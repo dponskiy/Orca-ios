@@ -27,6 +27,7 @@
 		873C1B5B2F4EA59D0058324F /* Orca.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Orca.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		873C1B6A2F4EA59E0058324F /* OrcaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrcaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		873C1B742F4EA59E0058324F /* OrcaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrcaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		873C1B892F4EABE10058324F /* OrcaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -75,6 +76,7 @@
 		873C1B522F4EA59D0058324F = {
 			isa = PBXGroup;
 			children = (
+				873C1B872F4EAB880058324F /* App */,
 				873C1B5D2F4EA59D0058324F /* Orca */,
 				873C1B6D2F4EA59E0058324F /* OrcaTests */,
 				873C1B772F4EA59E0058324F /* OrcaUITests */,
@@ -90,6 +92,14 @@
 				873C1B742F4EA59E0058324F /* OrcaUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		873C1B872F4EAB880058324F /* App */ = {
+			isa = PBXGroup;
+			children = (
+				873C1B892F4EABE10058324F /* OrcaApp.swift */,
+			);
+			path = App;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
