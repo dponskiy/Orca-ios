@@ -6,6 +6,37 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		872F722A2F4ED482000A4AE3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 872F72262F4ED482000A4AE3 /* Assets.xcassets */; };
+		872F722D2F4ED482000A4AE3 /* OrcaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72292F4ED482000A4AE3 /* OrcaApp.swift */; };
+		872F72482F4FCF15000A4AE3 /* InstrumentSans-Italic-VariableFont_wdth,wght.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F72472F4FCF15000A4AE3 /* InstrumentSans-Italic-VariableFont_wdth,wght.ttf */; };
+		872F724A2F4FCF21000A4AE3 /* InstrumentSans-VariableFont_wdth,wght.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F72492F4FCF21000A4AE3 /* InstrumentSans-VariableFont_wdth,wght.ttf */; };
+		872F724D2F4FCF33000A4AE3 /* DMSans-VariableFont_opsz,wght.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F724C2F4FCF33000A4AE3 /* DMSans-VariableFont_opsz,wght.ttf */; };
+		872F724E2F4FCF33000A4AE3 /* DMSans-Italic-VariableFont_opsz,wght.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F724B2F4FCF33000A4AE3 /* DMSans-Italic-VariableFont_opsz,wght.ttf */; };
+		872F72552F4FCF41000A4AE3 /* DMMono-MediumItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F72532F4FCF41000A4AE3 /* DMMono-MediumItalic.ttf */; };
+		872F72562F4FCF41000A4AE3 /* DMMono-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F724F2F4FCF41000A4AE3 /* DMMono-Italic.ttf */; };
+		872F72572F4FCF41000A4AE3 /* DMMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F72522F4FCF41000A4AE3 /* DMMono-Medium.ttf */; };
+		872F72582F4FCF41000A4AE3 /* DMMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F72542F4FCF41000A4AE3 /* DMMono-Regular.ttf */; };
+		872F72592F4FCF41000A4AE3 /* DMMono-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F72502F4FCF41000A4AE3 /* DMMono-Light.ttf */; };
+		872F725A2F4FCF41000A4AE3 /* DMMono-LightItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F72512F4FCF41000A4AE3 /* DMMono-LightItalic.ttf */; };
+		872F725D2F4FDC77000A4AE3 /* Ping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1BA22F4EB4440058324F /* Ping.swift */; };
+		872F725E2F4FDC7D000A4AE3 /* Echo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1BA12F4EB43E0058324F /* Echo.swift */; };
+		872F725F2F4FDC8B000A4AE3 /* Memory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1BA02F4EB4350058324F /* Memory.swift */; };
+		872F72602F4FDDBC000A4AE3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9F2F4EB4260058324F /* ContentView.swift */; };
+		872F72612F4FDE07000A4AE3 /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B922F4EB2F40058324F /* Colors.swift */; };
+		872F72622F4FE4D1000A4AE3 /* DropButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B952F4EB3890058324F /* DropButton.swift */; };
+		872F72632F4FE581000A4AE3 /* FinIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B942F4EB3790058324F /* FinIcon.swift */; };
+		872F72642F4FE598000A4AE3 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72342F4F2356000A4AE3 /* DashboardView.swift */; };
+		872F72652F4FE5D8000A4AE3 /* EchoBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72352F4F2365000A4AE3 /* EchoBubbleView.swift */; };
+		872F72662F4FE723000A4AE3 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723B2F4F23BA000A4AE3 /* SearchView.swift */; };
+		872F72672F4FE728000A4AE3 /* EchoDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72362F4F236F000A4AE3 /* EchoDetailView.swift */; };
+		872F72682F4FE746000A4AE3 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723E2F4F23D1000A4AE3 /* CalendarView.swift */; };
+		872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72382F4F2399000A4AE3 /* DropOverlayView.swift */; };
+		872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9A2F4EB3DF0058324F /* AudioService.swift */; };
+		872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B992F4EB3CE0058324F /* SonarEngine.swift */; };
+		872F726C2F4FF148000A4AE3 /* ConfirmBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72392F4F23A0000A4AE3 /* ConfirmBannerView.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		873C1B6B2F4EA59E0058324F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,15 +55,74 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		872F72262F4ED482000A4AE3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		872F72292F4ED482000A4AE3 /* OrcaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaApp.swift; sourceTree = "<group>"; };
+		872F72342F4F2356000A4AE3 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		872F72352F4F2365000A4AE3 /* EchoBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoBubbleView.swift; sourceTree = "<group>"; };
+		872F72362F4F236F000A4AE3 /* EchoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoDetailView.swift; sourceTree = "<group>"; };
+		872F72372F4F237F000A4AE3 /* MemoryOfDayCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryOfDayCard.swift; sourceTree = "<group>"; };
+		872F72382F4F2399000A4AE3 /* DropOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropOverlayView.swift; sourceTree = "<group>"; };
+		872F72392F4F23A0000A4AE3 /* ConfirmBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmBannerView.swift; sourceTree = "<group>"; };
+		872F723A2F4F23AB000A4AE3 /* CaptureDrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureDrawerView.swift; sourceTree = "<group>"; };
+		872F723B2F4F23BA000A4AE3 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		872F723C2F4F23C0000A4AE3 /* ResultCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultCardView.swift; sourceTree = "<group>"; };
+		872F723D2F4F23C7000A4AE3 /* BrowseAllView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseAllView.swift; sourceTree = "<group>"; };
+		872F723E2F4F23D1000A4AE3 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
+		872F723F2F4F23D7000A4AE3 /* DayDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayDetailView.swift; sourceTree = "<group>"; };
+		872F72402F4F23DE000A4AE3 /* AllPingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllPingView.swift; sourceTree = "<group>"; };
+		872F72412F4F23E7000A4AE3 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
+		872F72422F4F23F2000A4AE3 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
+		872F72432F4F23FE000A4AE3 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		872F72442F4F240A000A4AE3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		872F72452F4F2417000A4AE3 /* MemoryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryDetailView.swift; sourceTree = "<group>"; };
+		872F72462F4F2420000A4AE3 /* EchoScrollPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoScrollPicker.swift; sourceTree = "<group>"; };
+		872F72472F4FCF15000A4AE3 /* InstrumentSans-Italic-VariableFont_wdth,wght.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "InstrumentSans-Italic-VariableFont_wdth,wght.ttf"; sourceTree = "<group>"; };
+		872F72492F4FCF21000A4AE3 /* InstrumentSans-VariableFont_wdth,wght.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "InstrumentSans-VariableFont_wdth,wght.ttf"; sourceTree = "<group>"; };
+		872F724B2F4FCF33000A4AE3 /* DMSans-Italic-VariableFont_opsz,wght.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMSans-Italic-VariableFont_opsz,wght.ttf"; sourceTree = "<group>"; };
+		872F724C2F4FCF33000A4AE3 /* DMSans-VariableFont_opsz,wght.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMSans-VariableFont_opsz,wght.ttf"; sourceTree = "<group>"; };
+		872F724F2F4FCF41000A4AE3 /* DMMono-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMMono-Italic.ttf"; sourceTree = "<group>"; };
+		872F72502F4FCF41000A4AE3 /* DMMono-Light.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMMono-Light.ttf"; sourceTree = "<group>"; };
+		872F72512F4FCF41000A4AE3 /* DMMono-LightItalic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMMono-LightItalic.ttf"; sourceTree = "<group>"; };
+		872F72522F4FCF41000A4AE3 /* DMMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMMono-Medium.ttf"; sourceTree = "<group>"; };
+		872F72532F4FCF41000A4AE3 /* DMMono-MediumItalic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMMono-MediumItalic.ttf"; sourceTree = "<group>"; };
+		872F72542F4FCF41000A4AE3 /* DMMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMMono-Regular.ttf"; sourceTree = "<group>"; };
 		873C1B5B2F4EA59D0058324F /* Orca.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Orca.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		873C1B6A2F4EA59E0058324F /* OrcaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrcaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		873C1B742F4EA59E0058324F /* OrcaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrcaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		873C1B892F4EABE10058324F /* OrcaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaApp.swift; sourceTree = "<group>"; };
+		873C1B922F4EB2F40058324F /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
+		873C1B932F4EB2FB0058324F /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
+		873C1B942F4EB3790058324F /* FinIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinIcon.swift; sourceTree = "<group>"; };
+		873C1B952F4EB3890058324F /* DropButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropButton.swift; sourceTree = "<group>"; };
+		873C1B972F4EB3AA0058324F /* EchoBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoBadge.swift; sourceTree = "<group>"; };
+		873C1B982F4EB3B60058324F /* PingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingCard.swift; sourceTree = "<group>"; };
+		873C1B992F4EB3CE0058324F /* SonarEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarEngine.swift; sourceTree = "<group>"; };
+		873C1B9A2F4EB3DF0058324F /* AudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioService.swift; sourceTree = "<group>"; };
+		873C1B9B2F4EB3E60058324F /* NotifcationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotifcationService.swift; sourceTree = "<group>"; };
+		873C1B9C2F4EB3F30058324F /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		873C1B9D2F4EB3FC0058324F /* SyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncService.swift; sourceTree = "<group>"; };
+		873C1B9E2F4EB40A0058324F /* AnalyticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsService.swift; sourceTree = "<group>"; };
+		873C1B9F2F4EB4260058324F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		873C1BA02F4EB4350058324F /* Memory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Memory.swift; sourceTree = "<group>"; };
+		873C1BA12F4EB43E0058324F /* Echo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Echo.swift; sourceTree = "<group>"; };
+		873C1BA22F4EB4440058324F /* Ping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ping.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		872F725C2F4FD021000A4AE3 /* Exceptions for "Orca" folder in "Orca" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 873C1B5A2F4EA59D0058324F /* Orca */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		873C1B5D2F4EA59D0058324F /* Orca */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				872F725C2F4FD021000A4AE3 /* Exceptions for "Orca" folder in "Orca" target */,
+			);
 			path = Orca;
 			sourceTree = "<group>";
 		};
@@ -76,6 +166,11 @@
 		873C1B522F4EA59D0058324F = {
 			isa = PBXGroup;
 			children = (
+				873C1B902F4EB2D70058324F /* Resources */,
+				873C1B8F2F4EB2C80058324F /* Components */,
+				873C1B8D2F4EB2A60058324F /* Services */,
+				873C1B8C2F4EB2A00058324F /* Views */,
+				873C1B8A2F4EB2850058324F /* Models */,
 				873C1B872F4EAB880058324F /* App */,
 				873C1B5D2F4EA59D0058324F /* Orca */,
 				873C1B6D2F4EA59E0058324F /* OrcaTests */,
@@ -97,9 +192,154 @@
 		873C1B872F4EAB880058324F /* App */ = {
 			isa = PBXGroup;
 			children = (
-				873C1B892F4EABE10058324F /* OrcaApp.swift */,
+				873C1B9F2F4EB4260058324F /* ContentView.swift */,
+				872F72292F4ED482000A4AE3 /* OrcaApp.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		873C1B8A2F4EB2850058324F /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				873C1BA22F4EB4440058324F /* Ping.swift */,
+				873C1BA12F4EB43E0058324F /* Echo.swift */,
+				873C1BA02F4EB4350058324F /* Memory.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		873C1B8C2F4EB2A00058324F /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				873C1BAA2F4EB4840058324F /* Shared */,
+				873C1BA92F4EB47D0058324F /* Settings */,
+				873C1BA82F4EB4770058324F /* Auth */,
+				873C1BA72F4EB46D0058324F /* Onboarding */,
+				873C1BA62F4EB4640058324F /* Calendar */,
+				873C1BA52F4EB45E0058324F /* Search */,
+				873C1BA42F4EB4580058324F /* Drop */,
+				873C1BA32F4EB44E0058324F /* Dashboard */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		873C1B8D2F4EB2A60058324F /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				873C1B9E2F4EB40A0058324F /* AnalyticsService.swift */,
+				873C1B9D2F4EB3FC0058324F /* SyncService.swift */,
+				873C1B9C2F4EB3F30058324F /* AuthService.swift */,
+				873C1B9B2F4EB3E60058324F /* NotifcationService.swift */,
+				873C1B9A2F4EB3DF0058324F /* AudioService.swift */,
+				873C1B992F4EB3CE0058324F /* SonarEngine.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		873C1B8F2F4EB2C80058324F /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				873C1B982F4EB3B60058324F /* PingCard.swift */,
+				873C1B972F4EB3AA0058324F /* EchoBadge.swift */,
+				873C1B952F4EB3890058324F /* DropButton.swift */,
+				873C1B942F4EB3790058324F /* FinIcon.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		873C1B902F4EB2D70058324F /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				873C1B932F4EB2FB0058324F /* Config.swift */,
+				872F72262F4ED482000A4AE3 /* Assets.xcassets */,
+				873C1B922F4EB2F40058324F /* Colors.swift */,
+				872F72472F4FCF15000A4AE3 /* InstrumentSans-Italic-VariableFont_wdth,wght.ttf */,
+				872F72492F4FCF21000A4AE3 /* InstrumentSans-VariableFont_wdth,wght.ttf */,
+				872F724B2F4FCF33000A4AE3 /* DMSans-Italic-VariableFont_opsz,wght.ttf */,
+				872F724C2F4FCF33000A4AE3 /* DMSans-VariableFont_opsz,wght.ttf */,
+				872F724F2F4FCF41000A4AE3 /* DMMono-Italic.ttf */,
+				872F72502F4FCF41000A4AE3 /* DMMono-Light.ttf */,
+				872F72512F4FCF41000A4AE3 /* DMMono-LightItalic.ttf */,
+				872F72522F4FCF41000A4AE3 /* DMMono-Medium.ttf */,
+				872F72532F4FCF41000A4AE3 /* DMMono-MediumItalic.ttf */,
+				872F72542F4FCF41000A4AE3 /* DMMono-Regular.ttf */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		873C1BA32F4EB44E0058324F /* Dashboard */ = {
+			isa = PBXGroup;
+			children = (
+				872F72372F4F237F000A4AE3 /* MemoryOfDayCard.swift */,
+				872F72362F4F236F000A4AE3 /* EchoDetailView.swift */,
+				872F72352F4F2365000A4AE3 /* EchoBubbleView.swift */,
+				872F72342F4F2356000A4AE3 /* DashboardView.swift */,
+			);
+			path = Dashboard;
+			sourceTree = "<group>";
+		};
+		873C1BA42F4EB4580058324F /* Drop */ = {
+			isa = PBXGroup;
+			children = (
+				872F723A2F4F23AB000A4AE3 /* CaptureDrawerView.swift */,
+				872F72392F4F23A0000A4AE3 /* ConfirmBannerView.swift */,
+				872F72382F4F2399000A4AE3 /* DropOverlayView.swift */,
+			);
+			path = Drop;
+			sourceTree = "<group>";
+		};
+		873C1BA52F4EB45E0058324F /* Search */ = {
+			isa = PBXGroup;
+			children = (
+				872F723D2F4F23C7000A4AE3 /* BrowseAllView.swift */,
+				872F723C2F4F23C0000A4AE3 /* ResultCardView.swift */,
+				872F723B2F4F23BA000A4AE3 /* SearchView.swift */,
+			);
+			path = Search;
+			sourceTree = "<group>";
+		};
+		873C1BA62F4EB4640058324F /* Calendar */ = {
+			isa = PBXGroup;
+			children = (
+				872F72402F4F23DE000A4AE3 /* AllPingView.swift */,
+				872F723F2F4F23D7000A4AE3 /* DayDetailView.swift */,
+				872F723E2F4F23D1000A4AE3 /* CalendarView.swift */,
+			);
+			path = Calendar;
+			sourceTree = "<group>";
+		};
+		873C1BA72F4EB46D0058324F /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				872F72412F4F23E7000A4AE3 /* OnboardingFlow.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		873C1BA82F4EB4770058324F /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				872F72432F4F23FE000A4AE3 /* LoginView.swift */,
+				872F72422F4F23F2000A4AE3 /* SignUpView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		873C1BA92F4EB47D0058324F /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				872F72442F4F240A000A4AE3 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		873C1BAA2F4EB4840058324F /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				872F72462F4F2420000A4AE3 /* EchoScrollPicker.swift */,
+				872F72452F4F2417000A4AE3 /* MemoryDetailView.swift */,
+			);
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -222,6 +462,17 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				872F724A2F4FCF21000A4AE3 /* InstrumentSans-VariableFont_wdth,wght.ttf in Resources */,
+				872F722A2F4ED482000A4AE3 /* Assets.xcassets in Resources */,
+				872F724D2F4FCF33000A4AE3 /* DMSans-VariableFont_opsz,wght.ttf in Resources */,
+				872F724E2F4FCF33000A4AE3 /* DMSans-Italic-VariableFont_opsz,wght.ttf in Resources */,
+				872F72482F4FCF15000A4AE3 /* InstrumentSans-Italic-VariableFont_wdth,wght.ttf in Resources */,
+				872F72552F4FCF41000A4AE3 /* DMMono-MediumItalic.ttf in Resources */,
+				872F72562F4FCF41000A4AE3 /* DMMono-Italic.ttf in Resources */,
+				872F72572F4FCF41000A4AE3 /* DMMono-Medium.ttf in Resources */,
+				872F72582F4FCF41000A4AE3 /* DMMono-Regular.ttf in Resources */,
+				872F72592F4FCF41000A4AE3 /* DMMono-Light.ttf in Resources */,
+				872F725A2F4FCF41000A4AE3 /* DMMono-LightItalic.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -246,6 +497,23 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				872F72672F4FE728000A4AE3 /* EchoDetailView.swift in Sources */,
+				872F726C2F4FF148000A4AE3 /* ConfirmBannerView.swift in Sources */,
+				872F725E2F4FDC7D000A4AE3 /* Echo.swift in Sources */,
+				872F72622F4FE4D1000A4AE3 /* DropButton.swift in Sources */,
+				872F72612F4FDE07000A4AE3 /* Colors.swift in Sources */,
+				872F72652F4FE5D8000A4AE3 /* EchoBubbleView.swift in Sources */,
+				872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */,
+				872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */,
+				872F72602F4FDDBC000A4AE3 /* ContentView.swift in Sources */,
+				872F72682F4FE746000A4AE3 /* CalendarView.swift in Sources */,
+				872F72642F4FE598000A4AE3 /* DashboardView.swift in Sources */,
+				872F725D2F4FDC77000A4AE3 /* Ping.swift in Sources */,
+				872F725F2F4FDC8B000A4AE3 /* Memory.swift in Sources */,
+				872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */,
+				872F72632F4FE581000A4AE3 /* FinIcon.swift in Sources */,
+				872F722D2F4ED482000A4AE3 /* OrcaApp.swift in Sources */,
+				872F72662F4FE723000A4AE3 /* SearchView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -408,6 +676,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Orca/Info.plist;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -452,6 +721,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Orca/Info.plist;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

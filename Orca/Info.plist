@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>UIAppFonts</key>
+	<array>
+		<string>DMMono-Italic.ttf</string>
+		<string>DMMono-Light.ttf</string>
+		<string>DMMono-LightItalic.ttf</string>
+		<string>DMMono-Medium.ttf</string>
+		<string>DMMono-MediumItalic.ttf</string>
+		<string>DMMono-Regular.ttf</string>
+		<string>DMSans-Italic-VariableFont_opsz,wght.ttf</string>
+		<string>DMSans-VariableFont_opsz,wght.ttf</string>
+		<string>InstrumentSans-Italic-VariableFont_wdth,wght.ttf</string>
+		<string>InstrumentSans-VariableFont_wdth,wght.ttf</string>
+	</array>
+</dict>
+</plist>
