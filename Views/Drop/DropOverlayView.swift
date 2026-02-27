@@ -194,13 +194,19 @@ struct DropOverlayView: View {
         memory.echoConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.dateConfidence = sonarResult?.dateConfidence
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
+        memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
         
         // Create Ping if needed
-        if let result = sonarResult, result.shouldCreatePing, let date = result.detectedDate {
-            let ping = Ping(memoryId: memory.id, fireDate: date, recurrence: result.pingRecurrence)
-            modelContext.insert(ping)
-        }
+        // Create Ping if needed
+                if let result = sonarResult, result.shouldCreatePing {
+                    let fireDate = result.pingFireDate ?? result.detectedDate ?? Date()
+                    let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: result.pingRecurrence)
+                    if let fireTime = result.pingFireTime {
+                        ping.fireTime = fireTime
+                    }
+                    modelContext.insert(ping)
+                }
         
         withAnimation(.spring(duration: 0.4)) {
             showBanner = true

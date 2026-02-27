@@ -17,6 +17,9 @@ struct SonarResult {
     let tags: [String]
     let shouldCreatePing: Bool
     let pingRecurrence: Ping.Recurrence
+    let isActionable: Bool
+    let pingFireDate: Date?
+    let pingFireTime: Date?
 }
 
 class SonarEngine {
@@ -40,32 +43,46 @@ class SonarEngine {
     
     private let reminderKeywords = ["remind", "remember", "don't forget", "dont forget", "every monday", "every tuesday", "every wednesday", "every thursday", "every friday", "every saturday", "every sunday", "every week", "every month", "every year", "every day", "daily", "weekly", "monthly", "yearly", "annually", "birthday", "appointment", "deadline", "due date"]
     
+    private let actionKeywords = ["buy", "get", "pick up", "pickup", "call", "email", "send", "schedule", "book", "cancel", "return", "fix", "clean", "make", "order", "pay", "finish", "submit", "renew", "sign up", "signup", "register", "drop off", "dropoff", "mail", "ship", "text", "message", "contact", "set up", "setup", "install", "update", "replace", "check", "review", "prepare", "plan", "arrange", "confirm", "reschedule", "refill", "restock", "wash", "take", "bring", "move", "file", "print", "scan", "deposit", "transfer", "apply", "complete", "grab", "find", "look into", "follow up", "respond", "reply"]
+    
+    // MARK: - Main Process
+    
     func process(text: String, echos: [Echo]) -> SonarResult {
         let lower = text.lowercased()
         
-        // Echo assignment
         let echoResult = assignEcho(text: lower, echos: echos)
-        
-        // Date detection
-        let dateResult = detectDate(text: text)
-        
-        // Tag generation
+        let dateResults = detectDates(text: text)
         let tags = generateTags(text: text, echoName: echoResult.name)
+        let pingResult = decidePing(text: lower, dates: dateResults)
+        let actionable = detectAction(text: lower)
         
-        // Ping decision
-        let pingResult = decidePing(text: lower, date: dateResult.date)
+        let eventDate = dateResults.eventDate
+        let eventConfidence = dateResults.eventConfidence
         
         return SonarResult(
             echoId: echoResult.id,
             echoName: echoResult.name,
             echoConfidence: echoResult.confidence,
-            detectedDate: dateResult.date,
-            dateConfidence: dateResult.confidence,
+            detectedDate: eventDate,
+            dateConfidence: eventConfidence,
             tags: tags,
             shouldCreatePing: pingResult.shouldCreate,
-            pingRecurrence: pingResult.recurrence
+            pingRecurrence: pingResult.recurrence,
+            isActionable: actionable,
+            pingFireDate: pingResult.fireDate,
+            pingFireTime: pingResult.fireTime
         )
     }
+    
+    // MARK: - Action Detection
+    
+    private func detectAction(text: String) -> Bool {
+        return actionKeywords.contains { keyword in
+            text.contains(keyword)
+        }
+    }
+    
+    // MARK: - Echo Assignment
     
     private func assignEcho(text: String, echos: [Echo]) -> (id: UUID?, name: String, confidence: Double) {
         var bestMatch: (name: String, priority: Int, matchCount: Int)?
@@ -85,27 +102,48 @@ class SonarEngine {
             return (echo?.id, match.name, confidence)
         }
         
-        // Fallback to Notes
         let notesEcho = echos.first { $0.name == "Notes" }
         return (notesEcho?.id, "Notes", 0.3)
     }
     
-    private func detectDate(text: String) -> (date: Date?, confidence: Double?) {
+    // MARK: - Date Detection
+    
+    private func detectDates(text: String) -> (eventDate: Date?, eventConfidence: Double?, reminderDate: Date?, reminderTime: Date?) {
         let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue)
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         
-        guard let matches = detector?.matches(in: text, range: range),
-              let firstMatch = matches.first,
-              let date = firstMatch.date else {
-            return (nil, nil)
+        guard let matches = detector?.matches(in: text, range: range) else {
+            return (nil, nil, nil, nil)
         }
         
-        // Higher confidence for absolute dates, lower for relative
+        let dates = matches.compactMap { $0.date }
+        guard !dates.isEmpty else { return (nil, nil, nil, nil) }
+        
         let hasAbsoluteDate = text.contains(where: { $0.isNumber })
         let confidence = hasAbsoluteDate ? 0.9 : 0.6
         
-        return (date, confidence)
+        if dates.count == 1 {
+            return (dates[0], confidence, nil, nil)
+        }
+        
+        // Multiple dates found — sort by distance from now
+        let sorted = dates.sorted { abs($0.timeIntervalSinceNow) < abs($1.timeIntervalSinceNow) }
+        let nearest = sorted.first!
+        let furthest = sorted.last!
+        
+        // If the nearest date is within 7 days and furthest is later,
+        // treat nearest as reminder and furthest as event
+        let lower = text.lowercased()
+        let hasReminderPhrase = lower.contains("remind") || lower.contains("don't forget") || lower.contains("dont forget")
+        
+        if hasReminderPhrase && nearest != furthest {
+            return (furthest, confidence, nearest, nearest)
+        }
+        
+        return (furthest, confidence, nil, nil)
     }
+    
+    // MARK: - Tag Generation
     
     private func generateTags(text: String, echoName: String) -> [String] {
         var tags: [String] = []
@@ -115,7 +153,6 @@ class SonarEngine {
         
         let options: NLTagger.Options = [.omitWhitespace, .omitPunctuation]
         
-        // Extract proper nouns
         tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .nameType, options: options) { tag, range in
             if let tag = tag, tag == .personalName || tag == .placeName || tag == .organizationName {
                 let word = String(text[range]).lowercased()
@@ -126,7 +163,6 @@ class SonarEngine {
             return true
         }
         
-        // Extract significant nouns
         tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .lexicalClass, options: options) { tag, range in
             if let tag = tag, tag == .noun {
                 let word = String(text[range]).lowercased()
@@ -137,7 +173,6 @@ class SonarEngine {
             return true
         }
         
-        // Add echo name as tag
         if !tags.contains(echoName.lowercased()) {
             tags.append(echoName.lowercased())
         }
@@ -145,31 +180,37 @@ class SonarEngine {
         return Array(tags.prefix(6))
     }
     
-    private func decidePing(text: String, date: Date?) -> (shouldCreate: Bool, recurrence: Ping.Recurrence) {
-        guard date != nil else { return (false, .none) }
+    // MARK: - Ping Decision
+    
+    private func decidePing(text: String, dates: (eventDate: Date?, eventConfidence: Double?, reminderDate: Date?, reminderTime: Date?)) -> (shouldCreate: Bool, recurrence: Ping.Recurrence, fireDate: Date?, fireTime: Date?) {
+        guard dates.eventDate != nil else { return (false, Ping.Recurrence.none, nil, nil) }
         
         let hasReminderIntent = reminderKeywords.contains { text.contains($0) }
-        guard hasReminderIntent else { return (false, .none) }
+        guard hasReminderIntent else { return (false, Ping.Recurrence.none, nil, nil) }
         
-        // Determine recurrence
+        var recurrence: Ping.Recurrence = Ping.Recurrence.none
+        
         if text.contains("every day") || text.contains("daily") {
-            return (true, .daily)
-        }
-        if text.contains("every week") || text.contains("weekly") ||
-           text.contains("every monday") || text.contains("every tuesday") ||
-           text.contains("every wednesday") || text.contains("every thursday") ||
-           text.contains("every friday") || text.contains("every saturday") ||
-           text.contains("every sunday") {
-            return (true, .weekly)
-        }
-        if text.contains("every month") || text.contains("monthly") {
-            return (true, .monthly)
-        }
-        if text.contains("every year") || text.contains("yearly") ||
-           text.contains("annually") || text.contains("birthday") {
-            return (true, .yearly)
+            recurrence = .daily
+        } else if text.contains("every week") || text.contains("weekly") ||
+                    text.contains("every monday") || text.contains("every tuesday") ||
+                    text.contains("every wednesday") || text.contains("every thursday") ||
+                    text.contains("every friday") || text.contains("every saturday") ||
+                    text.contains("every sunday") {
+            recurrence = .weekly
+        } else if text.contains("every month") || text.contains("monthly") {
+            recurrence = .monthly
+        } else if text.contains("every year") || text.contains("yearly") ||
+                    text.contains("annually") || text.contains("birthday") {
+            recurrence = .yearly
         }
         
-        return (true, .none)
+        // If we detected a separate reminder date, use it
+        if let reminderDate = dates.reminderDate {
+            return (true, recurrence, reminderDate, dates.reminderTime)
+        }
+        
+        // Otherwise fire on the event date
+        return (true, recurrence, dates.eventDate, nil)
     }
 }

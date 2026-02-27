@@ -11,21 +11,24 @@ import SwiftData
 struct ContentView: View {
     @State private var selectedTab = 0
     @State private var showDrop = false
+    @State private var showDrawer = false
+    @State private var showTyped = false
+    @State private var showSearch = false
     
     var body: some View {
         ZStack {
             TabView(selection: $selectedTab) {
-                DashboardView()
+                DashboardView(showSearch: $showSearch)
                     .tabItem {
                         Image(systemName: "circle.grid.2x2.fill")
                         Text("Dashboard")
                     }
                     .tag(0)
                 
-                SearchView()
+                TodayView()
                     .tabItem {
-                        Image(systemName: "magnifyingglass")
-                        Text("Search")
+                        Image(systemName: "checkmark.circle")
+                        Text("Today")
                     }
                     .tag(1)
                 
@@ -43,12 +46,44 @@ struct ContentView: View {
                 Spacer()
                 DropButton {
                     showDrop = true
+                } onLongPress: {
+                    showDrawer = true
                 }
-                .padding(.bottom, 28)
+                .padding(.bottom, 70)
+            }
+            
+            // Capture drawer
+            if showDrawer {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .onTapGesture { showDrawer = false }
+                
+                VStack {
+                    Spacer()
+                    CaptureDrawerView(
+                        onSelect: { mode in
+                            showDrawer = false
+                            switch mode {
+                            case .voice: showDrop = true
+                            case .typed: showTyped = true
+                            case .screenshot: break
+                            }
+                        },
+                        onCancel: { showDrawer = false }
+                    )
+                }
+                .transition(.move(edge: .bottom))
             }
         }
+        .animation(.spring(duration: 0.3), value: showDrawer)
         .fullScreenCover(isPresented: $showDrop) {
             DropOverlayView(isPresented: $showDrop)
+        }
+        .fullScreenCover(isPresented: $showTyped) {
+            TypeCaptureView(isPresented: $showTyped)
+        }
+        .fullScreenCover(isPresented: $showSearch) {
+            SearchView(isPresented: $showSearch)
         }
     }
 }
@@ -57,4 +92,3 @@ struct ContentView: View {
     ContentView()
         .modelContainer(for: [Memory.self, Echo.self, Ping.self], inMemory: true)
 }
-

@@ -11,6 +11,8 @@ import SwiftData
 struct EchoDetailView: View {
     let echo: Echo
     @Query private var memories: [Memory]
+    @State private var editingMemory: Memory?
+    @Environment(\.modelContext) private var modelContext
     
     var filteredMemories: [Memory] {
         memories.filter { $0.echoId == echo.id }
@@ -19,6 +21,18 @@ struct EchoDetailView: View {
     
     var body: some View {
         List {
+            // Count header
+            Section {
+                HStack {
+                    Text("\(filteredMemories.count) \(filteredMemories.count == 1 ? "memory" : "memories")")
+                        .font(.custom("DMSans-Medium", size: 14))
+                        .foregroundColor(.gray)
+                    Spacer()
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+            
             if filteredMemories.isEmpty {
                 VStack(spacing: 12) {
                     Text("No memories yet")
@@ -33,30 +47,60 @@ struct EchoDetailView: View {
                 .listRowBackground(Color.clear)
             } else {
                 ForEach(filteredMemories) { memory in
-                    MemoryRow(memory: memory)
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(memory.text)
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.deepNavy)
+                                .lineLimit(3)
+                            
+                            HStack(spacing: 8) {
+                                Text(memory.createdAt, format: .dateTime.month(.abbreviated).day().year())
+                                    .font(.custom("DMMono-Regular", size: 12))
+                                    .foregroundColor(.gray)
+                                
+                                if memory.detectedDate != nil {
+                                    Text("📅")
+                                        .font(.system(size: 11))
+                                }
+                                
+                                if memory.wasEdited {
+                                    Text("edited")
+                                        .font(.custom("DMMono-Regular", size: 11))
+                                        .foregroundColor(.seafoam)
+                                }
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        Button {
+                            editingMemory = memory
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.mist)
+                                    .frame(width: 40, height: 40)
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundColor(.oceanTeal)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .onDelete { indexSet in
+                    for index in indexSet {
+                        modelContext.delete(filteredMemories[index])
+                    }
                 }
             }
         }
         .navigationTitle("\(echo.emoji) \(echo.name)")
         .listStyle(.plain)
-    }
-}
-
-struct MemoryRow: View {
-    let memory: Memory
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(memory.text)
-                .font(.custom("DMSans-Regular", size: 15))
-                .foregroundColor(.deepNavy)
-                .lineLimit(3)
-            
-            Text(memory.createdAt, style: .relative)
-                .font(.custom("DMMono-Regular", size: 12))
-                .foregroundColor(.gray)
+        .sheet(item: $editingMemory) { memory in
+            MemoryEditView(memory: memory)
         }
-        .padding(.vertical, 4)
     }
 }
 

@@ -35,6 +35,14 @@
 		872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9A2F4EB3DF0058324F /* AudioService.swift */; };
 		872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B992F4EB3CE0058324F /* SonarEngine.swift */; };
 		872F726C2F4FF148000A4AE3 /* ConfirmBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72392F4F23A0000A4AE3 /* ConfirmBannerView.swift */; };
+		872F726D2F4FF4BC000A4AE3 /* CaptureDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723A2F4F23AB000A4AE3 /* CaptureDrawerView.swift */; };
+		872F726F2F4FF511000A4AE3 /* TypeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F726E2F4FF50B000A4AE3 /* TypeCaptureView.swift */; };
+		872F72712F4FF9B7000A4AE3 /* MemoryEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72702F4FF9A9000A4AE3 /* MemoryEditView.swift */; };
+		872F72722F51254C000A4AE3 /* MemoryOfDayCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72372F4F237F000A4AE3 /* MemoryOfDayCard.swift */; };
+		872F72742F51256E000A4AE3 /* CreateEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72732F512563000A4AE3 /* CreateEchoView.swift */; };
+		872F72752F512601000A4AE3 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72442F4F240A000A4AE3 /* SettingsView.swift */; };
+		872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723D2F4F23C7000A4AE3 /* BrowseAllView.swift */; };
+		87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +94,9 @@
 		872F72522F4FCF41000A4AE3 /* DMMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMMono-Medium.ttf"; sourceTree = "<group>"; };
 		872F72532F4FCF41000A4AE3 /* DMMono-MediumItalic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMMono-MediumItalic.ttf"; sourceTree = "<group>"; };
 		872F72542F4FCF41000A4AE3 /* DMMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMMono-Regular.ttf"; sourceTree = "<group>"; };
+		872F726E2F4FF50B000A4AE3 /* TypeCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeCaptureView.swift; sourceTree = "<group>"; };
+		872F72702F4FF9A9000A4AE3 /* MemoryEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryEditView.swift; sourceTree = "<group>"; };
+		872F72732F512563000A4AE3 /* CreateEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateEchoView.swift; sourceTree = "<group>"; };
 		873C1B5B2F4EA59D0058324F /* Orca.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Orca.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		873C1B6A2F4EA59E0058324F /* OrcaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrcaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		873C1B742F4EA59E0058324F /* OrcaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrcaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -105,6 +116,7 @@
 		873C1BA02F4EB4350058324F /* Memory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Memory.swift; sourceTree = "<group>"; };
 		873C1BA12F4EB43E0058324F /* Echo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Echo.swift; sourceTree = "<group>"; };
 		873C1BA22F4EB4440058324F /* Ping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ping.swift; sourceTree = "<group>"; };
+		87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -211,6 +223,7 @@
 		873C1B8C2F4EB2A00058324F /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				87CD0AE02F5236E300CAAB4D /* Today */,
 				873C1BAA2F4EB4840058324F /* Shared */,
 				873C1BA92F4EB47D0058324F /* Settings */,
 				873C1BA82F4EB4770058324F /* Auth */,
@@ -270,6 +283,7 @@
 		873C1BA32F4EB44E0058324F /* Dashboard */ = {
 			isa = PBXGroup;
 			children = (
+				872F72732F512563000A4AE3 /* CreateEchoView.swift */,
 				872F72372F4F237F000A4AE3 /* MemoryOfDayCard.swift */,
 				872F72362F4F236F000A4AE3 /* EchoDetailView.swift */,
 				872F72352F4F2365000A4AE3 /* EchoBubbleView.swift */,
@@ -281,6 +295,7 @@
 		873C1BA42F4EB4580058324F /* Drop */ = {
 			isa = PBXGroup;
 			children = (
+				872F726E2F4FF50B000A4AE3 /* TypeCaptureView.swift */,
 				872F723A2F4F23AB000A4AE3 /* CaptureDrawerView.swift */,
 				872F72392F4F23A0000A4AE3 /* ConfirmBannerView.swift */,
 				872F72382F4F2399000A4AE3 /* DropOverlayView.swift */,
@@ -336,10 +351,19 @@
 		873C1BAA2F4EB4840058324F /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				872F72702F4FF9A9000A4AE3 /* MemoryEditView.swift */,
 				872F72462F4F2420000A4AE3 /* EchoScrollPicker.swift */,
 				872F72452F4F2417000A4AE3 /* MemoryDetailView.swift */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		87CD0AE02F5236E300CAAB4D /* Today */ = {
+			isa = PBXGroup;
+			children = (
+				87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */,
+			);
+			path = Today;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -498,19 +522,27 @@
 			buildActionMask = 2147483647;
 			files = (
 				872F72672F4FE728000A4AE3 /* EchoDetailView.swift in Sources */,
+				872F72752F512601000A4AE3 /* SettingsView.swift in Sources */,
 				872F726C2F4FF148000A4AE3 /* ConfirmBannerView.swift in Sources */,
 				872F725E2F4FDC7D000A4AE3 /* Echo.swift in Sources */,
+				872F72722F51254C000A4AE3 /* MemoryOfDayCard.swift in Sources */,
 				872F72622F4FE4D1000A4AE3 /* DropButton.swift in Sources */,
+				87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */,
 				872F72612F4FDE07000A4AE3 /* Colors.swift in Sources */,
+				872F72712F4FF9B7000A4AE3 /* MemoryEditView.swift in Sources */,
 				872F72652F4FE5D8000A4AE3 /* EchoBubbleView.swift in Sources */,
 				872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */,
+				872F726F2F4FF511000A4AE3 /* TypeCaptureView.swift in Sources */,
 				872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */,
+				872F726D2F4FF4BC000A4AE3 /* CaptureDrawerView.swift in Sources */,
 				872F72602F4FDDBC000A4AE3 /* ContentView.swift in Sources */,
 				872F72682F4FE746000A4AE3 /* CalendarView.swift in Sources */,
 				872F72642F4FE598000A4AE3 /* DashboardView.swift in Sources */,
 				872F725D2F4FDC77000A4AE3 /* Ping.swift in Sources */,
 				872F725F2F4FDC8B000A4AE3 /* Memory.swift in Sources */,
+				872F72742F51256E000A4AE3 /* CreateEchoView.swift in Sources */,
 				872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */,
+				872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */,
 				872F72632F4FE581000A4AE3 /* FinIcon.swift in Sources */,
 				872F722D2F4ED482000A4AE3 /* OrcaApp.swift in Sources */,
 				872F72662F4FE723000A4AE3 /* SearchView.swift in Sources */,

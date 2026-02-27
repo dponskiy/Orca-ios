@@ -21,6 +21,9 @@ class Memory {
     var echoConfidence: Double = 1.0
     var dateConfidence: Double?
     var wasEdited: Bool = false
+    var isActionable: Bool = false
+    var isCompleted: Bool = false
+    var completedAt: Date?
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var syncStatus: SyncStatus = SyncStatus.pending

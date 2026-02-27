@@ -9,29 +9,112 @@ import SwiftUI
 import SwiftData
 
 struct DashboardView: View {
+    @Binding var showSearch: Bool
     @Query private var memories: [Memory]
     @Query private var echos: [Echo]
     @Environment(\.modelContext) private var modelContext
+    @State private var showCreateEcho = false
+    @State private var showMemoryOfDay = true
+    
+    var activeEchos: [Echo] {
+        echos.filter { echo in
+            memories.contains { $0.echoId == echo.id }
+        }
+    }
     
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Greeting
-                    Text(greeting)
-                        .font(.custom("InstrumentSerif-Regular", size: 28))
-                        .foregroundColor(.deepNavy)
+                VStack(alignment: .leading, spacing: 20) {
+                    // Header
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(greeting)
+                                .font(.custom("InstrumentSerif-Regular", size: 28))
+                                .foregroundColor(.deepNavy)
+                            
+                            Text("\(memories.count) memories across \(activeEchos.count) \(activeEchos.count == 1 ? "Echo" : "Echos")")
+                                .font(.custom("DMSans-Regular", size: 14))
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                        
+                        // Profile button
+                        NavigationLink(destination: SettingsView()) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.mist)
+                                    .frame(width: 36, height: 36)
+                                Image(systemName: "person")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.oceanTeal)
+                            }
+                        }
+                    }
                     
-                    Text("\(memories.count) memories across \(echos.count) Echos")
-                        .font(.custom("DMSans-Regular", size: 14))
-                        .foregroundColor(.gray)
+                    // Search bar
+                    Button {
+                        showSearch = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 15))
+                                .foregroundColor(.gray)
+                            Text("Dive into memories...")
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.gray)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+                    }
                     
-                    // Echo bubbles
-                    if echos.isEmpty {
+                    // Memory of the Day
+                    if showMemoryOfDay, let motd = memoryOfTheDay {
+                        MemoryOfDayCard(memory: motd, echos: echos) {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                showMemoryOfDay = false
+                            }
+                        }
+                    }
+                    
+                    // Your Echos header
+                    HStack {
+                        Text("YOUR ECHOS")
+                            .font(.custom("DMSans-Medium", size: 13))
+                            .foregroundColor(.oceanTeal)
+                            .tracking(1)
+                        
+                        Spacer()
+                        
+                        Button {
+                            showCreateEcho = true
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.mist)
+                                    .frame(width: 28, height: 28)
+                                Image(systemName: "plus")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.oceanTeal)
+                            }
+                        }
+                    }
+                    .padding(.top, 4)
+                    
+                    // Echo bubbles or empty state
+                    if activeEchos.isEmpty {
                         emptyState
                     } else {
                         echoBubbleGrid
                     }
+                    
+                    // Spacer for FAB clearance
+                    Spacer().frame(height: 100)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
@@ -39,6 +122,9 @@ struct DashboardView: View {
             .background(Color.pearl)
             .onAppear {
                 seedDefaultEchos()
+            }
+            .sheet(isPresented: $showCreateEcho) {
+                CreateEchoView()
             }
         }
     }
@@ -52,9 +138,17 @@ struct DashboardView: View {
         }
     }
     
+    private var memoryOfTheDay: Memory? {
+        guard !memories.isEmpty else { return nil }
+        let calendar = Calendar.current
+        let dayOfYear = calendar.ordinality(of: .day, in: .year, for: Date()) ?? 0
+        let index = dayOfYear % memories.count
+        return memories.sorted(by: { $0.createdAt < $1.createdAt })[index]
+    }
+    
     private var emptyState: some View {
         VStack(spacing: 16) {
-            Spacer().frame(height: 60)
+            Spacer().frame(height: 40)
             FinIcon()
                 .fill(Color.seafoam.opacity(0.3))
                 .frame(width: 60, height: 72)
@@ -69,51 +163,30 @@ struct DashboardView: View {
     }
     
     private var echoBubbleGrid: some View {
-            let activeEchos = echos.filter { echo in
-                memories.contains { $0.echoId == echo.id }
-            }
+            let active = activeEchos
+            let columns = [
+                GridItem(.flexible()),
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ]
             
-            return ZStack {
-                ForEach(Array(activeEchos.enumerated()), id: \.element.id) { index, echo in
+            return LazyVGrid(columns: columns, spacing: 24) {
+                ForEach(Array(active.enumerated()), id: \.element.id) { index, echo in
                     let count = memories.filter { $0.echoId == echo.id }.count
-                    let position = bubblePosition(index: index, total: activeEchos.count)
                     
                     NavigationLink(destination: EchoDetailView(echo: echo)) {
                         EchoBubbleView(
                             echo: echo,
-                            count: count
+                            count: count,
+                            totalMemories: memories.count
                         )
                     }
-                    .offset(x: position.x, y: position.y)
+                    .offset(
+                        x: CGFloat([8, -6, 10, -8, 5, -10, 7, -5, 9, -7, 6, -9, 8, -6][index % 14]),
+                        y: CGFloat([4, -8, 6, -4, 10, -6, 3, -9, 7, -3, 8, -5, 4, -7][index % 14])
+                    )
                 }
             }
-            .frame(height: CGFloat(max(1, (activeEchos.count + 1) / 2)) * 130)
-            .frame(maxWidth: .infinity)
-        }
-        
-        private func bubblePosition(index: Int, total: Int) -> CGPoint {
-            // Staggered positions that feel organic, not grid-like
-            let offsets: [CGPoint] = [
-                CGPoint(x: -60, y: 0),
-                CGPoint(x: 70, y: 20),
-                CGPoint(x: -20, y: 110),
-                CGPoint(x: 90, y: 90),
-                CGPoint(x: -80, y: 210),
-                CGPoint(x: 40, y: 190),
-                CGPoint(x: -30, y: 310),
-                CGPoint(x: 80, y: 290),
-                CGPoint(x: -70, y: 400),
-                CGPoint(x: 50, y: 380),
-                CGPoint(x: -10, y: 490),
-                CGPoint(x: 90, y: 470),
-                CGPoint(x: -60, y: 580),
-                CGPoint(x: 60, y: 560),
-            ]
-            
-            if index < offsets.count {
-                return offsets[index]
-            }
-            return CGPoint(x: index % 2 == 0 ? -40 : 60, y: CGFloat(index) * 90)
         }
     
     private func seedDefaultEchos() {
@@ -127,6 +200,6 @@ struct DashboardView: View {
 }
 
 #Preview {
-    DashboardView()
+    DashboardView(showSearch: .constant(false))
         .modelContainer(for: [Memory.self, Echo.self, Ping.self], inMemory: true)
 }

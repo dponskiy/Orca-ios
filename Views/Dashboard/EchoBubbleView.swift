@@ -10,6 +10,7 @@ import SwiftUI
 struct EchoBubbleView: View {
     let echo: Echo
     let count: Int
+    var totalMemories: Int = 1
     @State private var floating = false
     
     var body: some View {
@@ -42,19 +43,21 @@ struct EchoBubbleView: View {
     }
     
     private var bubbleSize: CGFloat {
-            switch count {
-            case 1...3: return 68
-            case 4...8: return 76
-            case 9...15: return 88
-            case 16...30: return 96
-            default: return 104
-            }
-        }
+        let minSize: CGFloat = 56
+        let maxSize: CGFloat = 100
+        
+        guard totalMemories > 0 else { return minSize }
+        
+        let proportion = Double(count) / Double(totalMemories)
+        
+        return minSize + (maxSize - minSize) * CGFloat(min(proportion * 3, 1.0))
     }
+}
 
 #Preview {
-    EchoBubbleView(
-        echo: Echo(name: "Dining", emoji: "🍜"),
-        count: 5
-    )
+    HStack {
+        EchoBubbleView(echo: Echo(name: "Gifts", emoji: "🎁"), count: 2, totalMemories: 20)
+        EchoBubbleView(echo: Echo(name: "Work", emoji: "💼"), count: 10, totalMemories: 20)
+        EchoBubbleView(echo: Echo(name: "Dining", emoji: "🍜"), count: 18, totalMemories: 20)
+    }
 }
