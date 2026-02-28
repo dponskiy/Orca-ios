@@ -10,25 +10,20 @@ import SwiftData
 
 @main
 struct OrcaApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Memory.self,
-            Echo.self,
-            Ping.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
-
+    @State private var authService = AuthService()
+    @AppStorage("hasSkippedAuth") private var hasSkippedAuth = false
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if authService.isAuthenticated || hasSkippedAuth {
+                ContentView()
+                    .environment(authService)
+            } else {
+                AuthView(authService: authService) {
+                    hasSkippedAuth = true
+                }
+            }
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(for: [Memory.self, Echo.self, Ping.self])
     }
 }

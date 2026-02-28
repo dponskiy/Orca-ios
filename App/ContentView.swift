@@ -91,4 +91,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .modelContainer(for: [Memory.self, Echo.self, Ping.self], inMemory: true)
+        .environment(AuthService())
 }

@@ -43,6 +43,11 @@
 		872F72752F512601000A4AE3 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72442F4F240A000A4AE3 /* SettingsView.swift */; };
 		872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723D2F4F23C7000A4AE3 /* BrowseAllView.swift */; };
 		87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */; };
+		87CD0AE12F52917B00CAAB4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B932F4EB2FB0058324F /* Config.swift */; };
+		87CD0AE42F52992800CAAB4D /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9C2F4EB3F30058324F /* AuthService.swift */; };
+		87CD0AE52F52992E00CAAB4D /* SupabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */; };
+		87CD0AE72F52996100CAAB4D /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AE62F52995300CAAB4D /* AuthView.swift */; };
+		87CD0AEA2F529B4700CAAB4D /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 87CD0AE92F529B4700CAAB4D /* Supabase */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -117,6 +122,8 @@
 		873C1BA12F4EB43E0058324F /* Echo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Echo.swift; sourceTree = "<group>"; };
 		873C1BA22F4EB4440058324F /* Ping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ping.swift; sourceTree = "<group>"; };
 		87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseManager.swift; sourceTree = "<group>"; };
+		87CD0AE62F52995300CAAB4D /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -155,6 +162,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				87CD0AEA2F529B4700CAAB4D /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -187,6 +195,7 @@
 				873C1B5D2F4EA59D0058324F /* Orca */,
 				873C1B6D2F4EA59E0058324F /* OrcaTests */,
 				873C1B772F4EA59E0058324F /* OrcaUITests */,
+				87CD0AE82F529B4700CAAB4D /* Frameworks */,
 				873C1B5C2F4EA59D0058324F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -239,6 +248,7 @@
 		873C1B8D2F4EB2A60058324F /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */,
 				873C1B9E2F4EB40A0058324F /* AnalyticsService.swift */,
 				873C1B9D2F4EB3FC0058324F /* SyncService.swift */,
 				873C1B9C2F4EB3F30058324F /* AuthService.swift */,
@@ -334,6 +344,7 @@
 		873C1BA82F4EB4770058324F /* Auth */ = {
 			isa = PBXGroup;
 			children = (
+				87CD0AE62F52995300CAAB4D /* AuthView.swift */,
 				872F72432F4F23FE000A4AE3 /* LoginView.swift */,
 				872F72422F4F23F2000A4AE3 /* SignUpView.swift */,
 			);
@@ -366,6 +377,13 @@
 			path = Today;
 			sourceTree = "<group>";
 		};
+		87CD0AE82F529B4700CAAB4D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -386,6 +404,7 @@
 			);
 			name = Orca;
 			packageProductDependencies = (
+				87CD0AE92F529B4700CAAB4D /* Supabase */,
 			);
 			productName = Orca;
 			productReference = 873C1B5B2F4EA59D0058324F /* Orca.app */;
@@ -469,6 +488,9 @@
 			);
 			mainGroup = 873C1B522F4EA59D0058324F;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				87CD0AE22F52928600CAAB4D /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 873C1B5C2F4EA59D0058324F /* Products */;
 			projectDirPath = "";
@@ -540,12 +562,16 @@
 				872F72642F4FE598000A4AE3 /* DashboardView.swift in Sources */,
 				872F725D2F4FDC77000A4AE3 /* Ping.swift in Sources */,
 				872F725F2F4FDC8B000A4AE3 /* Memory.swift in Sources */,
+				87CD0AE72F52996100CAAB4D /* AuthView.swift in Sources */,
+				87CD0AE12F52917B00CAAB4D /* Config.swift in Sources */,
 				872F72742F51256E000A4AE3 /* CreateEchoView.swift in Sources */,
+				87CD0AE42F52992800CAAB4D /* AuthService.swift in Sources */,
 				872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */,
 				872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */,
 				872F72632F4FE581000A4AE3 /* FinIcon.swift in Sources */,
 				872F722D2F4ED482000A4AE3 /* OrcaApp.swift in Sources */,
 				872F72662F4FE723000A4AE3 /* SearchView.swift in Sources */,
+				87CD0AE52F52992E00CAAB4D /* SupabaseManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -700,6 +726,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
@@ -745,6 +772,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
@@ -927,6 +955,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		87CD0AE22F52928600CAAB4D /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		87CD0AE92F529B4700CAAB4D /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 87CD0AE22F52928600CAAB4D /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 873C1B532F4EA59D0058324F /* Project object */;
 }
