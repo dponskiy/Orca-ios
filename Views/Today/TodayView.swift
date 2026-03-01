@@ -29,12 +29,11 @@ struct TodayView: View {
             allMemories.filter { memory in
                 guard memory.isActionable && !memory.isCompleted else { return false }
                 
-                // Show on detected date
                 if isTaskForDate(memory: memory) { return true }
                 
-                // Also show if there's a recurring ping for this day
                 let memoryPings = pings.filter { $0.memoryId == memory.id && $0.isActive }
                 for ping in memoryPings {
+                    guard ping.recurrence != .none else { continue }
                     guard selectedDate >= calendar.startOfDay(for: ping.fireDate) else { continue }
                     switch ping.recurrence {
                     case .daily:

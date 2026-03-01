@@ -106,17 +106,16 @@ struct TypeCaptureView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
-        
         if let result = sonarResult {
-                    for suggestion in result.pingSuggestions {
-                        let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
-                        let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
-                        if let fireTime = suggestion.fireTime {
-                            ping.fireTime = fireTime
-                        }
-                        modelContext.insert(ping)
-                    }
+            for suggestion in result.pingSuggestions {
+                let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
+                let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
+                if let fireTime = suggestion.fireTime {
+                    ping.fireTime = fireTime
                 }
+                modelContext.insert(ping)
+            }
+        }
         
         withAnimation(.spring(duration: 0.4)) {
             showBanner = true

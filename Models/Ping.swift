@@ -26,6 +26,7 @@ class Ping {
     init(memoryId: UUID, fireDate: Date, recurrence: Recurrence = .none) {
         self.memoryId = memoryId
         self.fireDate = fireDate
+        self.recurrence = recurrence
         self.fireTime = Calendar.current.date(
             bySettingHour: 9, minute: 0, second: 0, of: fireDate
         ) ?? fireDate
