@@ -104,6 +104,7 @@ struct EchoDetailView: View {
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
+                        .tint(.red)
                         
                         Button {
                             editingMemory = memory

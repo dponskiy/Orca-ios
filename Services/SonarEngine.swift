@@ -33,17 +33,17 @@ class SonarEngine {
     
     private let keywordMap: [(echo: String, keywords: [String], priority: Int)] = [
         ("Health", ["doctor", "medicine", "prescription", "appointment", "dentist", "therapy", "vitamin", "hospital", "symptoms", "allergy", "medication", "pharmacy", "sick", "pain", "blood pressure", "checkup"], 1),
-        ("Kids", ["school", "homework", "daycare", "teacher", "parent", "pediatrician", "baby", "child", "kid", "daughter", "son", "playground", "soccer practice", "ballet", "tutor"], 2),
+        ("Kids", ["daycare", "teacher", "parent", "pediatrician", "baby", "child", "kid", "daughter", "son", "playground", "soccer practice", "ballet", "tutor"], 2),
         ("Birthday", ["birthday", "bday", "turning", "birthday party", "birthday gift", "birthday present"], 3),
         ("Gifts", ["present", "gift", "christmas gift", "anniversary gift", "wishes", "wants", "wish list", "registry", "surprise"], 4),
         ("Travel", ["flight", "hotel", "airport", "vacation", "trip", "booking", "passport", "luggage", "airbnb", "rental car", "itinerary", "resort", "cruise", "destination"], 5),
         ("Cooking", ["recipe", "ingredient", "cook", "bake", "tablespoon", "teaspoon", "oven", "stove", "marinade", "seasoning", "prep", "simmer", "saute", "roast", "grill"], 6),
-        ("Dining", ["restaurant", "reservation", "menu", "waiter", "takeout", "delivery", "brunch", "dinner", "lunch", "cafe", "appetizer", "entree", "dessert", "cocktail", "bar"], 7),
-        ("Sports", ["game", "score", "team", "season", "ticket", "stadium", "coach", "player", "league", "tournament", "playoffs", "practice", "workout", "gym", "match"], 8),
+        ("Dining", ["restaurant", "reservation", "menu", "waiter", "takeout", "delivery", "brunch", "lunch", "cafe", "appetizer", "entree", "dessert", "cocktail", "bar"], 7),
+        ("Sports", ["game", "score", "team", "season", "ticket", "stadium", "coach", "player", "league", "tournament", "playoffs", "workout", "gym", "match"], 8),
         ("Events", ["concert", "show", "festival", "conference", "expo", "recital", "performance", "gala", "ceremony", "graduation", "prom", "meetup", "gathering"], 9),
-        ("Shopping", ["buy", "price", "store", "coupon", "sale", "amazon", "size", "return", "order", "shipping", "discount", "brand", "mall", "target", "walmart", "costco"], 10),
+        ("Shopping", ["buy", "price", "store", "coupon", "sale", "amazon", "size", "return", "shipping", "discount", "brand", "mall", "target", "walmart", "costco"], 10),
         ("Home", ["plumber", "electrician", "repair", "mortgage", "rent", "landlord", "furniture", "paint", "garden", "lawn", "roof", "garage", "basement", "kitchen", "bathroom", "renovate", "move"], 11),
-        ("School", ["class", "exam", "test", "study", "professor", "lecture", "semester", "tuition", "campus", "assignment", "essay", "grade", "gpa", "syllabus", "textbook"], 12),
+        ("School", ["class", "exam", "test", "study", "professor", "lecture", "semester", "tuition", "campus", "assignment", "essay", "grade", "gpa", "syllabus", "textbook", "homework", "school"], 12),
         ("Work", ["meeting", "deadline", "project", "email", "boss", "coworker", "presentation", "report", "salary", "interview", "client", "office", "standup", "promotion", "review"], 13),
         ("Pets", ["vet", "dog", "cat", "puppy", "kitten", "pet food", "grooming", "walk", "collar", "leash", "litter", "treats", "adoption", "vaccine", "flea"], 14),
         ("Finance", ["bank", "savings", "investment", "tax", "credit card", "payment", "budget", "insurance", "loan", "interest", "401k", "stocks", "debt", "refund", "subscription"], 15),
@@ -149,7 +149,6 @@ class SonarEngine {
         let confidence = hasAbsoluteDate ? 0.9 : 0.6
         
         if dates.count == 1 {
-            // Check for relative offset like "an hour before"
             let lower = text.lowercased()
             let hasReminderPhrase = lower.contains("remind") || lower.contains("don't forget") || lower.contains("dont forget")
             
@@ -162,7 +161,6 @@ class SonarEngine {
             return (dates[0], confidence, nil, nil)
         }
         
-        // Multiple dates found — sort by distance from now
         let sorted = dates.sorted { abs($0.timeIntervalSinceNow) < abs($1.timeIntervalSinceNow) }
         let nearest = sorted.first!
         let furthest = sorted.last!
@@ -206,16 +204,26 @@ class SonarEngine {
     
     private func buildPingSuggestions(text: String, dates: (eventDate: Date?, eventConfidence: Double?, reminderDate: Date?, reminderTime: Date?)) -> [PingSuggestion] {
         var suggestions: [PingSuggestion] = []
+        let calendar = Calendar.current
         
-        // Check for multi-weekday recurring ("every saturday and sunday")
-        let multiWeekdays = detectMultiWeekdays(text: text)
-        if !multiWeekdays.isEmpty {
-            let calendar = Calendar.current
-            for weekday in multiWeekdays {
+        // Check for weekday recurring ("every monday", "every saturday and sunday")
+        let weekdays = detectWeekdays(text: text)
+        if !weekdays.isEmpty {
+            for weekday in weekdays {
                 let nextDate = nextOccurrence(of: weekday)
+                
+                // Try to extract time from the text
+                var fireTime = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: Date())
+                if let eventDate = dates.eventDate {
+                    let components = calendar.dateComponents([.hour, .minute], from: eventDate)
+                    if components.hour != 0 || components.minute != 0 {
+                        fireTime = eventDate
+                    }
+                }
+                
                 suggestions.append(PingSuggestion(
                     fireDate: nextDate,
-                    fireTime: calendar.date(bySettingHour: 9, minute: 0, second: 0, of: Date()),
+                    fireTime: fireTime,
                     recurrence: .weekly
                 ))
             }
@@ -225,7 +233,6 @@ class SonarEngine {
         // Check for auto-yearly events (birthdays, holidays, etc.)
         let isAutoYearly = autoYearlyKeywords.contains { text.contains($0) }
         if isAutoYearly, let eventDate = dates.eventDate {
-            let calendar = Calendar.current
             let defaultTime = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: eventDate)
             
             suggestions.append(PingSuggestion(
@@ -234,7 +241,6 @@ class SonarEngine {
                 recurrence: .yearly
             ))
             
-            // If there's also a separate reminder date, add that too
             if let reminderDate = dates.reminderDate {
                 suggestions.append(PingSuggestion(
                     fireDate: reminderDate,
@@ -246,44 +252,73 @@ class SonarEngine {
             return suggestions
         }
         
+        // Check for daily/monthly/yearly recurrence keywords
+        if text.contains("every day") || text.contains("daily") {
+            let fireDate = dates.eventDate ?? Date()
+            suggestions.append(PingSuggestion(
+                fireDate: fireDate,
+                fireTime: dates.eventDate,
+                recurrence: .daily
+            ))
+            return suggestions
+        }
+        
+        if text.contains("every week") || text.contains("weekly") {
+            let fireDate = dates.eventDate ?? Date()
+            suggestions.append(PingSuggestion(
+                fireDate: fireDate,
+                fireTime: dates.eventDate,
+                recurrence: .weekly
+            ))
+            return suggestions
+        }
+        
+        if text.contains("every month") || text.contains("monthly") {
+            let fireDate = dates.eventDate ?? Date()
+            suggestions.append(PingSuggestion(
+                fireDate: fireDate,
+                fireTime: dates.eventDate,
+                recurrence: .monthly
+            ))
+            return suggestions
+        }
+        
+        if text.contains("every year") || text.contains("yearly") || text.contains("annually") {
+            let fireDate = dates.eventDate ?? Date()
+            suggestions.append(PingSuggestion(
+                fireDate: fireDate,
+                fireTime: dates.eventDate,
+                recurrence: .yearly
+            ))
+            return suggestions
+        }
+        
         // Standard reminder detection
         guard dates.eventDate != nil else { return [] }
         
         let hasReminderIntent = reminderKeywords.contains { text.contains($0) }
         guard hasReminderIntent else { return [] }
         
-        var recurrence: Ping.Recurrence = Ping.Recurrence.none
-        
-        if text.contains("every day") || text.contains("daily") {
-            recurrence = .daily
-        } else if text.contains("every week") || text.contains("weekly") {
-            recurrence = .weekly
-        } else if text.contains("every month") || text.contains("monthly") {
-            recurrence = .monthly
-        } else if text.contains("every year") || text.contains("yearly") || text.contains("annually") {
-            recurrence = .yearly
-        }
-        
         if let reminderDate = dates.reminderDate {
             suggestions.append(PingSuggestion(
                 fireDate: reminderDate,
                 fireTime: dates.reminderTime,
-                recurrence: recurrence
+                recurrence: Ping.Recurrence.none
             ))
         } else {
             suggestions.append(PingSuggestion(
                 fireDate: dates.eventDate,
                 fireTime: nil,
-                recurrence: recurrence
+                recurrence: Ping.Recurrence.none
             ))
         }
         
         return suggestions
     }
     
-    // MARK: - Multi-Weekday Detection
+    // MARK: - Weekday Detection
     
-    private func detectMultiWeekdays(text: String) -> [Int] {
+    private func detectWeekdays(text: String) -> [Int] {
         guard text.contains("every") else { return [] }
         
         var weekdays: [Int] = []
@@ -295,7 +330,7 @@ class SonarEngine {
             }
         }
         
-        return weekdays.count >= 2 ? weekdays : (weekdays.count == 1 && text.contains("every") ? weekdays : [])
+        return weekdays
     }
     
     private func nextOccurrence(of weekday: Int) -> Date {

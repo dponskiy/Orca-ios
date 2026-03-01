@@ -26,15 +26,43 @@ struct TodayView: View {
     // MARK: - Filtered Data
     
     var todayTasks: [Memory] {
-        allMemories.filter { memory in
-            memory.isActionable && !memory.isCompleted && isTaskForDate(memory: memory)
+            allMemories.filter { memory in
+                guard memory.isActionable && !memory.isCompleted else { return false }
+                
+                // Show on detected date
+                if isTaskForDate(memory: memory) { return true }
+                
+                // Also show if there's a recurring ping for this day
+                let memoryPings = pings.filter { $0.memoryId == memory.id && $0.isActive }
+                for ping in memoryPings {
+                    guard selectedDate >= calendar.startOfDay(for: ping.fireDate) else { continue }
+                    switch ping.recurrence {
+                    case .daily:
+                        return true
+                    case .weekly:
+                        let fireWeekday = calendar.component(.weekday, from: ping.fireDate)
+                        let selectedWeekday = calendar.component(.weekday, from: selectedDate)
+                        if fireWeekday == selectedWeekday { return true }
+                    case .monthly:
+                        let fireDay = calendar.component(.day, from: ping.fireDate)
+                        let selectedDay = calendar.component(.day, from: selectedDate)
+                        if fireDay == selectedDay { return true }
+                    case .yearly:
+                        let fc = calendar.dateComponents([.month, .day], from: ping.fireDate)
+                        let sc = calendar.dateComponents([.month, .day], from: selectedDate)
+                        if fc.month == sc.month && fc.day == sc.day { return true }
+                    case .none:
+                        continue
+                    }
+                }
+                return false
+            }
+            .sorted { m1, m2 in
+                let d1 = m1.detectedDate ?? m1.createdAt
+                let d2 = m2.detectedDate ?? m2.createdAt
+                return d1 < d2
+            }
         }
-        .sorted { m1, m2 in
-            let d1 = m1.detectedDate ?? m1.createdAt
-            let d2 = m2.detectedDate ?? m2.createdAt
-            return d1 < d2
-        }
-    }
     
     var overdueTasks: [Memory] {
         guard calendar.isDateInToday(selectedDate) else { return [] }
@@ -57,8 +85,11 @@ struct TodayView: View {
     
     var todayPings: [Ping] {
         pings.filter { ping in
-            guard ping.isActive,
-                  let memory = allMemories.first(where: { $0.id == ping.memoryId }) else { return false }
+                    guard ping.isActive,
+                          let memory = allMemories.first(where: { $0.id == ping.memoryId }) else { return false }
+                    
+                    // Hide pings for recurring actionable tasks (they show in TO DO)
+                    if memory.isActionable && ping.recurrence != .none { return false }
             
             if calendar.isDate(ping.fireDate, inSameDayAs: selectedDate) {
                 return true
@@ -67,10 +98,10 @@ struct TodayView: View {
             guard selectedDate >= calendar.startOfDay(for: ping.fireDate) else { return false }
             
             if let eventDate = memory.detectedDate,
-               ping.fireDate != eventDate,
-               selectedDate > calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: eventDate) ?? eventDate) {
-                return false
-            }
+                           !calendar.isDate(ping.fireDate, inSameDayAs: eventDate),
+                           selectedDate > calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: eventDate) ?? eventDate) {
+                            return false
+                        }
             
             switch ping.recurrence {
             case .daily:
