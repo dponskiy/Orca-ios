@@ -13,23 +13,45 @@ class Echo {
     var id: UUID = UUID()
     var name: String
     var emoji: String
-    var isDefault: Bool = false
+    var isDefault: Bool = true
     var sortOrder: Int = 0
     var createdAt: Date = Date()
-
-    init(name: String, emoji: String, isDefault: Bool = false) {
+    
+    init(name: String, emoji: String, isDefault: Bool = true, sortOrder: Int = 0) {
         self.name = name
         self.emoji = emoji
         self.isDefault = isDefault
+        self.sortOrder = sortOrder
     }
-
-    static let defaults: [(String, String)] = [
-            ("Health", "💊"), ("Kids", "🎒"),
-            ("Gifts", "🎁"), ("Travel", "✈️"),
-            ("Cooking", "👨‍🍳"), ("Dining", "🍜"),
-            ("Sports", "🏈"), ("Shopping", "🛒"),
-            ("Home", "🏠"), ("Work", "💼"),
-            ("Pets", "🐾"), ("Finance", "💰"),
-            ("Chores", "🧹"), ("Games", "🎮"),
-    ]
+    
+    static func seedDefaults(context: ModelContext) {
+        let descriptor = FetchDescriptor<Echo>()
+        guard (try? context.fetchCount(descriptor)) == 0 else { return }
+        
+        let defaults: [(String, String)] = [
+            ("Health", "💊"),
+            ("Kids", "🎒"),
+            ("Birthday", "🎂"),
+            ("Gifts", "🎁"),
+            ("Travel", "✈️"),
+            ("Cooking", "👨‍🍳"),
+            ("Dining", "🍜"),
+            ("Sports", "🏈"),
+            ("Events", "🎉"),
+            ("Shopping", "🛒"),
+            ("Home", "🏠"),
+            ("School", "📚"),
+            ("Work", "💼"),
+            ("Pets", "🐾"),
+            ("Finance", "💰"),
+            ("Holidays", "🎄"),
+            ("Chores", "🧹"),
+            ("Games", "🎮"),
+        ]
+        
+        for (index, (name, emoji)) in defaults.enumerated() {
+            let echo = Echo(name: name, emoji: emoji, sortOrder: index)
+            context.insert(echo)
+        }
+    }
 }

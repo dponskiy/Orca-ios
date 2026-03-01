@@ -190,14 +190,10 @@ struct DashboardView: View {
         }
     
     private func seedDefaultEchos() {
-        guard echos.isEmpty else { return }
-        for (index, item) in Echo.defaults.enumerated() {
-            let echo = Echo(name: item.0, emoji: item.1, isDefault: true)
-            echo.sortOrder = index
-            modelContext.insert(echo)
+            guard echos.isEmpty else { return }
+            Echo.seedDefaults(context: modelContext)
         }
-    }
-}
+        }
 
 #Preview {
     DashboardView(showSearch: .constant(false))

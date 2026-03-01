@@ -55,9 +55,15 @@ struct EchoDetailView: View {
                                 .lineLimit(3)
                             
                             HStack(spacing: 8) {
-                                Text(memory.createdAt, format: .dateTime.month(.abbreviated).day().year())
-                                    .font(.custom("DMMono-Regular", size: 12))
-                                    .foregroundColor(.gray)
+                                if let date = memory.detectedDate {
+                                    Text(date, format: .dateTime.month(.abbreviated).day().year())
+                                        .font(.custom("DMMono-Regular", size: 12))
+                                        .foregroundColor(.oceanTeal)
+                                } else {
+                                    Text(memory.createdAt, format: .dateTime.month(.abbreviated).day().year())
+                                        .font(.custom("DMMono-Regular", size: 12))
+                                        .foregroundColor(.gray)
+                                }
                                 
                                 if memory.detectedDate != nil {
                                     Text("📅")
@@ -88,12 +94,41 @@ struct EchoDetailView: View {
                         }
                     }
                     .padding(.vertical, 4)
-                }
-                .onDelete { indexSet in
-                    for index in indexSet {
-                        modelContext.delete(filteredMemories[index])
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        editingMemory = memory
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            modelContext.delete(memory)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        
+                        Button {
+                            editingMemory = memory
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
+                        .tint(.oceanTeal)
                     }
                 }
+                
+                // Swipe hint
+                HStack {
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.left")
+                            .font(.system(size: 10))
+                        Text("swipe to edit or delete")
+                            .font(.custom("DMSans-Regular", size: 12))
+                    }
+                    .foregroundColor(.gray.opacity(0.5))
+                    .padding(.top, 8)
+                    Spacer()
+                }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             }
         }
         .navigationTitle("\(echo.emoji) \(echo.name)")

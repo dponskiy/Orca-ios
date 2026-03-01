@@ -8,6 +8,12 @@
 import Foundation
 import NaturalLanguage
 
+struct PingSuggestion {
+    let fireDate: Date?
+    let fireTime: Date?
+    let recurrence: Ping.Recurrence
+}
+
 struct SonarResult {
     let echoId: UUID?
     let echoName: String
@@ -20,6 +26,7 @@ struct SonarResult {
     let isActionable: Bool
     let pingFireDate: Date?
     let pingFireTime: Date?
+    let pingSuggestions: [PingSuggestion]
 }
 
 class SonarEngine {
@@ -27,23 +34,39 @@ class SonarEngine {
     private let keywordMap: [(echo: String, keywords: [String], priority: Int)] = [
         ("Health", ["doctor", "medicine", "prescription", "appointment", "dentist", "therapy", "vitamin", "hospital", "symptoms", "allergy", "medication", "pharmacy", "sick", "pain", "blood pressure", "checkup"], 1),
         ("Kids", ["school", "homework", "daycare", "teacher", "parent", "pediatrician", "baby", "child", "kid", "daughter", "son", "playground", "soccer practice", "ballet", "tutor"], 2),
-        ("Gifts", ["birthday", "present", "gift", "christmas", "anniversary", "wedding", "wishes", "wants", "wish list", "registry", "surprise"], 3),
-        ("Travel", ["flight", "hotel", "airport", "vacation", "trip", "booking", "passport", "luggage", "airbnb", "rental car", "itinerary", "resort", "cruise", "destination"], 4),
-        ("Cooking", ["recipe", "ingredient", "cook", "bake", "tablespoon", "teaspoon", "oven", "stove", "marinade", "seasoning", "prep", "simmer", "saute", "roast", "grill"], 5),
-        ("Dining", ["restaurant", "reservation", "menu", "order", "waiter", "takeout", "delivery", "brunch", "dinner", "lunch", "cafe", "appetizer", "entree", "dessert", "cocktail", "bar"], 6),
-        ("Sports", ["game", "score", "team", "season", "ticket", "stadium", "coach", "player", "league", "tournament", "playoffs", "practice", "workout", "gym", "match"], 7),
-        ("Shopping", ["buy", "price", "store", "coupon", "sale", "amazon", "size", "return", "order", "shipping", "discount", "brand", "mall", "target", "walmart", "costco"], 8),
-        ("Home", ["plumber", "electrician", "repair", "mortgage", "rent", "landlord", "furniture", "paint", "garden", "lawn", "roof", "garage", "basement", "kitchen", "bathroom", "renovate", "move"], 9),
-        ("Work", ["meeting", "deadline", "project", "email", "boss", "coworker", "presentation", "report", "salary", "interview", "client", "office", "standup", "promotion", "review"], 10),
-        ("Pets", ["vet", "dog", "cat", "puppy", "kitten", "pet food", "grooming", "walk", "collar", "leash", "litter", "treats", "adoption", "vaccine", "flea"], 11),
-        ("Finance", ["bank", "savings", "investment", "tax", "credit card", "payment", "budget", "insurance", "loan", "interest", "401k", "stocks", "debt", "mortgage", "refund", "subscription"], 12),
-        ("Chores", ["laundry", "vacuum", "dishes", "clean", "trash", "recycle", "mop", "dust", "organize", "declutter", "iron", "sweep", "garbage", "errands"], 13),
-        ("Games", ["xbox", "playstation", "nintendo", "switch", "steam", "gaming", "controller", "multiplayer", "level", "quest", "raid", "download", "update", "dlc", "console"], 14),
+        ("Birthday", ["birthday", "bday", "turning", "birthday party", "birthday gift", "birthday present"], 3),
+        ("Gifts", ["present", "gift", "christmas gift", "anniversary gift", "wishes", "wants", "wish list", "registry", "surprise"], 4),
+        ("Travel", ["flight", "hotel", "airport", "vacation", "trip", "booking", "passport", "luggage", "airbnb", "rental car", "itinerary", "resort", "cruise", "destination"], 5),
+        ("Cooking", ["recipe", "ingredient", "cook", "bake", "tablespoon", "teaspoon", "oven", "stove", "marinade", "seasoning", "prep", "simmer", "saute", "roast", "grill"], 6),
+        ("Dining", ["restaurant", "reservation", "menu", "waiter", "takeout", "delivery", "brunch", "dinner", "lunch", "cafe", "appetizer", "entree", "dessert", "cocktail", "bar"], 7),
+        ("Sports", ["game", "score", "team", "season", "ticket", "stadium", "coach", "player", "league", "tournament", "playoffs", "practice", "workout", "gym", "match"], 8),
+        ("Events", ["concert", "show", "festival", "conference", "expo", "recital", "performance", "gala", "ceremony", "graduation", "prom", "meetup", "gathering"], 9),
+        ("Shopping", ["buy", "price", "store", "coupon", "sale", "amazon", "size", "return", "order", "shipping", "discount", "brand", "mall", "target", "walmart", "costco"], 10),
+        ("Home", ["plumber", "electrician", "repair", "mortgage", "rent", "landlord", "furniture", "paint", "garden", "lawn", "roof", "garage", "basement", "kitchen", "bathroom", "renovate", "move"], 11),
+        ("School", ["class", "exam", "test", "study", "professor", "lecture", "semester", "tuition", "campus", "assignment", "essay", "grade", "gpa", "syllabus", "textbook"], 12),
+        ("Work", ["meeting", "deadline", "project", "email", "boss", "coworker", "presentation", "report", "salary", "interview", "client", "office", "standup", "promotion", "review"], 13),
+        ("Pets", ["vet", "dog", "cat", "puppy", "kitten", "pet food", "grooming", "walk", "collar", "leash", "litter", "treats", "adoption", "vaccine", "flea"], 14),
+        ("Finance", ["bank", "savings", "investment", "tax", "credit card", "payment", "budget", "insurance", "loan", "interest", "401k", "stocks", "debt", "refund", "subscription"], 15),
+        ("Holidays", ["christmas", "thanksgiving", "easter", "halloween", "new year", "valentine", "fourth of july", "independence day", "labor day", "memorial day", "hanukkah", "kwanzaa", "diwali"], 16),
+        ("Chores", ["laundry", "vacuum", "dishes", "clean", "trash", "recycle", "mop", "dust", "organize", "declutter", "iron", "sweep", "garbage", "errands"], 17),
+        ("Games", ["xbox", "playstation", "nintendo", "switch", "steam", "gaming", "controller", "multiplayer", "level", "quest", "raid", "download", "dlc", "console"], 18),
     ]
     
-    private let reminderKeywords = ["remind", "remember", "don't forget", "dont forget", "every monday", "every tuesday", "every wednesday", "every thursday", "every friday", "every saturday", "every sunday", "every week", "every month", "every year", "every day", "daily", "weekly", "monthly", "yearly", "annually", "birthday", "appointment", "deadline", "due date"]
+    private let reminderKeywords = ["remind", "remember", "don't forget", "dont forget", "every monday", "every tuesday", "every wednesday", "every thursday", "every friday", "every saturday", "every sunday", "every week", "every month", "every year", "every day", "daily", "weekly", "monthly", "yearly", "annually", "appointment", "deadline", "due date"]
     
-    private let actionKeywords = ["buy", "get", "pick up", "pickup", "call", "email", "send", "schedule", "book", "cancel", "return", "fix", "clean", "make", "order", "pay", "finish", "submit", "renew", "sign up", "signup", "register", "drop off", "dropoff", "mail", "ship", "text", "message", "contact", "set up", "setup", "install", "update", "replace", "check", "review", "prepare", "plan", "arrange", "confirm", "reschedule", "refill", "restock", "wash", "take", "bring", "move", "file", "print", "scan", "deposit", "transfer", "apply", "complete", "grab", "find", "look into", "follow up", "respond", "reply"]
+    private let actionKeywords = ["buy", "get", "pick up", "pickup", "call", "email", "send", "schedule", "book", "cancel", "return", "fix", "clean", "make", "order", "pay", "finish", "submit", "renew", "sign up", "signup", "register", "drop off", "dropoff", "mail", "ship", "text", "message", "contact", "set up", "setup", "install", "update", "replace", "check", "review", "prepare", "plan", "arrange", "confirm", "reschedule", "refill", "restock", "wash", "take", "bring", "move", "file", "print", "scan", "deposit", "transfer", "apply", "complete", "grab", "find", "look into", "follow up", "respond", "reply", "game", "concert", "show", "match", "party", "dinner", "event", "appointment", "meeting", "flight", "reservation", "practice", "class", "exam", "recital", "performance"]
+    
+    private let autoYearlyKeywords = ["birthday", "bday", "anniversary", "christmas", "thanksgiving", "easter", "halloween", "new year", "valentine", "hanukkah", "kwanzaa", "diwali", "independence day", "fourth of july", "memorial day", "labor day"]
+    
+    private let weekdayMap: [(String, Int)] = [
+        ("sunday", 1), ("sundays", 1),
+        ("monday", 2), ("mondays", 2),
+        ("tuesday", 3), ("tuesdays", 3),
+        ("wednesday", 4), ("wednesdays", 4),
+        ("thursday", 5), ("thursdays", 5),
+        ("friday", 6), ("fridays", 6),
+        ("saturday", 7), ("saturdays", 7),
+    ]
     
     // MARK: - Main Process
     
@@ -53,11 +76,13 @@ class SonarEngine {
         let echoResult = assignEcho(text: lower, echos: echos)
         let dateResults = detectDates(text: text)
         let tags = generateTags(text: text, echoName: echoResult.name)
-        let pingResult = decidePing(text: lower, dates: dateResults)
         let actionable = detectAction(text: lower)
+        let pingSuggestions = buildPingSuggestions(text: lower, dates: dateResults)
         
         let eventDate = dateResults.eventDate
         let eventConfidence = dateResults.eventConfidence
+        
+        let primary = pingSuggestions.first
         
         return SonarResult(
             echoId: echoResult.id,
@@ -66,11 +91,12 @@ class SonarEngine {
             detectedDate: eventDate,
             dateConfidence: eventConfidence,
             tags: tags,
-            shouldCreatePing: pingResult.shouldCreate,
-            pingRecurrence: pingResult.recurrence,
+            shouldCreatePing: !pingSuggestions.isEmpty,
+            pingRecurrence: primary?.recurrence ?? Ping.Recurrence.none,
             isActionable: actionable,
-            pingFireDate: pingResult.fireDate,
-            pingFireTime: pingResult.fireTime
+            pingFireDate: primary?.fireDate,
+            pingFireTime: primary?.fireTime,
+            pingSuggestions: pingSuggestions
         )
     }
     
@@ -90,7 +116,7 @@ class SonarEngine {
         for entry in keywordMap {
             let matchCount = entry.keywords.filter { text.contains($0) }.count
             if matchCount > 0 {
-                if bestMatch == nil || entry.priority < bestMatch!.priority || matchCount > bestMatch!.matchCount {
+                if bestMatch == nil || matchCount > bestMatch!.matchCount || (matchCount == bestMatch!.matchCount && entry.priority < bestMatch!.priority) {
                     bestMatch = (entry.echo, entry.priority, matchCount)
                 }
             }
@@ -123,6 +149,16 @@ class SonarEngine {
         let confidence = hasAbsoluteDate ? 0.9 : 0.6
         
         if dates.count == 1 {
+            // Check for relative offset like "an hour before"
+            let lower = text.lowercased()
+            let hasReminderPhrase = lower.contains("remind") || lower.contains("don't forget") || lower.contains("dont forget")
+            
+            if hasReminderPhrase, let offset = detectRelativeOffset(text: lower) {
+                let eventDate = dates[0]
+                let reminderDate = eventDate.addingTimeInterval(offset)
+                return (eventDate, confidence, reminderDate, reminderDate)
+            }
+            
             return (dates[0], confidence, nil, nil)
         }
         
@@ -131,8 +167,6 @@ class SonarEngine {
         let nearest = sorted.first!
         let furthest = sorted.last!
         
-        // If the nearest date is within 7 days and furthest is later,
-        // treat nearest as reminder and furthest as event
         let lower = text.lowercased()
         let hasReminderPhrase = lower.contains("remind") || lower.contains("don't forget") || lower.contains("dont forget")
         
@@ -141,6 +175,136 @@ class SonarEngine {
         }
         
         return (furthest, confidence, nil, nil)
+    }
+    
+    // MARK: - Relative Offset Detection
+    
+    private func detectRelativeOffset(text: String) -> TimeInterval? {
+        let patterns: [(String, TimeInterval)] = [
+            ("(an?|1|one)\\s+hours?\\s+before", -3600),
+            ("(2|two)\\s+hours?\\s+before", -7200),
+            ("(3|three)\\s+hours?\\s+before", -10800),
+            ("(4|four)\\s+hours?\\s+before", -14400),
+            ("half\\s+(an?\\s+)?hours?\\s+before", -1800),
+            ("(30|thirty)\\s+minutes?\\s+before", -1800),
+            ("(15|fifteen)\\s+minutes?\\s+before", -900),
+            ("(45|forty.?five)\\s+minutes?\\s+before", -2700),
+            ("(a|1|one)\\s+days?\\s+before", -86400),
+            ("(2|two)\\s+days?\\s+before", -172800),
+            ("(a|1|one)\\s+weeks?\\s+before", -604800),
+        ]
+        
+        for (pattern, offset) in patterns {
+            if text.range(of: pattern, options: .regularExpression) != nil {
+                return offset
+            }
+        }
+        return nil
+    }
+    
+    // MARK: - Ping Suggestions Builder
+    
+    private func buildPingSuggestions(text: String, dates: (eventDate: Date?, eventConfidence: Double?, reminderDate: Date?, reminderTime: Date?)) -> [PingSuggestion] {
+        var suggestions: [PingSuggestion] = []
+        
+        // Check for multi-weekday recurring ("every saturday and sunday")
+        let multiWeekdays = detectMultiWeekdays(text: text)
+        if !multiWeekdays.isEmpty {
+            let calendar = Calendar.current
+            for weekday in multiWeekdays {
+                let nextDate = nextOccurrence(of: weekday)
+                suggestions.append(PingSuggestion(
+                    fireDate: nextDate,
+                    fireTime: calendar.date(bySettingHour: 9, minute: 0, second: 0, of: Date()),
+                    recurrence: .weekly
+                ))
+            }
+            return suggestions
+        }
+        
+        // Check for auto-yearly events (birthdays, holidays, etc.)
+        let isAutoYearly = autoYearlyKeywords.contains { text.contains($0) }
+        if isAutoYearly, let eventDate = dates.eventDate {
+            let calendar = Calendar.current
+            let defaultTime = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: eventDate)
+            
+            suggestions.append(PingSuggestion(
+                fireDate: eventDate,
+                fireTime: defaultTime,
+                recurrence: .yearly
+            ))
+            
+            // If there's also a separate reminder date, add that too
+            if let reminderDate = dates.reminderDate {
+                suggestions.append(PingSuggestion(
+                    fireDate: reminderDate,
+                    fireTime: dates.reminderTime,
+                    recurrence: Ping.Recurrence.none
+                ))
+            }
+            
+            return suggestions
+        }
+        
+        // Standard reminder detection
+        guard dates.eventDate != nil else { return [] }
+        
+        let hasReminderIntent = reminderKeywords.contains { text.contains($0) }
+        guard hasReminderIntent else { return [] }
+        
+        var recurrence: Ping.Recurrence = Ping.Recurrence.none
+        
+        if text.contains("every day") || text.contains("daily") {
+            recurrence = .daily
+        } else if text.contains("every week") || text.contains("weekly") {
+            recurrence = .weekly
+        } else if text.contains("every month") || text.contains("monthly") {
+            recurrence = .monthly
+        } else if text.contains("every year") || text.contains("yearly") || text.contains("annually") {
+            recurrence = .yearly
+        }
+        
+        if let reminderDate = dates.reminderDate {
+            suggestions.append(PingSuggestion(
+                fireDate: reminderDate,
+                fireTime: dates.reminderTime,
+                recurrence: recurrence
+            ))
+        } else {
+            suggestions.append(PingSuggestion(
+                fireDate: dates.eventDate,
+                fireTime: nil,
+                recurrence: recurrence
+            ))
+        }
+        
+        return suggestions
+    }
+    
+    // MARK: - Multi-Weekday Detection
+    
+    private func detectMultiWeekdays(text: String) -> [Int] {
+        guard text.contains("every") else { return [] }
+        
+        var weekdays: [Int] = []
+        for (name, number) in weekdayMap {
+            if text.contains(name) {
+                if !weekdays.contains(number) {
+                    weekdays.append(number)
+                }
+            }
+        }
+        
+        return weekdays.count >= 2 ? weekdays : (weekdays.count == 1 && text.contains("every") ? weekdays : [])
+    }
+    
+    private func nextOccurrence(of weekday: Int) -> Date {
+        let calendar = Calendar.current
+        let today = Date()
+        let todayWeekday = calendar.component(.weekday, from: today)
+        var daysUntil = (weekday - todayWeekday + 7) % 7
+        if daysUntil == 0 { daysUntil = 7 }
+        return calendar.date(byAdding: .day, value: daysUntil, to: today) ?? today
     }
     
     // MARK: - Tag Generation
@@ -178,39 +342,5 @@ class SonarEngine {
         }
         
         return Array(tags.prefix(6))
-    }
-    
-    // MARK: - Ping Decision
-    
-    private func decidePing(text: String, dates: (eventDate: Date?, eventConfidence: Double?, reminderDate: Date?, reminderTime: Date?)) -> (shouldCreate: Bool, recurrence: Ping.Recurrence, fireDate: Date?, fireTime: Date?) {
-        guard dates.eventDate != nil else { return (false, Ping.Recurrence.none, nil, nil) }
-        
-        let hasReminderIntent = reminderKeywords.contains { text.contains($0) }
-        guard hasReminderIntent else { return (false, Ping.Recurrence.none, nil, nil) }
-        
-        var recurrence: Ping.Recurrence = Ping.Recurrence.none
-        
-        if text.contains("every day") || text.contains("daily") {
-            recurrence = .daily
-        } else if text.contains("every week") || text.contains("weekly") ||
-                    text.contains("every monday") || text.contains("every tuesday") ||
-                    text.contains("every wednesday") || text.contains("every thursday") ||
-                    text.contains("every friday") || text.contains("every saturday") ||
-                    text.contains("every sunday") {
-            recurrence = .weekly
-        } else if text.contains("every month") || text.contains("monthly") {
-            recurrence = .monthly
-        } else if text.contains("every year") || text.contains("yearly") ||
-                    text.contains("annually") || text.contains("birthday") {
-            recurrence = .yearly
-        }
-        
-        // If we detected a separate reminder date, use it
-        if let reminderDate = dates.reminderDate {
-            return (true, recurrence, reminderDate, dates.reminderTime)
-        }
-        
-        // Otherwise fire on the event date
-        return (true, recurrence, dates.eventDate, nil)
     }
 }

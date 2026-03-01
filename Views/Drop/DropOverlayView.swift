@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import AVFoundation
 
 struct DropOverlayView: View {
     @Binding var isPresented: Bool
@@ -23,7 +24,6 @@ struct DropOverlayView: View {
     var body: some View {
         ZStack {
             if showBanner {
-                // Dimmed dashboard with banner
                 Color.black.opacity(0.35)
                     .ignoresSafeArea()
                     .onTapGesture {
@@ -47,6 +47,15 @@ struct DropOverlayView: View {
             }
         }
         .onAppear {
+            checkAndStartRecording()
+        }
+    }
+    
+    // MARK: - Permission Check
+    
+    private func checkAndStartRecording() {
+        let micStatus = AVAudioApplication.shared.recordPermission
+        if micStatus == .undetermined {
             audioService.requestPermissions { granted in
                 if granted {
                     audioService.startRecording()
@@ -54,12 +63,17 @@ struct DropOverlayView: View {
                     permissionDenied = true
                 }
             }
+        } else if micStatus == .denied {
+            permissionDenied = true
+        } else {
+            audioService.startRecording()
         }
     }
     
+    // MARK: - Recording View
+    
     private var recordingView: some View {
         ZStack {
-            // Background gradient
             LinearGradient(
                 colors: [.deepNavy, Color(hex: "1A2A44")],
                 startPoint: .top,
@@ -70,7 +84,6 @@ struct DropOverlayView: View {
             VStack(spacing: 24) {
                 Spacer()
                 
-                // Live transcription
                 if !audioService.transcription.isEmpty {
                     Text(audioService.transcription)
                         .font(.custom("DMSans-Regular", size: 18))
@@ -80,7 +93,6 @@ struct DropOverlayView: View {
                         .animation(.easeOut(duration: 0.2), value: audioService.transcription)
                 }
                 
-                // Waveform bars
                 HStack(spacing: 3) {
                     ForEach(0..<24, id: \.self) { i in
                         RoundedRectangle(cornerRadius: 2)
@@ -91,21 +103,18 @@ struct DropOverlayView: View {
                 }
                 .frame(height: 40)
                 
-                // Timer
                 Text(formatTime(audioService.recordingDuration))
                     .font(.custom("DMMono-Regular", size: 16))
                     .foregroundColor(.white.opacity(0.5))
                 
                 Spacer()
                 
-                // Fin icon pulsing
                 FinIcon()
                     .fill(Color.coral.opacity(0.6))
                     .frame(width: 40, height: 48)
                     .scaleEffect(audioService.isRecording ? 1.1 : 1.0)
                     .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: audioService.isRecording)
                 
-                // Stop button
                 Button {
                     stopAndProcess()
                 } label: {
@@ -123,6 +132,8 @@ struct DropOverlayView: View {
             }
         }
     }
+    
+    // MARK: - Permission Denied View
     
     private var permissionDeniedView: some View {
         ZStack {
@@ -162,6 +173,8 @@ struct DropOverlayView: View {
         }
     }
     
+    // MARK: - Helpers
+    
     private func barHeight(index: Int) -> CGFloat {
         let base: CGFloat = 4
         let level = CGFloat(audioService.audioLevel)
@@ -183,10 +196,8 @@ struct DropOverlayView: View {
             return
         }
         
-        // Run Sonar
         sonarResult = sonarEngine.process(text: audioService.transcription, echos: echos)
         
-        // Save memory
         let echoId = sonarResult?.echoId ?? echos.first?.id ?? UUID()
         let memory = Memory(text: audioService.transcription, echoId: echoId)
         memory.tags = sonarResult?.tags ?? []
@@ -197,16 +208,17 @@ struct DropOverlayView: View {
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
         
-        // Create Ping if needed
-        // Create Ping if needed
-                if let result = sonarResult, result.shouldCreatePing {
-                    let fireDate = result.pingFireDate ?? result.detectedDate ?? Date()
-                    let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: result.pingRecurrence)
-                    if let fireTime = result.pingFireTime {
-                        ping.fireTime = fireTime
-                    }
-                    modelContext.insert(ping)
+        // Create Pings from suggestions
+        if let result = sonarResult {
+            for suggestion in result.pingSuggestions {
+                let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
+                let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
+                if let fireTime = suggestion.fireTime {
+                    ping.fireTime = fireTime
                 }
+                modelContext.insert(ping)
+            }
+        }
         
         withAnimation(.spring(duration: 0.4)) {
             showBanner = true
@@ -218,7 +230,6 @@ struct DropOverlayView: View {
     }
     
     private func undoAndClose() {
-        // Delete the most recent memory
         let recent = try? modelContext.fetch(
             FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         )

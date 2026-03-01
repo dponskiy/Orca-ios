@@ -736,6 +736,8 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orca/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orca needs your Microphone to capture voice memories";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Orca uses speech recognition to transcribe your voice memories";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -782,6 +784,8 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orca/Info.plist;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orca needs your Microphone to capture voice memories";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Orca uses speech recognition to transcribe your voice memories";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

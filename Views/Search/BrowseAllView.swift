@@ -31,10 +31,18 @@ struct BrowseAllView: View {
     }
     
     var filteredMemories: [Memory] {
+        var result: [Memory]
         if let echoId = selectedEchoId {
-            return memories.filter { $0.echoId == echoId }
+            result = memories.filter { $0.echoId == echoId }
+        } else {
+            result = Array(memories)
         }
-        return Array(memories)
+        
+        return result.sorted {
+            let d1 = $0.detectedDate ?? $0.updatedAt
+            let d2 = $1.detectedDate ?? $1.updatedAt
+            return d1 > d2
+        }
     }
     
     var body: some View {
@@ -213,14 +221,20 @@ struct BrowseAllView: View {
                     .lineLimit(3)
                 
                 HStack(spacing: 8) {
-                    Text(memory.createdAt, format: .dateTime.month(.abbreviated).day().year())
-                        .font(.custom("DMMono-Regular", size: 12))
-                        .foregroundColor(.gray)
-                    
                     if let date = memory.detectedDate {
-                        Text(date, format: .dateTime.month(.abbreviated).day())
+                        Text(date, format: .dateTime.month(.abbreviated).day().year())
                             .font(.custom("DMMono-Regular", size: 12))
-                            .foregroundColor(.coral)
+                            .foregroundColor(.oceanTeal)
+                    } else {
+                        Text(memory.createdAt, format: .dateTime.month(.abbreviated).day().year())
+                            .font(.custom("DMMono-Regular", size: 12))
+                            .foregroundColor(.gray)
+                    }
+                    
+                    if memory.wasEdited {
+                        Text("edited")
+                            .font(.custom("DMMono-Regular", size: 11))
+                            .foregroundColor(.gray)
                     }
                 }
             }
@@ -228,6 +242,10 @@ struct BrowseAllView: View {
             Spacer()
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            editingMemory = memory
+        }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 modelContext.delete(memory)
@@ -250,11 +268,13 @@ struct BrowseAllView: View {
         formatter.dateFormat = "MMM yyyy"
         
         let grouped = Dictionary(grouping: filteredMemories) { memory in
-            formatter.string(from: memory.createdAt)
+            let date = memory.detectedDate ?? memory.updatedAt
+            return formatter.string(from: date)
         }
         
         return grouped.sorted { pair1, pair2 in
-            guard let d1 = pair1.value.first?.createdAt, let d2 = pair2.value.first?.createdAt else { return false }
+            let d1 = pair1.value.first.flatMap { $0.detectedDate ?? $0.updatedAt } ?? Date.distantPast
+            let d2 = pair2.value.first.flatMap { $0.detectedDate ?? $0.updatedAt } ?? Date.distantPast
             return d1 > d2
         }
     }

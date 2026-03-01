@@ -56,49 +56,59 @@ struct TodayView: View {
     }
     
     var todayPings: [Ping] {
-            pings.filter { ping in
-                guard ping.isActive,
-                      let memory = allMemories.first(where: { $0.id == ping.memoryId }) else { return false }
-                
-                // Exact date match
-                if calendar.isDate(ping.fireDate, inSameDayAs: selectedDate) {
-                    return true
-                }
-                
-                // Only show recurring pings on/after fire date
-                guard selectedDate >= calendar.startOfDay(for: ping.fireDate) else { return false }
-                
-                // If memory has an event date, stop recurring after that date
-                if let eventDate = memory.detectedDate,
-                   ping.fireDate != eventDate,
-                   selectedDate > calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: eventDate) ?? eventDate) {
-                    return false
-                }
-                
-                switch ping.recurrence {
-                case .daily:
-                    return true
-                case .weekly:
-                    let fireWeekday = calendar.component(.weekday, from: ping.fireDate)
-                    let selectedWeekday = calendar.component(.weekday, from: selectedDate)
-                    return fireWeekday == selectedWeekday
-                case .monthly:
-                    let fireDay = calendar.component(.day, from: ping.fireDate)
-                    let selectedDay = calendar.component(.day, from: selectedDate)
-                    return fireDay == selectedDay
-                case .yearly:
-                    let fireComponents = calendar.dateComponents([.month, .day], from: ping.fireDate)
-                    let selectedComponents = calendar.dateComponents([.month, .day], from: selectedDate)
-                    return fireComponents.month == selectedComponents.month && fireComponents.day == selectedComponents.day
-                case .none:
-                    return false
-                }
+        pings.filter { ping in
+            guard ping.isActive,
+                  let memory = allMemories.first(where: { $0.id == ping.memoryId }) else { return false }
+            
+            if calendar.isDate(ping.fireDate, inSameDayAs: selectedDate) {
+                return true
+            }
+            
+            guard selectedDate >= calendar.startOfDay(for: ping.fireDate) else { return false }
+            
+            if let eventDate = memory.detectedDate,
+               ping.fireDate != eventDate,
+               selectedDate > calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: eventDate) ?? eventDate) {
+                return false
+            }
+            
+            switch ping.recurrence {
+            case .daily:
+                return true
+            case .weekly:
+                let fireWeekday = calendar.component(.weekday, from: ping.fireDate)
+                let selectedWeekday = calendar.component(.weekday, from: selectedDate)
+                return fireWeekday == selectedWeekday
+            case .monthly:
+                let fireDay = calendar.component(.day, from: ping.fireDate)
+                let selectedDay = calendar.component(.day, from: selectedDate)
+                return fireDay == selectedDay
+            case .yearly:
+                let fireComponents = calendar.dateComponents([.month, .day], from: ping.fireDate)
+                let selectedComponents = calendar.dateComponents([.month, .day], from: selectedDate)
+                return fireComponents.month == selectedComponents.month && fireComponents.day == selectedComponents.day
+            case .none:
+                return false
             }
         }
+    }
+    
+    var todayEvents: [Memory] {
+        allMemories.filter { memory in
+            !memory.isActionable && !memory.isCompleted &&
+            memory.detectedDate != nil &&
+            calendar.isDate(memory.detectedDate!, inSameDayAs: selectedDate)
+        }
+        .sorted { m1, m2 in
+            (m1.detectedDate ?? m1.createdAt) < (m2.detectedDate ?? m2.createdAt)
+        }
+    }
     
     var droppedToday: [Memory] {
         allMemories.filter { memory in
-            !memory.isActionable && calendar.isDate(memory.createdAt, inSameDayAs: selectedDate)
+            !memory.isActionable &&
+            memory.detectedDate == nil &&
+            calendar.isDate(memory.createdAt, inSameDayAs: selectedDate)
         }
     }
     
@@ -127,6 +137,10 @@ struct TodayView: View {
                             pingsSection
                         }
                         
+                        if !todayEvents.isEmpty {
+                            eventsSection
+                        }
+                        
                         if !completedTasks.isEmpty {
                             completedSection
                         }
@@ -135,7 +149,7 @@ struct TodayView: View {
                             droppedSection
                         }
                         
-                        if todayTasks.isEmpty && todayPings.isEmpty && droppedToday.isEmpty && completedTasks.isEmpty && overdueTasks.isEmpty {
+                        if todayTasks.isEmpty && todayPings.isEmpty && todayEvents.isEmpty && droppedToday.isEmpty && completedTasks.isEmpty && overdueTasks.isEmpty {
                             emptyState
                         }
                         
@@ -307,6 +321,17 @@ struct TodayView: View {
                 }
             }
             
+            if !todayEvents.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.seafoam)
+                    Text("\(todayEvents.count) \(todayEvents.count == 1 ? "event" : "events")")
+                        .font(.custom("DMSans-Medium", size: 13))
+                        .foregroundColor(.seafoam)
+                }
+            }
+            
             Spacer()
         }
     }
@@ -378,6 +403,9 @@ struct TodayView: View {
                                 }
                             }
                         }
+                        .onTapGesture {
+                            editingMemory = memory
+                        }
                         
                         Spacer()
                         
@@ -417,6 +445,79 @@ struct TodayView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
                 }
+            }
+        }
+    }
+    
+    // MARK: - Events Section
+    private var eventsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("EVENTS")
+                .font(.custom("DMSans-Medium", size: 13))
+                .foregroundColor(.seafoam)
+                .tracking(1)
+            
+            ForEach(todayEvents) { memory in
+                HStack(spacing: 12) {
+                    if let echo = echos.first(where: { $0.id == memory.echoId }) {
+                        Text(echo.emoji)
+                            .font(.system(size: 16))
+                            .frame(width: 24)
+                    } else {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.seafoam)
+                            .frame(width: 24)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(memory.text)
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.deepNavy)
+                            .lineLimit(2)
+                        
+                        HStack(spacing: 8) {
+                            if let echo = echos.first(where: { $0.id == memory.echoId }) {
+                                Text(echo.name)
+                                    .font(.custom("DMSans-Medium", size: 12))
+                                    .foregroundColor(.deepNavy)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.mist)
+                                    .clipShape(Capsule())
+                            }
+                            
+                            if let date = memory.detectedDate {
+                                Text(date, format: .dateTime.hour().minute())
+                                    .font(.custom("DMMono-Regular", size: 12))
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    .onTapGesture {
+                        editingMemory = memory
+                    }
+                    
+                    Spacer()
+                    
+                    Button {
+                        editingMemory = memory
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.mist)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "pencil")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.oceanTeal)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(12)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
             }
         }
     }
@@ -473,6 +574,9 @@ struct TodayView: View {
                         .font(.custom("DMSans-Regular", size: 15))
                         .foregroundColor(.deepNavy)
                         .lineLimit(2)
+                        .onTapGesture {
+                            editingMemory = memory
+                        }
                     
                     Spacer()
                 }
@@ -526,6 +630,9 @@ struct TodayView: View {
                             .foregroundColor(isOverdue ? .coral : .gray)
                     }
                 }
+            }
+            .onTapGesture {
+                editingMemory = memory
             }
             
             Spacer()
