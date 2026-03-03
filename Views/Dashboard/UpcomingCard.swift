@@ -7,9 +7,11 @@
 
 import SwiftUI
 
-struct MemoryOfDayCard: View {
+struct UpcomingCard: View {
     let memory: Memory
     let echos: [Echo]
+    let isPinned: Bool
+    let onTap: () -> Void
     let onDismiss: () -> Void
     
     var echo: Echo? {
@@ -19,13 +21,23 @@ struct MemoryOfDayCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 12))
-                    .foregroundColor(.oceanTeal)
-                Text("MEMORY OF THE DAY")
-                    .font(.custom("DMSans-Medium", size: 11))
-                    .foregroundColor(.oceanTeal)
-                    .tracking(1)
+                if isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.coral)
+                    Text("PINNED")
+                        .font(.custom("DMSans-Medium", size: 11))
+                        .foregroundColor(.coral)
+                        .tracking(1)
+                } else {
+                    Image(systemName: "clock")
+                        .font(.system(size: 11))
+                        .foregroundColor(.oceanTeal)
+                    Text("COMING UP")
+                        .font(.custom("DMSans-Medium", size: 11))
+                        .foregroundColor(.oceanTeal)
+                        .tracking(1)
+                }
                 
                 Spacer()
                 
@@ -35,9 +47,6 @@ struct MemoryOfDayCard: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.gray)
-                        .frame(width: 24, height: 24)
-                        .background(Color.pearl)
-                        .clipShape(Circle())
                 }
             }
             
@@ -65,22 +74,34 @@ struct MemoryOfDayCard: View {
                     HStack(spacing: 4) {
                         Text("📅")
                             .font(.system(size: 11))
-                        Text(date, format: .dateTime.month(.abbreviated).day())
+                        Text(date, format: .dateTime.month(.abbreviated).day().hour().minute())
                             .font(.custom("DMMono-Regular", size: 12))
                             .foregroundColor(.gray)
                     }
                 }
                 
                 Spacer()
-                
-                Text(memory.createdAt, format: .dateTime.month(.abbreviated).day().year())
-                    .font(.custom("DMMono-Regular", size: 11))
-                    .foregroundColor(.gray)
             }
         }
         .padding(16)
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap()
+        }
     }
+}
+
+#Preview {
+    UpcomingCard(
+        memory: Memory(text: "Liverpool game at 10am", echoId: UUID()),
+        echos: [],
+        isPinned: false,
+        onTap: {},
+        onDismiss: {}
+    )
+    .padding()
+    .background(Color.pearl)
 }
