@@ -13,9 +13,12 @@ struct SearchView: View {
     @Query(sort: \Memory.createdAt, order: .reverse) private var memories: [Memory]
     @Query private var echos: [Echo]
     
+    @State private var editingMemory: Memory?
     @State private var searchText = ""
     @State private var showBrowseAll = false
     @FocusState private var isFocused: Bool
+    @State private var audioService = AudioService()
+    @State private var isListening = false
     
     var results: [Memory] {
         guard !searchText.isEmpty else { return [] }
@@ -58,15 +61,32 @@ struct SearchView: View {
                     .background(Color.pearl)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     
-                    Button { } label: {
+                    Button {
+                        if isListening {
+                            audioService.stopRecording()
+                            searchText = audioService.transcription
+                            isListening = false
+                        } else {
+                            isListening = true
+                            audioService.startRecording()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                                if isListening {
+                                    audioService.stopRecording()
+                                    searchText = audioService.transcription
+                                    isListening = false
+                                }
+                            }
+                        }
+                    } label: {
                         ZStack {
                             Circle()
-                                .fill(Color.deepNavy)
+                                .fill(isListening ? Color.coral : Color.deepNavy)
                                 .frame(width: 36, height: 36)
-                            Image(systemName: "mic.fill")
+                            Image(systemName: isListening ? "stop.fill" : "mic.fill")
                                 .font(.system(size: 14))
                                 .foregroundColor(.white)
                         }
+                        .animation(.easeInOut(duration: 0.2), value: isListening)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -83,6 +103,9 @@ struct SearchView: View {
                 Spacer()
             }
             .background(Color.white)
+            .sheet(item: $editingMemory) { memory in
+                            MemoryEditView(memory: memory)
+                        }
             .onAppear {
                 isFocused = true
             }
@@ -241,6 +264,10 @@ struct SearchView: View {
             Spacer()
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
+                            .onTapGesture {
+                                editingMemory = memory
+                            }
     }
 }
 

@@ -14,12 +14,19 @@ struct MemoryEditView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var echos: [Echo]
     @Query private var pings: [Ping]
+    @Query private var subTasks: [SubTask]
     
     @State private var editedText: String = ""
     @State private var selectedEchoId: UUID = UUID()
     @State private var selectedDate: Date?
     @State private var hasDate: Bool = false
-    @State private var showDeleteConfirm = false
+    @State private var editedURL: String = ""
+    @State private var newSubTaskText: String = ""
+    
+    // Recipe fetch states
+    @State private var isFetchingRecipe = false
+    @State private var recipeErrorMessage: String? = nil
+    @State private var showRecipeSuccess = false
     
     // Ping states
     @State private var hasPing: Bool = false
@@ -53,36 +60,114 @@ struct MemoryEditView: View {
         pings.first { $0.memoryId == memory.id }
     }
     
+    var memorySubTasks: [SubTask] {
+        subTasks.filter { $0.memoryId == memory.id }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+    
+    // Show "Fetch Recipe" when there's a URL and echo is Cooking
+    var isCookingEcho: Bool {
+        echos.first { $0.id == selectedEchoId }?.name.lowercased().contains("cook") == true ||
+        echos.first { $0.id == selectedEchoId }?.name.lowercased().contains("recipe") == true ||
+        echos.first { $0.id == selectedEchoId }?.emoji == "🍳" ||
+        echos.first { $0.id == selectedEchoId }?.emoji == "🍽️"
+    }
+    
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    // Text
                     textSection
+                    
+                    // Echo
                     echoSection
+                    
+                    // Checklist
+                    if memory.hasChecklist || !memorySubTasks.isEmpty {
+                        checklistSection
+                    }
+                    
+                    // URL
+                    urlSection
+                    
+                    // Date
                     dateSection
                     
+                    // Ping
                     if hasDate {
                         pingSection
                     }
                     
-                    // Delete button
-                    Button {
-                        showDeleteConfirm = true
+                    // Pin
+                    Toggle(isOn: Binding(
+                        get: { memory.isPinned },
+                        set: { newValue in memory.isPinned = newValue }
+                    )) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.coral)
+                            Text("Pin to Dashboard")
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.deepNavy)
+                        }
+                    }
+                    .tint(.coral)
+                    
+                    // Task toggle
+                    Toggle(isOn: Binding(
+                        get: { memory.isActionable },
+                        set: { newValue in memory.isActionable = newValue }
+                    )) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle")
+                                .font(.system(size: 14))
+                                .foregroundColor(.oceanTeal)
+                            Text("Mark as Task")
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.deepNavy)
+                        }
+                    }
+                    .tint(.oceanTeal)
+                    
+                    // Convert to checklist button
+                    if !memory.hasChecklist && memorySubTasks.isEmpty {
+                        Button {
+                            convertToChecklist()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "list.bullet")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.oceanTeal)
+                                Text("Convert to Checklist")
+                                    .font(.custom("DMSans-Medium", size: 14))
+                                    .foregroundColor(.oceanTeal)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.oceanTeal.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+                                        
+                    // Delete
+                    Button(role: .destructive) {
+                        modelContext.delete(memory)
+                        dismiss()
                     } label: {
-                        HStack {
-                            Spacer()
+                        HStack(spacing: 6) {
                             Image(systemName: "trash")
                                 .font(.system(size: 14))
                             Text("Delete Memory")
-                                .font(.custom("DMSans-Medium", size: 15))
-                            Spacer()
+                                .font(.custom("DMSans-Medium", size: 14))
                         }
-                        .foregroundColor(.coral)
-                        .padding(.vertical, 14)
-                        .background(Color.coral.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .foregroundColor(.red)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.red.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
-                    .padding(.top, 8)
                 }
                 .padding(20)
             }
@@ -91,10 +176,8 @@ struct MemoryEditView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.gray)
+                    Button("Cancel") { dismiss() }
+                        .foregroundColor(.gray)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
@@ -107,15 +190,6 @@ struct MemoryEditView: View {
             }
             .onAppear {
                 loadState()
-            }
-            .alert("Delete Memory", isPresented: $showDeleteConfirm) {
-                Button("Delete", role: .destructive) {
-                    modelContext.delete(memory)
-                    dismiss()
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This will permanently delete this memory and any associated Pings.")
             }
         }
     }
@@ -151,7 +225,11 @@ struct MemoryEditView: View {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(echos) { echo in
+                    ForEach(echos.sorted { e1, e2 in
+                        if e1.id == selectedEchoId { return true }
+                        if e2.id == selectedEchoId { return false }
+                        return e1.sortOrder < e2.sortOrder
+                    }) { echo in
                         Button {
                             selectedEchoId = echo.id
                         } label: {
@@ -173,6 +251,182 @@ struct MemoryEditView: View {
         }
     }
     
+    // MARK: - Checklist Section
+    private var checklistSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Checklist")
+                    .font(.custom("DMSans-Medium", size: 14))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                let completed = memorySubTasks.filter { $0.isCompleted }.count
+                let total = memorySubTasks.count
+                if total > 0 {
+                    Text("\(completed)/\(total)")
+                        .font(.custom("DMMono-Regular", size: 12))
+                        .foregroundColor(.gray)
+                }
+            }
+            
+            ForEach(memorySubTasks) { subTask in
+                HStack(spacing: 10) {
+                    Button {
+                        withAnimation(.spring(duration: 0.2)) {
+                            subTask.isCompleted.toggle()
+                        }
+                    } label: {
+                        if subTask.isCompleted {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.oceanTeal)
+                                    .frame(width: 22, height: 22)
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                        } else {
+                            Circle()
+                                .stroke(Color.oceanTeal, lineWidth: 1.5)
+                                .frame(width: 22, height: 22)
+                        }
+                    }
+                    
+                    Text(subTask.text)
+                        .font(.custom("DMSans-Regular", size: 15))
+                        .foregroundColor(subTask.isCompleted ? .gray : .deepNavy)
+                        .strikethrough(subTask.isCompleted)
+                    
+                    Spacer()
+                    
+                    Button {
+                        modelContext.delete(subTask)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.gray.opacity(0.5))
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            
+            // Add new item
+            HStack(spacing: 10) {
+                Circle()
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 1.5)
+                    .frame(width: 22, height: 22)
+                
+                TextField("Add item...", text: $newSubTaskText)
+                    .font(.custom("DMSans-Regular", size: 15))
+                    .foregroundColor(.deepNavy)
+                    .onSubmit { addSubTask() }
+                
+                if !newSubTaskText.isEmpty {
+                    Button { addSubTask() } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.oceanTeal)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .padding(16)
+        .background(Color.pearl)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+    
+    // MARK: - URL Section
+    private var urlSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Link")
+                .font(.custom("DMSans-Medium", size: 14))
+                .foregroundColor(.gray)
+            
+            HStack(spacing: 8) {
+                Image(systemName: "link")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+                
+                TextField("Add a URL...", text: $editedURL)
+                    .font(.custom("DMSans-Regular", size: 15))
+                    .foregroundColor(.deepNavy)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+            }
+            .padding(12)
+            .background(Color.pearl)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1)
+            )
+            
+            // Action row: Open Link + Fetch Recipe
+            if !editedURL.isEmpty {
+                HStack(spacing: 10) {
+                    // Open Link
+                    if let url = URL(string: editedURL), UIApplication.shared.canOpenURL(url) {
+                        Button {
+                            UIApplication.shared.open(url)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.system(size: 13))
+                                Text("Open Link")
+                                    .font(.custom("DMSans-Medium", size: 13))
+                            }
+                            .foregroundColor(.oceanTeal)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.oceanTeal.opacity(0.1))
+                            .clipShape(Capsule())
+                        }
+                    }
+                    
+                    // Fetch Recipe button — always shown when URL present, highlighted for cooking echo
+                    Button {
+                        fetchRecipe()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if isFetchingRecipe {
+                                ProgressView()
+                                    .scaleEffect(0.75)
+                                    .tint(isCookingEcho ? .white : .oceanTeal)
+                            } else {
+                                Image(systemName: showRecipeSuccess ? "checkmark" : "fork.knife")
+                                    .font(.system(size: 13))
+                            }
+                            Text(isFetchingRecipe ? "Fetching..." : showRecipeSuccess ? "Imported!" : "Fetch Recipe")
+                                .font(.custom("DMSans-Medium", size: 13))
+                        }
+                        .foregroundColor(isCookingEcho ? .white : .oceanTeal)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(isCookingEcho ? Color.oceanTeal : Color.oceanTeal.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                    .disabled(isFetchingRecipe)
+                }
+                
+                // Error message
+                if let error = recipeErrorMessage {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.circle")
+                            .font(.system(size: 12))
+                            .foregroundColor(.coral)
+                        Text(error)
+                            .font(.custom("DMSans-Regular", size: 12))
+                            .foregroundColor(.coral)
+                    }
+                    .padding(.top, 2)
+                }
+            }
+        }
+    }
+    
     // MARK: - Date Section
     private var dateSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -187,9 +441,7 @@ struct MemoryEditView: View {
             }
             .tint(.oceanTeal)
             .onChange(of: hasDate) { _, newValue in
-                if !newValue {
-                    hasPing = false
-                }
+                if !newValue { hasPing = false }
             }
             
             if hasDate {
@@ -199,7 +451,7 @@ struct MemoryEditView: View {
                         get: { selectedDate ?? Date() },
                         set: { selectedDate = $0 }
                     ),
-                    displayedComponents: .date
+                    displayedComponents: [.date, .hourAndMinute]
                 )
                 .datePickerStyle(.graphical)
                 .tint(.oceanTeal)
@@ -226,6 +478,7 @@ struct MemoryEditView: View {
             .tint(.oceanTeal)
             
             if hasPing {
+                // Lead time
                 VStack(alignment: .leading, spacing: 6) {
                     Text("When")
                         .font(.custom("DMSans-Medium", size: 13))
@@ -250,6 +503,7 @@ struct MemoryEditView: View {
                     }
                 }
                 
+                // Time of day
                 DatePicker(
                     "Time",
                     selection: $pingTime,
@@ -258,6 +512,7 @@ struct MemoryEditView: View {
                 .font(.custom("DMSans-Regular", size: 15))
                 .tint(.oceanTeal)
                 
+                // Recurrence
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Repeat")
                         .font(.custom("DMSans-Medium", size: 13))
@@ -288,6 +543,7 @@ struct MemoryEditView: View {
                     }
                 }
                 
+                // Preview
                 if let date = selectedDate {
                     let fireDate = Calendar.current.date(byAdding: .day, value: -pingLeadTime.days, to: date) ?? date
                     HStack(spacing: 6) {
@@ -310,12 +566,150 @@ struct MemoryEditView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
     
+    // MARK: - Details Section
+    private var detailsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Details")
+                .font(.custom("DMSans-Medium", size: 14))
+                .foregroundColor(.gray)
+            
+            HStack {
+                Text("Captured")
+                    .font(.custom("DMSans-Regular", size: 13))
+                    .foregroundColor(.gray)
+                Spacer()
+                Text(memory.createdAt, format: .dateTime.month(.abbreviated).day().year().hour().minute())
+                    .font(.custom("DMMono-Regular", size: 13))
+                    .foregroundColor(.deepNavy)
+            }
+            
+            HStack {
+                Text("Type")
+                    .font(.custom("DMSans-Regular", size: 13))
+                    .foregroundColor(.gray)
+                Spacer()
+                Text(memory.captureType.rawValue.capitalized)
+                    .font(.custom("DMMono-Regular", size: 13))
+                    .foregroundColor(.deepNavy)
+            }
+        }
+        .padding(12)
+        .background(Color.pearl)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+    
+    // MARK: - Fetch Recipe
+    
+    private func fetchRecipe() {
+        guard !editedURL.isEmpty else { return }
+        recipeErrorMessage = nil
+        showRecipeSuccess = false
+        isFetchingRecipe = true
+        
+        Task {
+            do {
+                let recipe = try await RecipeExtractor.shared.extract(from: editedURL)
+                await MainActor.run {
+                    populateFromRecipe(recipe)
+                    isFetchingRecipe = false
+                    showRecipeSuccess = true
+                    // Reset success indicator after 2 seconds
+                    Task {
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        showRecipeSuccess = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isFetchingRecipe = false
+                    recipeErrorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+    
+    private func populateFromRecipe(_ recipe: RecipeResult) {
+        // Build instructions text
+        var parts: [String] = []
+        parts.append("🍽 \(recipe.title)")
+        
+        var meta: [String] = []
+        if let prep = recipe.prepTime  { meta.append("Prep: \(prep)") }
+        if let cook = recipe.cookTime  { meta.append("Cook: \(cook)") }
+        if let srv  = recipe.servings  { meta.append("Serves: \(srv)") }
+        if !meta.isEmpty { parts.append(meta.joined(separator: " · ")) }
+        
+        if !recipe.instructions.isEmpty {
+            parts.append("\nInstructions:")
+            for (i, step) in recipe.instructions.enumerated() {
+                parts.append("\(i + 1). \(step)")
+            }
+        }
+        
+        editedText = parts.joined(separator: "\n")
+        
+        // Clear existing subtasks and replace with ingredients
+        for subTask in memorySubTasks {
+            modelContext.delete(subTask)
+        }
+        
+        if !recipe.ingredients.isEmpty {
+            memory.hasChecklist = true
+            for (index, ingredient) in recipe.ingredients.enumerated() {
+                let subTask = SubTask(memoryId: memory.id, text: ingredient, sortOrder: index)
+                modelContext.insert(subTask)
+            }
+        }
+        
+        // Auto-switch echo to Cooking if one exists
+        if !isCookingEcho {
+            if let cookingEcho = echos.first(where: {
+                $0.name.lowercased().contains("cook") ||
+                $0.name.lowercased().contains("recipe") ||
+                $0.emoji == "🍳" || $0.emoji == "🍽️"
+            }) {
+                selectedEchoId = cookingEcho.id
+            }
+        }
+    }
+    
+    // MARK: - Helpers
+    
+    private func addSubTask() {
+        guard !newSubTaskText.isEmpty else { return }
+        let nextOrder = (memorySubTasks.last?.sortOrder ?? -1) + 1
+        let subTask = SubTask(memoryId: memory.id, text: newSubTaskText, sortOrder: nextOrder)
+        modelContext.insert(subTask)
+        memory.hasChecklist = true
+        newSubTaskText = ""
+    }
+    
+    private func convertToChecklist() {
+        let lines = editedText.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        
+        if lines.count >= 2 {
+            for (index, line) in lines.enumerated() {
+                let subTask = SubTask(memoryId: memory.id, text: line, sortOrder: index)
+                modelContext.insert(subTask)
+            }
+            memory.hasChecklist = true
+        } else {
+            let subTask = SubTask(memoryId: memory.id, text: "", sortOrder: 0)
+            modelContext.insert(subTask)
+            memory.hasChecklist = true
+        }
+    }
+    
     // MARK: - Load / Save
+    
     private func loadState() {
         editedText = memory.text
         selectedEchoId = memory.echoId
         selectedDate = memory.detectedDate
         hasDate = memory.detectedDate != nil
+        editedURL = memory.url ?? ""
         
         if let ping = existingPing {
             hasPing = true
@@ -335,7 +729,18 @@ struct MemoryEditView: View {
         memory.detectedDate = hasDate ? selectedDate : nil
         memory.wasEdited = true
         memory.updatedAt = Date()
+        memory.url = editedURL.isEmpty ? nil : editedURL
         
+        // Auto-complete memory if all subtasks are done
+        if memory.hasChecklist && !memorySubTasks.isEmpty {
+            let allDone = memorySubTasks.allSatisfy { $0.isCompleted }
+            if allDone {
+                memory.isCompleted = true
+                memory.completedAt = Date()
+            }
+        }
+        
+        // Handle Ping
         if hasPing, let date = selectedDate {
             let fireDate = Calendar.current.date(byAdding: .day, value: -pingLeadTime.days, to: date) ?? date
             
@@ -348,13 +753,16 @@ struct MemoryEditView: View {
                 existing.fireTime = pingTime
                 existing.recurrence = pingRecurrence
                 existing.isActive = true
+                NotificationService.shared.schedulePing(ping: existing, memoryText: editedText)
             } else {
                 let ping = Ping(memoryId: memory.id, fireDate: finalFireDate, recurrence: pingRecurrence)
                 ping.fireTime = pingTime
                 modelContext.insert(ping)
+                NotificationService.shared.schedulePing(ping: ping, memoryText: editedText)
             }
         } else {
             if let existing = existingPing {
+                NotificationService.shared.cancelPing(pingId: existing.id)
                 modelContext.delete(existing)
             }
         }

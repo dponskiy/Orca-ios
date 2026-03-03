@@ -25,6 +25,7 @@ struct TodayView: View {
     
     // MARK: - Filtered Data
     
+    
     var todayTasks: [Memory] {
             allMemories.filter { memory in
                 guard memory.isActionable && !memory.isCompleted else { return false }
@@ -400,6 +401,14 @@ struct TodayView: View {
     }
     
     // MARK: - Pings Section
+    private func fetchSubTasks(for memory: Memory) -> [SubTask] {
+            let memoryId = memory.id
+            let descriptor = FetchDescriptor<SubTask>(
+                sortBy: [SortDescriptor(\.sortOrder)]
+            )
+            let all = (try? modelContext.fetch(descriptor)) ?? []
+            return all.filter { $0.memoryId == memoryId }
+        }
     private var pingsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("PINGS")
@@ -419,7 +428,22 @@ struct TodayView: View {
                             Text(memory.text)
                                 .font(.custom("DMSans-Regular", size: 15))
                                 .foregroundColor(.deepNavy)
-                                .lineLimit(2)
+                                .lineLimit(memory.hasChecklist ? 1 : 2)
+                            
+                            if memory.hasChecklist {
+                                let subTasks = pings.count >= 0 ? fetchSubTasks(for: memory) : []
+                                if !subTasks.isEmpty {
+                                    let completed = subTasks.filter { $0.isCompleted }.count
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "list.bullet")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.oceanTeal)
+                                        Text("\(completed)/\(subTasks.count) items")
+                                            .font(.custom("DMMono-Regular", size: 11))
+                                            .foregroundColor(.oceanTeal)
+                                    }
+                                }
+                            }
                             
                             HStack(spacing: 8) {
                                 Text(ping.fireTime, format: .dateTime.hour().minute())
@@ -622,286 +646,298 @@ struct TodayView: View {
     private func taskRow(memory: Memory, isOverdue: Bool) -> some View {
         HStack(spacing: 12) {
             Button {
-                withAnimation(.spring(duration: 0.3)) {
-                    memory.isCompleted = true
-                    memory.completedAt = Date()
-                    memory.updatedAt = Date()
-                }
-            } label: {
-                Circle()
-                    .stroke(isOverdue ? Color.coral : Color.oceanTeal, lineWidth: 2)
-                    .frame(width: 24, height: 24)
-            }
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(memory.text)
-                    .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(.deepNavy)
-                    .lineLimit(2)
-                
-                HStack(spacing: 8) {
-                    if let echo = echos.first(where: { $0.id == memory.echoId }) {
-                        HStack(spacing: 3) {
-                            Text(echo.emoji)
-                                .font(.system(size: 11))
-                            Text(echo.name)
-                                .font(.custom("DMSans-Medium", size: 12))
-                                .foregroundColor(.deepNavy)
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.mist)
-                        .clipShape(Capsule())
-                    }
-                    
-                    if let date = memory.detectedDate {
-                        Text(date, format: .dateTime.month(.abbreviated).day())
-                            .font(.custom("DMMono-Regular", size: 12))
-                            .foregroundColor(isOverdue ? .coral : .gray)
-                    }
-                }
-            }
-            .onTapGesture {
-                editingMemory = memory
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 4) {
-                Button {
-                    snoozeMemory = memory
-                    showSnoozeSheet = true
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.mist)
-                            .frame(width: 32, height: 32)
-                        Image(systemName: "moon.zzz")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.oceanTeal)
-                    }
-                }
-                .buttonStyle(.plain)
-                
-                Button {
-                    editingMemory = memory
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.mist)
-                            .frame(width: 32, height: 32)
-                        Image(systemName: "pencil")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.oceanTeal)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(12)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
-    }
-    
-    // MARK: - Completed Row
-    private func completedRow(memory: Memory) -> some View {
-        HStack(spacing: 12) {
-            Button {
-                withAnimation(.spring(duration: 0.3)) {
-                    memory.isCompleted = false
-                    memory.completedAt = nil
-                    memory.updatedAt = Date()
-                }
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(Color.oceanTeal)
-                        .frame(width: 24, height: 24)
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                }
-            }
-            
-            Text(memory.text)
-                .font(.custom("DMSans-Regular", size: 15))
-                .foregroundColor(.gray)
-                .strikethrough()
-                .lineLimit(2)
-            
-            Spacer()
-        }
-        .padding(12)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
-    }
-    
-    // MARK: - Empty State
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Spacer().frame(height: 40)
-            
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 44))
-                .foregroundColor(.seafoam.opacity(0.4))
-            
-            Text(calendar.isDateInToday(selectedDate) ? "All clear today" : "Nothing on this day")
-                .font(.custom("DMSans-Medium", size: 18))
-                .foregroundColor(.deepNavy)
-            
-            Text(calendar.isDateInToday(selectedDate) ? "Drop a memory with a task and it\u{2019}ll show up here" : "Tasks and memories for this day will appear here")
-                .font(.custom("DMSans-Regular", size: 14))
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-    }
-    
-    // MARK: - Helpers
-    
-    private func isTaskForDate(memory: Memory, for date: Date? = nil) -> Bool {
-        let targetDate = date ?? selectedDate
-        
-        if let detectedDate = memory.detectedDate {
-            return calendar.isDate(detectedDate, inSameDayAs: targetDate)
-        }
-        
-        return calendar.isDate(memory.createdAt, inSameDayAs: targetDate)
-    }
-}
-
-// MARK: - Snooze Sheet
-struct SnoozeSheet: View {
-    let memory: Memory
-    let onDone: () -> Void
-    @Environment(\.dismiss) private var dismiss
-    
-    private let calendar = Calendar.current
-    
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                Text(memory.text)
-                    .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(.deepNavy)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(Color.pearl)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                
-                Text("Snooze until...")
-                    .font(.custom("DMSans-Medium", size: 16))
-                    .foregroundColor(.deepNavy)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                
-                VStack(spacing: 8) {
-                    snoozeOption(
-                        icon: "sunrise",
-                        label: "Tomorrow",
-                        sublabel: formatDate(daysFromNow: 1),
-                        date: calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
-                    )
-                    
-                    snoozeOption(
-                        icon: "calendar.badge.plus",
-                        label: "In 2 days",
-                        sublabel: formatDate(daysFromNow: 2),
-                        date: calendar.date(byAdding: .day, value: 2, to: Date()) ?? Date()
-                    )
-                    
-                    snoozeOption(
-                        icon: "calendar",
-                        label: "Next week",
-                        sublabel: formatDate(daysFromNow: 7),
-                        date: calendar.date(byAdding: .day, value: 7, to: Date()) ?? Date()
-                    )
-                    
-                    snoozeOption(
-                        icon: "calendar.badge.clock",
-                        label: "Next month",
-                        sublabel: formatDate(daysFromNow: 30),
-                        date: calendar.date(byAdding: .month, value: 1, to: Date()) ?? Date()
-                    )
-                }
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Or pick a date")
-                        .font(.custom("DMSans-Medium", size: 14))
-                        .foregroundColor(.gray)
-                    
-                    DatePicker(
-                        "Snooze date",
-                        selection: Binding(
-                            get: { memory.detectedDate ?? Date() },
-                            set: { newDate in
-                                memory.detectedDate = newDate
+                            withAnimation(.spring(duration: 0.3)) {
+                                memory.isCompleted = true
+                                memory.completedAt = Date()
                                 memory.updatedAt = Date()
-                                onDone()
+                                
+                                let memoryPings = pings.filter { $0.memoryId == memory.id }
+                                for ping in memoryPings {
+                                    ping.isActive = false
+                                    NotificationService.shared.cancelPing(pingId: ping.id)
+                                }
                             }
-                        ),
-                        in: Date()...,
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.compact)
-                    .tint(.oceanTeal)
-                }
+                        } label: {
+                            Circle()
+                                .stroke(isOverdue ? Color.coral : Color.oceanTeal, lineWidth: 2)
+                                .frame(width: 24, height: 24)
+                        }
                 
-                Spacer()
-            }
-            .padding(20)
-            .navigationTitle("Snooze")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(memory.text)
+                        .font(.custom("DMSans-Regular", size: 15))
+                        .foregroundColor(.deepNavy)
+                        .lineLimit(2)
+                    
+                    HStack(spacing: 8) {
+                        if let echo = echos.first(where: { $0.id == memory.echoId }) {
+                            HStack(spacing: 3) {
+                                Text(echo.emoji)
+                                    .font(.system(size: 11))
+                                Text(echo.name)
+                                    .font(.custom("DMSans-Medium", size: 12))
+                                    .foregroundColor(.deepNavy)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.mist)
+                            .clipShape(Capsule())
+                        }
+                        
+                        if let date = memory.detectedDate {
+                            Text(date, format: .dateTime.month(.abbreviated).day())
+                                .font(.custom("DMMono-Regular", size: 12))
+                                .foregroundColor(isOverdue ? .coral : .gray)
+                        }
                     }
-                    .foregroundColor(.gray)
                 }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-    
-    private func snoozeOption(icon: String, label: String, sublabel: String, date: Date) -> some View {
-        Button {
-            memory.detectedDate = date
-            memory.updatedAt = Date()
-            onDone()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 16))
-                    .foregroundColor(.oceanTeal)
-                    .frame(width: 24)
-                
-                Text(label)
-                    .font(.custom("DMSans-Medium", size: 15))
-                    .foregroundColor(.deepNavy)
+                .onTapGesture {
+                    editingMemory = memory
+                }
                 
                 Spacer()
                 
-                Text(sublabel)
-                    .font(.custom("DMMono-Regular", size: 13))
-                    .foregroundColor(.gray)
+                HStack(spacing: 4) {
+                    Button {
+                        snoozeMemory = memory
+                        showSnoozeSheet = true
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.mist)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "moon.zzz")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.oceanTeal)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        editingMemory = memory
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.mist)
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "pencil")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.oceanTeal)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .padding(14)
+            .padding(12)
             .background(Color.white)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
         }
-    }
-    
-    private func formatDate(daysFromNow days: Int) -> String {
-        let date = calendar.date(byAdding: .day, value: days, to: Date()) ?? Date()
-        return date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-    }
-}
+        
+        // MARK: - Completed Row
+        private func completedRow(memory: Memory) -> some View {
+            HStack(spacing: 12) {
+                Button {
+                                withAnimation(.spring(duration: 0.3)) {
+                                    memory.isCompleted = false
+                                    memory.completedAt = nil
+                                    memory.updatedAt = Date()
+                                    
+                                    let memoryPings = pings.filter { $0.memoryId == memory.id }
+                                    for ping in memoryPings {
+                                        ping.isActive = true
+                                        NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                                    }
+                                }
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.oceanTeal)
+                                        .frame(width: 24, height: 24)
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                    Text(memory.text)
+                        .font(.custom("DMSans-Regular", size: 15))
+                        .foregroundColor(.gray)
+                        .strikethrough()
+                        .lineLimit(2)
+                    
+                    Spacer()
+                }
+                .padding(12)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
+            }
+            
+            // MARK: - Empty State
+            private var emptyState: some View {
+                VStack(spacing: 16) {
+                    Spacer().frame(height: 40)
+                    
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 44))
+                        .foregroundColor(.seafoam.opacity(0.4))
+                    
+                    Text(calendar.isDateInToday(selectedDate) ? "All clear today" : "Nothing on this day")
+                        .font(.custom("DMSans-Medium", size: 18))
+                        .foregroundColor(.deepNavy)
+                    
+                    Text(calendar.isDateInToday(selectedDate) ? "Drop a memory with a task and it\u{2019}ll show up here" : "Tasks and memories for this day will appear here")
+                        .font(.custom("DMSans-Regular", size: 14))
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            
+            // MARK: - Helpers
+            
+            private func isTaskForDate(memory: Memory, for date: Date? = nil) -> Bool {
+                let targetDate = date ?? selectedDate
+                
+                if let detectedDate = memory.detectedDate {
+                    return calendar.isDate(detectedDate, inSameDayAs: targetDate)
+                }
+                
+                return calendar.isDate(memory.createdAt, inSameDayAs: targetDate)
+            }
+        }
+        
+        // MARK: - Snooze Sheet
+        struct SnoozeSheet: View {
+            let memory: Memory
+            let onDone: () -> Void
+            @Environment(\.dismiss) private var dismiss
+            
+            private let calendar = Calendar.current
+            
+            var body: some View {
+                NavigationStack {
+                    VStack(spacing: 20) {
+                        Text(memory.text)
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.deepNavy)
+                            .lineLimit(3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(Color.pearl)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        
+                        Text("Snooze until...")
+                            .font(.custom("DMSans-Medium", size: 16))
+                            .foregroundColor(.deepNavy)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        VStack(spacing: 8) {
+                            snoozeOption(
+                                icon: "sunrise",
+                                label: "Tomorrow",
+                                sublabel: formatDate(daysFromNow: 1),
+                                date: calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+                            )
+                            
+                            snoozeOption(
+                                icon: "calendar.badge.plus",
+                                label: "In 2 days",
+                                sublabel: formatDate(daysFromNow: 2),
+                                date: calendar.date(byAdding: .day, value: 2, to: Date()) ?? Date()
+                            )
+                            
+                            snoozeOption(
+                                icon: "calendar",
+                                label: "Next week",
+                                sublabel: formatDate(daysFromNow: 7),
+                                date: calendar.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+                            )
+                            
+                            snoozeOption(
+                                icon: "calendar.badge.clock",
+                                label: "Next month",
+                                sublabel: formatDate(daysFromNow: 30),
+                                date: calendar.date(byAdding: .month, value: 1, to: Date()) ?? Date()
+                            )
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Or pick a date")
+                                .font(.custom("DMSans-Medium", size: 14))
+                                .foregroundColor(.gray)
+                            
+                            DatePicker(
+                                "Snooze date",
+                                selection: Binding(
+                                    get: { memory.detectedDate ?? Date() },
+                                    set: { newDate in
+                                        memory.detectedDate = newDate
+                                        memory.updatedAt = Date()
+                                        onDone()
+                                    }
+                                ),
+                                in: Date()...,
+                                displayedComponents: .date
+                            )
+                            .datePickerStyle(.compact)
+                            .tint(.oceanTeal)
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(20)
+                    .navigationTitle("Snooze")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") {
+                                dismiss()
+                            }
+                            .foregroundColor(.gray)
+                        }
+                    }
+                }
+                .presentationDetents([.medium])
+            }
+            
+            private func snoozeOption(icon: String, label: String, sublabel: String, date: Date) -> some View {
+                Button {
+                    memory.detectedDate = date
+                    memory.updatedAt = Date()
+                    onDone()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: icon)
+                            .font(.system(size: 16))
+                            .foregroundColor(.oceanTeal)
+                            .frame(width: 24)
+                        
+                        Text(label)
+                            .font(.custom("DMSans-Medium", size: 15))
+                            .foregroundColor(.deepNavy)
+                        
+                        Spacer()
+                        
+                        Text(sublabel)
+                            .font(.custom("DMMono-Regular", size: 13))
+                            .foregroundColor(.gray)
+                    }
+                    .padding(14)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
+                }
+            }
+            
+            private func formatDate(daysFromNow days: Int) -> String {
+                let date = calendar.date(byAdding: .day, value: days, to: Date()) ?? Date()
+                return date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+            }
+        }
+        
+        #Preview {
+            TodayView()
+                .modelContainer(for: [Memory.self, Echo.self, Ping.self, SubTask.self], inMemory: true)
+        }
 
-#Preview {
-    TodayView()
-        .modelContainer(for: [Memory.self, Echo.self, Ping.self], inMemory: true)
-}

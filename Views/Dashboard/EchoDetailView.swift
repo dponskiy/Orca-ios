@@ -76,6 +76,21 @@ struct EchoDetailView: View {
                                         .foregroundColor(.seafoam)
                                 }
                             }
+                            if let url = memory.url, !url.isEmpty {
+                                                                Button {
+                                                                    if let link = URL(string: url) {
+                                                                        UIApplication.shared.open(link)
+                                                                    }
+                                                                } label: {
+                                                                    HStack(spacing: 4) {
+                                                                        Image(systemName: "link")
+                                                                            .font(.system(size: 10))
+                                                                        Text("Open Link")
+                                                                            .font(.custom("DMSans-Medium", size: 11))
+                                                                    }
+                                                                    .foregroundColor(.oceanTeal)
+                                                                }
+                                                            }
                         }
                         
                         Spacer()

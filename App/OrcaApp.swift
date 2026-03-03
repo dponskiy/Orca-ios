@@ -1,3 +1,4 @@
+
 //
 //  OrcaApp.swift
 //  Orca
@@ -12,11 +13,14 @@ import SwiftData
 struct OrcaApp: App {
     @State private var authService = AuthService()
     @AppStorage("hasSkippedAuth") private var hasSkippedAuth = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     
     var body: some Scene {
         WindowGroup {
             Group {
-                if authService.isAuthenticated || hasSkippedAuth {
+                if !hasCompletedOnboarding {
+                    OnboardingFlow()
+                } else if authService.isAuthenticated || hasSkippedAuth {
                     ContentView()
                         .environment(authService)
                 } else {
@@ -30,12 +34,14 @@ struct OrcaApp: App {
                 seedNewEchosIfNeeded()
             }
         }
-        .modelContainer(for: [Memory.self, Echo.self, Ping.self])
+        .modelContainer(for: [Memory.self, Echo.self, Ping.self, SubTask.self])
     }
     
     private func seedNewEchosIfNeeded() {
-        guard let container = try? ModelContainer(for: Memory.self, Echo.self, Ping.self) else { return }
+        guard let container = try? ModelContainer(for: Memory.self, Echo.self, Ping.self, SubTask.self) else { return }
         let context = container.mainContext
+        
+        Echo.seedDefaults(context: context)
         
         let newDefaults: [(String, String, Int)] = [
             ("Birthday", "🎂", 2),

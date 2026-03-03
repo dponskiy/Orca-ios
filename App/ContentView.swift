@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showDrawer = false
     @State private var showTyped = false
     @State private var showSearch = false
+    @State private var showScreenshot = false
     
     var body: some View {
         ZStack {
@@ -66,7 +67,7 @@ struct ContentView: View {
                             switch mode {
                             case .voice: showDrop = true
                             case .typed: showTyped = true
-                            case .screenshot: break
+                            case .screenshot: showScreenshot = true
                             }
                         },
                         onCancel: { showDrawer = false }
@@ -82,9 +83,21 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showTyped) {
             TypeCaptureView(isPresented: $showTyped)
         }
+        .fullScreenCover(isPresented: $showScreenshot) {
+                    PhotoCaptureView(isPresented: $showScreenshot)
+                }
         .fullScreenCover(isPresented: $showSearch) {
             SearchView(isPresented: $showSearch)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openDropOverlay)) { _ in
+                    showDrop = true
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .openTypeCapture)) { _ in
+                    showTyped = true
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .openScreenshotCapture)) { _ in
+                    showScreenshot = true
+                }
     }
 }
 

@@ -1,5 +1,5 @@
 //
-//  Untitled.swift
+//  TypeCaptureView.swift
 //  Orca
 //
 //  Created by David Piliponskiy on 2/25/26.
@@ -17,7 +17,43 @@ struct TypeCaptureView: View {
     @State private var showBanner = false
     @State private var sonarResult: SonarResult?
     @FocusState private var isFocused: Bool
+    @State private var editMemory: Memory? = nil
     
+    private func handleRecipeFetch(_ recipe: RecipeResult) {
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        guard let memory = try? modelContext.fetch(descriptor).first else { return }
+        
+        // Update memory text with instructions
+        var parts: [String] = ["🍽 \(recipe.title)"]
+        var meta: [String] = []
+        if let prep = recipe.prepTime { meta.append("Prep: \(prep)") }
+        if let cook = recipe.cookTime { meta.append("Cook: \(cook)") }
+        if let srv  = recipe.servings { meta.append("Serves: \(srv)") }
+        if !meta.isEmpty { parts.append(meta.joined(separator: " · ")) }
+        if !recipe.instructions.isEmpty {
+            parts.append("\nInstructions:")
+            for (i, step) in recipe.instructions.enumerated() {
+                parts.append("\(i + 1). \(step)")
+            }
+        }
+        memory.text = parts.joined(separator: "\n")
+        
+        // Add ingredients as subtasks
+        if !recipe.ingredients.isEmpty {
+            memory.hasChecklist = true
+            for (index, ingredient) in recipe.ingredients.enumerated() {
+                let subTask = SubTask(memoryId: memory.id, text: ingredient, sortOrder: index)
+                modelContext.insert(subTask)
+            }
+        }
+    }
+    private func updateLastMemoryEcho(_ echoId: UUID) {
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        if let last = try? modelContext.fetch(descriptor).first {
+            last.echoId = echoId
+        }
+    }
+
     private let sonarEngine = SonarEngine()
     
     var body: some View {
@@ -33,14 +69,25 @@ struct TypeCaptureView: View {
                         transcription: text,
                         sonarResult: sonarResult,
                         echos: echos,
-                        onDone: { isPresented = false },
-                        onUndo: {
-                            undoMemory()
+                        onDone: { isTask in
+                            updateLastMemoryTask(isTask: isTask)
                             isPresented = false
-                        }
-                    )
+                        },
+                            onUndo: { undoMemory() },
+                            onEchoChanged: { newEchoId in
+                                updateLastMemoryEcho(newEchoId)
+                            },
+                            onRecipeFetched: { recipe in
+                                handleRecipeFetch(recipe)
+                            },
+                            onEdit: {
+                                let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+                                editMemory = try? modelContext.fetch(descriptor).first
+                            }
+                        )
                 }
-            } else {
+            }
+            else {
                 ZStack {
                     Color.deepNavy.ignoresSafeArea()
                     
@@ -89,6 +136,9 @@ struct TypeCaptureView: View {
                     isFocused = true
                 }
             }
+                }
+        .sheet(item: $editMemory) { memory in
+                    MemoryEditView(memory: memory)
         }
     }
     
@@ -106,6 +156,21 @@ struct TypeCaptureView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
+
+        // Detect URL
+        if let detectedURL = sonarEngine.detectURL(text: text) {
+            memory.url = detectedURL
+        }
+        
+        // Detect checklist
+        if let checklistItems = sonarEngine.detectChecklist(text: text) {
+            memory.hasChecklist = true
+            for (index, item) in checklistItems.enumerated() {
+                let subTask = SubTask(memoryId: memory.id, text: item, sortOrder: index)
+                modelContext.insert(subTask)
+            }
+        }
+
         if let result = sonarResult {
             for suggestion in result.pingSuggestions {
                 let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
@@ -114,6 +179,7 @@ struct TypeCaptureView: View {
                     ping.fireTime = fireTime
                 }
                 modelContext.insert(ping)
+                NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
             }
         }
         
@@ -121,7 +187,16 @@ struct TypeCaptureView: View {
             showBanner = true
         }
     }
-    
+
+    private func updateLastMemoryTask(isTask: Bool) {
+        let recent = try? modelContext.fetch(
+            FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        )
+        if let last = recent?.first {
+            last.isActionable = isTask
+        }
+    }
+
     private func undoMemory() {
         let recent = try? modelContext.fetch(
             FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])

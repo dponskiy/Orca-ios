@@ -27,7 +27,10 @@ class Memory {
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var syncStatus: SyncStatus = SyncStatus.pending
-
+    var isPinned: Bool = false
+    var url: String?
+        var hasChecklist: Bool = false
+    
     enum CaptureType: String, Codable {
         case voice, screenshot, typed
     }

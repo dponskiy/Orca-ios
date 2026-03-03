@@ -27,6 +27,7 @@ struct SonarResult {
     let pingFireDate: Date?
     let pingFireTime: Date?
     let pingSuggestions: [PingSuggestion]
+    let shouldOfferRecipeFetch: Bool
 }
 
 class SonarEngine {
@@ -84,6 +85,11 @@ class SonarEngine {
         
         let primary = pingSuggestions.first
         
+        let detectedURL = detectURL(text: text)
+        let isCookingEcho = echoResult.name.lowercased().contains("cook") ||
+                            echoResult.name.lowercased().contains("recipe")
+        let shouldOfferRecipeFetch = isCookingEcho && detectedURL != nil
+
         return SonarResult(
             echoId: echoResult.id,
             echoName: echoResult.name,
@@ -96,7 +102,8 @@ class SonarEngine {
             isActionable: actionable,
             pingFireDate: primary?.fireDate,
             pingFireTime: primary?.fireTime,
-            pingSuggestions: pingSuggestions
+            pingSuggestions: pingSuggestions,
+            shouldOfferRecipeFetch: shouldOfferRecipeFetch
         )
     }
     
@@ -205,14 +212,16 @@ class SonarEngine {
     private func buildPingSuggestions(text: String, dates: (eventDate: Date?, eventConfidence: Double?, reminderDate: Date?, reminderTime: Date?)) -> [PingSuggestion] {
         var suggestions: [PingSuggestion] = []
         let calendar = Calendar.current
+        let hasEvery = text.contains("every")
         
-        // Check for weekday recurring ("every monday", "every saturday and sunday")
+        // Check for weekday recurring ("every monday", "saturday and sunday")
         let weekdays = detectWeekdays(text: text)
         if !weekdays.isEmpty {
+            let recurrence: Ping.Recurrence = (hasEvery || weekdays.count >= 2) ? .weekly : .none
+            
             for weekday in weekdays {
                 let nextDate = nextOccurrence(of: weekday)
                 
-                // Try to extract time from the text
                 var fireTime = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: Date())
                 if let eventDate = dates.eventDate {
                     let components = calendar.dateComponents([.hour, .minute], from: eventDate)
@@ -224,7 +233,7 @@ class SonarEngine {
                 suggestions.append(PingSuggestion(
                     fireDate: nextDate,
                     fireTime: fireTime,
-                    recurrence: .weekly
+                    recurrence: recurrence
                 ))
             }
             return suggestions
@@ -319,8 +328,6 @@ class SonarEngine {
     // MARK: - Weekday Detection
     
     private func detectWeekdays(text: String) -> [Int] {
-        guard text.contains("every") else { return [] }
-        
         var weekdays: [Int] = []
         for (name, number) in weekdayMap {
             if text.contains(name) {
@@ -330,7 +337,15 @@ class SonarEngine {
             }
         }
         
-        return weekdays
+        // 2+ weekdays = recurring even without "every"
+        // 1 weekday = only recurring if "every" is present
+        if weekdays.count >= 2 {
+            return weekdays
+        } else if weekdays.count == 1 && text.contains("every") {
+            return weekdays
+        }
+        
+        return []
     }
     
     private func nextOccurrence(of weekday: Int) -> Date {
@@ -340,6 +355,43 @@ class SonarEngine {
         var daysUntil = (weekday - todayWeekday + 7) % 7
         if daysUntil == 0 { daysUntil = 7 }
         return calendar.date(byAdding: .day, value: daysUntil, to: today) ?? today
+    }
+    
+    // MARK: - URL Detection
+    
+    func detectURL(text: String) -> String? {
+        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        
+        guard let matches = detector?.matches(in: text, range: range),
+              let firstMatch = matches.first,
+              let url = firstMatch.url else {
+            return nil
+        }
+        
+        return url.absoluteString
+    }
+    
+    // MARK: - Checklist Detection
+    
+    func detectChecklist(text: String) -> [String]? {
+        let lines = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        
+        if lines.count >= 3 {
+            return lines
+        }
+        
+        let commaItems = text.components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        
+        if commaItems.count >= 3 {
+            return commaItems
+        }
+        
+        return nil
     }
     
     // MARK: - Tag Generation

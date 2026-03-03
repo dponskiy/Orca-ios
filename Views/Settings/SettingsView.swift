@@ -5,15 +5,31 @@
 //  Created by David Piliponskiy on 2/25/26.
 //
 
+//
+//  SettingsView.swift
+//  Orca
+//
+//  Created by David Piliponskiy on 2/25/26.
+//
+
 import SwiftUI
+import SwiftData
+import StoreKit
 
 struct SettingsView: View {
     @Environment(AuthService.self) private var authService
+    @Environment(\.modelContext) private var modelContext
     @AppStorage("hasSkippedAuth") private var hasSkippedAuth = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
+    
+    @Query private var memories: [Memory]
+    @State private var showManageEchos = false
+    @State private var showClearConfirm = false
     
     var body: some View {
         NavigationStack {
             List {
+                // MARK: - Account
                 Section("Account") {
                     if authService.isAuthenticated {
                         HStack {
@@ -70,11 +86,64 @@ struct SettingsView: View {
                     }
                 }
                 
+                // MARK: - Preferences
                 Section("Preferences") {
-                    Label("Notifications", systemImage: "bell")
-                    Label("Manage Echos", systemImage: "circle.grid.2x2")
+                    Button {
+                        if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        Label("Notifications", systemImage: "bell")
+                            .foregroundColor(.deepNavy)
+                    }
+                    
+                    Button {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+
+                    } label: {
+                        Label("Set as Action Button", systemImage: "button.angledtop.vertical.right")
+                            .foregroundColor(.deepNavy)
+                    }
+                    
+                    Button {
+                        showManageEchos = true
+                    } label: {
+                        Label("Manage Echos", systemImage: "circle.grid.2x2")
+                            .foregroundColor(.deepNavy)
+                    }
                 }
                 
+                // MARK: - Support
+                Section("Support") {
+                    Button {
+                        hasCompletedOnboarding = false
+                    } label: {
+                        Label("Replay Onboarding", systemImage: "arrow.counterclockwise")
+                            .foregroundColor(.deepNavy)
+                    }
+                    
+                    Button {
+                        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                            AppStore.requestReview(in: scene)
+                        }
+                    } label: {
+                        Label("Rate Orca", systemImage: "star")
+                            .foregroundColor(.deepNavy)
+                    }
+                    
+                    Button {
+                        if let url = URL(string: "mailto:support@orca.app?subject=Orca%20Feedback") {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        Label("Send Feedback", systemImage: "envelope")
+                            .foregroundColor(.deepNavy)
+                    }
+                }
+                
+                // MARK: - About
                 Section("About") {
                     Link(destination: URL(string: Config.privacyURL)!) {
                         Label("Privacy Policy", systemImage: "hand.raised")
@@ -84,6 +153,17 @@ struct SettingsView: View {
                     }
                 }
                 
+                // MARK: - Danger Zone
+                Section("Data") {
+                    Button {
+                        showClearConfirm = true
+                    } label: {
+                        Label("Clear All Memories", systemImage: "trash")
+                            .foregroundColor(.red)
+                    }
+                }
+                
+                // MARK: - Version
                 Section {
                     HStack {
                         Spacer()
@@ -94,6 +174,9 @@ struct SettingsView: View {
                             Text("Orca v1.0")
                                 .font(.custom("DMMono-Regular", size: 12))
                                 .foregroundColor(.gray)
+                            Text("\(memories.count) memories saved")
+                                .font(.custom("DMMono-Regular", size: 11))
+                                .foregroundColor(.gray.opacity(0.7))
                         }
                         Spacer()
                     }
@@ -101,6 +184,21 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .navigationDestination(isPresented: $showManageEchos) {
+                ManageEchosView()
+            }
+            .confirmationDialog(
+                "Clear all memories?",
+                isPresented: $showClearConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Clear All", role: .destructive) {
+                    clearAllMemories()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete all \(memories.count) memories. This cannot be undone.")
+            }
         }
     }
     
@@ -110,6 +208,12 @@ struct SettingsView: View {
         let first = parts.first?.prefix(1) ?? "O"
         let last = parts.count > 1 ? parts.last?.prefix(1) ?? "" : ""
         return "\(first)\(last)".uppercased()
+    }
+    
+    private func clearAllMemories() {
+        for memory in memories {
+            modelContext.delete(memory)
+        }
     }
 }
 

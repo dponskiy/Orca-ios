@@ -12,9 +12,11 @@ struct DashboardView: View {
     @Binding var showSearch: Bool
     @Query private var memories: [Memory]
     @Query private var echos: [Echo]
+    @Query private var pings: [Ping]
     @Environment(\.modelContext) private var modelContext
     @State private var showCreateEcho = false
-    @State private var showMemoryOfDay = true
+    @State private var showUpcoming = true
+    @State private var editingMemory: Memory?
     
     var activeEchos: [Echo] {
         echos.filter { echo in
@@ -40,7 +42,6 @@ struct DashboardView: View {
                         
                         Spacer()
                         
-                        // Profile button
                         NavigationLink(destination: SettingsView()) {
                             ZStack {
                                 Circle()
@@ -73,13 +74,19 @@ struct DashboardView: View {
                         .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
                     }
                     
-                    // Memory of the Day
-                    if showMemoryOfDay, let motd = memoryOfTheDay {
-                        MemoryOfDayCard(memory: motd, echos: echos) {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                showMemoryOfDay = false
+                    // Upcoming / Pinned card
+                    if showUpcoming, let upcoming = upcomingMemory {
+                        UpcomingCard(
+                            memory: upcoming.memory,
+                            echos: echos,
+                            isPinned: upcoming.isPinned,
+                            onTap: { editingMemory = upcoming.memory },
+                            onDismiss: {
+                                withAnimation(.easeOut(duration: 0.3)) {
+                                    showUpcoming = false
+                                }
                             }
-                        }
+                        )
                     }
                     
                     // Your Echos header
@@ -113,7 +120,6 @@ struct DashboardView: View {
                         echoBubbleGrid
                     }
                     
-                    // Spacer for FAB clearance
                     Spacer().frame(height: 100)
                 }
                 .padding(.horizontal, 20)
@@ -122,12 +128,18 @@ struct DashboardView: View {
             .background(Color.pearl)
             .onAppear {
                 seedDefaultEchos()
+                showUpcoming = true
             }
             .sheet(isPresented: $showCreateEcho) {
                 CreateEchoView()
             }
+            .sheet(item: $editingMemory) { memory in
+                MemoryEditView(memory: memory)
+            }
         }
     }
+    
+    // MARK: - Greeting
     
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -138,13 +150,27 @@ struct DashboardView: View {
         }
     }
     
-    private var memoryOfTheDay: Memory? {
-        guard !memories.isEmpty else { return nil }
-        let calendar = Calendar.current
-        let dayOfYear = calendar.ordinality(of: .day, in: .year, for: Date()) ?? 0
-        let index = dayOfYear % memories.count
-        return memories.sorted(by: { $0.createdAt < $1.createdAt })[index]
+    // MARK: - Upcoming Memory
+    
+    private var upcomingMemory: (memory: Memory, isPinned: Bool)? {
+        if let pinned = memories.first(where: { $0.isPinned }) {
+            return (pinned, true)
+        }
+        
+        let now = Date()
+        let upcoming = memories
+            .filter { $0.detectedDate != nil && $0.detectedDate! > now && !$0.isCompleted }
+            .sorted { ($0.detectedDate ?? now) < ($1.detectedDate ?? now) }
+            .first
+        
+        if let upcoming = upcoming {
+            return (upcoming, false)
+        }
+        
+        return nil
     }
+    
+    // MARK: - Empty State
     
     private var emptyState: some View {
         VStack(spacing: 16) {
@@ -162,38 +188,69 @@ struct DashboardView: View {
         .frame(maxWidth: .infinity)
     }
     
-    private var echoBubbleGrid: some View {
-            let active = activeEchos
-            let columns = [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ]
+    // MARK: - Pending Count
+    
+    private func pendingCountFor(echo: Echo) -> Int {
+        let echoMemories = memories.filter { $0.echoId == echo.id }
+        var count = 0
+        
+        for memory in echoMemories {
+            if memory.isActionable && !memory.isCompleted {
+                if let date = memory.detectedDate,
+                   date <= Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()) {
+                    count += 1
+                    continue
+                }
+            }
             
-            return LazyVGrid(columns: columns, spacing: 24) {
-                ForEach(Array(active.enumerated()), id: \.element.id) { index, echo in
-                    let count = memories.filter { $0.echoId == echo.id }.count
-                    
-                    NavigationLink(destination: EchoDetailView(echo: echo)) {
-                        EchoBubbleView(
-                            echo: echo,
-                            count: count,
-                            totalMemories: memories.count
-                        )
-                    }
-                    .offset(
-                        x: CGFloat([8, -6, 10, -8, 5, -10, 7, -5, 9, -7, 6, -9, 8, -6][index % 14]),
-                        y: CGFloat([4, -8, 6, -4, 10, -6, 3, -9, 7, -3, 8, -5, 4, -7][index % 14])
-                    )
+            let memoryPings = pings.filter { $0.memoryId == memory.id && $0.isActive }
+            for ping in memoryPings {
+                if Calendar.current.isDate(ping.fireDate, inSameDayAs: Date()) {
+                    count += 1
                 }
             }
         }
+        
+        return count
+    }
+    
+    // MARK: - Echo Bubble Grid
+    
+    private var echoBubbleGrid: some View {
+        let active = activeEchos
+        let columns = [
+            GridItem(.flexible()),
+            GridItem(.flexible()),
+            GridItem(.flexible())
+        ]
+        
+        return LazyVGrid(columns: columns, spacing: 24) {
+            ForEach(Array(active.enumerated()), id: \.element.id) { index, echo in
+                let count = memories.filter { $0.echoId == echo.id }.count
+                
+                NavigationLink(destination: EchoDetailView(echo: echo)) {
+                    EchoBubbleView(
+                        echo: echo,
+                        count: count,
+                        pendingCount: pendingCountFor(echo: echo),
+                        totalMemories: memories.count
+                    )
+                }
+                .offset(
+                    x: CGFloat([8, -6, 10, -8, 5, -10, 7, -5, 9, -7, 6, -9, 8, -6][index % 14]),
+                    y: CGFloat([4, -8, 6, -4, 10, -6, 3, -9, 7, -3, 8, -5, 4, -7][index % 14])
+                )
+            }
+        }
+    }
+    
+    // MARK: - Seed Defaults
     
     private func seedDefaultEchos() {
-            guard echos.isEmpty else { return }
-            Echo.seedDefaults(context: modelContext)
-        }
-        }
+        guard echos.isEmpty else { return }
+        Echo.seedDefaults(context: modelContext)
+    }
+}
 
 #Preview {
     DashboardView(showSearch: .constant(false))

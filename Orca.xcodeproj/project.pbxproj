@@ -30,7 +30,7 @@
 		872F72652F4FE5D8000A4AE3 /* EchoBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72352F4F2365000A4AE3 /* EchoBubbleView.swift */; };
 		872F72662F4FE723000A4AE3 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723B2F4F23BA000A4AE3 /* SearchView.swift */; };
 		872F72672F4FE728000A4AE3 /* EchoDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72362F4F236F000A4AE3 /* EchoDetailView.swift */; };
-		872F72682F4FE746000A4AE3 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723E2F4F23D1000A4AE3 /* CalendarView.swift */; };
+		872F72682F4FE746000A4AE3 /* CalendarTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723E2F4F23D1000A4AE3 /* CalendarTabView.swift */; };
 		872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72382F4F2399000A4AE3 /* DropOverlayView.swift */; };
 		872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9A2F4EB3DF0058324F /* AudioService.swift */; };
 		872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B992F4EB3CE0058324F /* SonarEngine.swift */; };
@@ -38,7 +38,7 @@
 		872F726D2F4FF4BC000A4AE3 /* CaptureDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723A2F4F23AB000A4AE3 /* CaptureDrawerView.swift */; };
 		872F726F2F4FF511000A4AE3 /* TypeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F726E2F4FF50B000A4AE3 /* TypeCaptureView.swift */; };
 		872F72712F4FF9B7000A4AE3 /* MemoryEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72702F4FF9A9000A4AE3 /* MemoryEditView.swift */; };
-		872F72722F51254C000A4AE3 /* MemoryOfDayCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72372F4F237F000A4AE3 /* MemoryOfDayCard.swift */; };
+		872F72722F51254C000A4AE3 /* UpcomingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72372F4F237F000A4AE3 /* UpcomingCard.swift */; };
 		872F72742F51256E000A4AE3 /* CreateEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72732F512563000A4AE3 /* CreateEchoView.swift */; };
 		872F72752F512601000A4AE3 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72442F4F240A000A4AE3 /* SettingsView.swift */; };
 		872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723D2F4F23C7000A4AE3 /* BrowseAllView.swift */; };
@@ -48,6 +48,13 @@
 		87CD0AE52F52992E00CAAB4D /* SupabaseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */; };
 		87CD0AE72F52996100CAAB4D /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AE62F52995300CAAB4D /* AuthView.swift */; };
 		87CD0AEA2F529B4700CAAB4D /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 87CD0AE92F529B4700CAAB4D /* Supabase */; };
+		87CD0AEC2F55407D00CAAB4D /* NotifcationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9B2F4EB3E60058324F /* NotifcationService.swift */; };
+		87CD0AEE2F57300700CAAB4D /* PhotoCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AED2F57300500CAAB4D /* PhotoCaptureView.swift */; };
+		87CD0AF02F57357500CAAB4D /* OrcaShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AEF2F57357300CAAB4D /* OrcaShortcuts.swift */; };
+		87CD0AF22F57443700CAAB4D /* SubTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AF12F57443300CAAB4D /* SubTask.swift */; };
+		87CD0AF42F576FCC00CAAB4D /* RecipeExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AF32F576FC300CAAB4D /* RecipeExtractor.swift */; };
+		87CD0AF62F578BC300CAAB4D /* ManageEchosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AF52F578BC200CAAB4D /* ManageEchosView.swift */; };
+		87CD0AF72F57930700CAAB4D /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72412F4F23E7000A4AE3 /* OnboardingFlow.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -73,16 +80,14 @@
 		872F72342F4F2356000A4AE3 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		872F72352F4F2365000A4AE3 /* EchoBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoBubbleView.swift; sourceTree = "<group>"; };
 		872F72362F4F236F000A4AE3 /* EchoDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoDetailView.swift; sourceTree = "<group>"; };
-		872F72372F4F237F000A4AE3 /* MemoryOfDayCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryOfDayCard.swift; sourceTree = "<group>"; };
+		872F72372F4F237F000A4AE3 /* UpcomingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpcomingCard.swift; sourceTree = "<group>"; };
 		872F72382F4F2399000A4AE3 /* DropOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropOverlayView.swift; sourceTree = "<group>"; };
 		872F72392F4F23A0000A4AE3 /* ConfirmBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmBannerView.swift; sourceTree = "<group>"; };
 		872F723A2F4F23AB000A4AE3 /* CaptureDrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureDrawerView.swift; sourceTree = "<group>"; };
 		872F723B2F4F23BA000A4AE3 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		872F723C2F4F23C0000A4AE3 /* ResultCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultCardView.swift; sourceTree = "<group>"; };
 		872F723D2F4F23C7000A4AE3 /* BrowseAllView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseAllView.swift; sourceTree = "<group>"; };
-		872F723E2F4F23D1000A4AE3 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
-		872F723F2F4F23D7000A4AE3 /* DayDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayDetailView.swift; sourceTree = "<group>"; };
-		872F72402F4F23DE000A4AE3 /* AllPingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllPingView.swift; sourceTree = "<group>"; };
+		872F723E2F4F23D1000A4AE3 /* CalendarTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarTabView.swift; sourceTree = "<group>"; };
 		872F72412F4F23E7000A4AE3 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
 		872F72422F4F23F2000A4AE3 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
 		872F72432F4F23FE000A4AE3 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
@@ -124,6 +129,11 @@
 		87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseManager.swift; sourceTree = "<group>"; };
 		87CD0AE62F52995300CAAB4D /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
+		87CD0AED2F57300500CAAB4D /* PhotoCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCaptureView.swift; sourceTree = "<group>"; };
+		87CD0AEF2F57357300CAAB4D /* OrcaShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaShortcuts.swift; sourceTree = "<group>"; };
+		87CD0AF12F57443300CAAB4D /* SubTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubTask.swift; sourceTree = "<group>"; };
+		87CD0AF32F576FC300CAAB4D /* RecipeExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeExtractor.swift; sourceTree = "<group>"; };
+		87CD0AF52F578BC200CAAB4D /* ManageEchosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageEchosView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -222,6 +232,7 @@
 		873C1B8A2F4EB2850058324F /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				87CD0AF12F57443300CAAB4D /* SubTask.swift */,
 				873C1BA22F4EB4440058324F /* Ping.swift */,
 				873C1BA12F4EB43E0058324F /* Echo.swift */,
 				873C1BA02F4EB4350058324F /* Memory.swift */,
@@ -248,12 +259,14 @@
 		873C1B8D2F4EB2A60058324F /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				87CD0AEF2F57357300CAAB4D /* OrcaShortcuts.swift */,
 				87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */,
 				873C1B9E2F4EB40A0058324F /* AnalyticsService.swift */,
 				873C1B9D2F4EB3FC0058324F /* SyncService.swift */,
 				873C1B9C2F4EB3F30058324F /* AuthService.swift */,
 				873C1B9B2F4EB3E60058324F /* NotifcationService.swift */,
 				873C1B9A2F4EB3DF0058324F /* AudioService.swift */,
+				87CD0AF32F576FC300CAAB4D /* RecipeExtractor.swift */,
 				873C1B992F4EB3CE0058324F /* SonarEngine.swift */,
 			);
 			path = Services;
@@ -294,7 +307,7 @@
 			isa = PBXGroup;
 			children = (
 				872F72732F512563000A4AE3 /* CreateEchoView.swift */,
-				872F72372F4F237F000A4AE3 /* MemoryOfDayCard.swift */,
+				872F72372F4F237F000A4AE3 /* UpcomingCard.swift */,
 				872F72362F4F236F000A4AE3 /* EchoDetailView.swift */,
 				872F72352F4F2365000A4AE3 /* EchoBubbleView.swift */,
 				872F72342F4F2356000A4AE3 /* DashboardView.swift */,
@@ -305,6 +318,7 @@
 		873C1BA42F4EB4580058324F /* Drop */ = {
 			isa = PBXGroup;
 			children = (
+				87CD0AED2F57300500CAAB4D /* PhotoCaptureView.swift */,
 				872F726E2F4FF50B000A4AE3 /* TypeCaptureView.swift */,
 				872F723A2F4F23AB000A4AE3 /* CaptureDrawerView.swift */,
 				872F72392F4F23A0000A4AE3 /* ConfirmBannerView.swift */,
@@ -326,9 +340,7 @@
 		873C1BA62F4EB4640058324F /* Calendar */ = {
 			isa = PBXGroup;
 			children = (
-				872F72402F4F23DE000A4AE3 /* AllPingView.swift */,
-				872F723F2F4F23D7000A4AE3 /* DayDetailView.swift */,
-				872F723E2F4F23D1000A4AE3 /* CalendarView.swift */,
+				872F723E2F4F23D1000A4AE3 /* CalendarTabView.swift */,
 			);
 			path = Calendar;
 			sourceTree = "<group>";
@@ -354,6 +366,7 @@
 		873C1BA92F4EB47D0058324F /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				87CD0AF52F578BC200CAAB4D /* ManageEchosView.swift */,
 				872F72442F4F240A000A4AE3 /* SettingsView.swift */,
 			);
 			path = Settings;
@@ -545,22 +558,29 @@
 			files = (
 				872F72672F4FE728000A4AE3 /* EchoDetailView.swift in Sources */,
 				872F72752F512601000A4AE3 /* SettingsView.swift in Sources */,
+				87CD0AF02F57357500CAAB4D /* OrcaShortcuts.swift in Sources */,
 				872F726C2F4FF148000A4AE3 /* ConfirmBannerView.swift in Sources */,
 				872F725E2F4FDC7D000A4AE3 /* Echo.swift in Sources */,
-				872F72722F51254C000A4AE3 /* MemoryOfDayCard.swift in Sources */,
+				87CD0AEC2F55407D00CAAB4D /* NotifcationService.swift in Sources */,
+				87CD0AF72F57930700CAAB4D /* OnboardingFlow.swift in Sources */,
+				872F72722F51254C000A4AE3 /* UpcomingCard.swift in Sources */,
 				872F72622F4FE4D1000A4AE3 /* DropButton.swift in Sources */,
 				87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */,
 				872F72612F4FDE07000A4AE3 /* Colors.swift in Sources */,
 				872F72712F4FF9B7000A4AE3 /* MemoryEditView.swift in Sources */,
 				872F72652F4FE5D8000A4AE3 /* EchoBubbleView.swift in Sources */,
+				87CD0AF42F576FCC00CAAB4D /* RecipeExtractor.swift in Sources */,
 				872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */,
 				872F726F2F4FF511000A4AE3 /* TypeCaptureView.swift in Sources */,
 				872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */,
+				87CD0AF62F578BC300CAAB4D /* ManageEchosView.swift in Sources */,
 				872F726D2F4FF4BC000A4AE3 /* CaptureDrawerView.swift in Sources */,
 				872F72602F4FDDBC000A4AE3 /* ContentView.swift in Sources */,
-				872F72682F4FE746000A4AE3 /* CalendarView.swift in Sources */,
+				87CD0AEE2F57300700CAAB4D /* PhotoCaptureView.swift in Sources */,
+				872F72682F4FE746000A4AE3 /* CalendarTabView.swift in Sources */,
 				872F72642F4FE598000A4AE3 /* DashboardView.swift in Sources */,
 				872F725D2F4FDC77000A4AE3 /* Ping.swift in Sources */,
+				87CD0AF22F57443700CAAB4D /* SubTask.swift in Sources */,
 				872F725F2F4FDC8B000A4AE3 /* Memory.swift in Sources */,
 				87CD0AE72F52996100CAAB4D /* AuthView.swift in Sources */,
 				87CD0AE12F52917B00CAAB4D /* Config.swift in Sources */,
@@ -736,7 +756,9 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orca/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Orca uses your camera to capture screenshots as memories";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orca needs your Microphone to capture voice memories";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Orca accesses your photos to capture screenshots as memories";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Orca uses speech recognition to transcribe your voice memories";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -784,7 +806,9 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orca/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Orca uses your camera to capture screenshots as memories";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orca needs your Microphone to capture voice memories";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Orca accesses your photos to capture screenshots as memories";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Orca uses speech recognition to transcribe your voice memories";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;

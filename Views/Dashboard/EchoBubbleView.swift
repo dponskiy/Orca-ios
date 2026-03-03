@@ -10,54 +10,65 @@ import SwiftUI
 struct EchoBubbleView: View {
     let echo: Echo
     let count: Int
+    var pendingCount: Int = 0
     var totalMemories: Int = 1
-    @State private var floating = false
     
-    var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(Color.mist)
-                    .frame(width: bubbleSize, height: bubbleSize)
-                
-                Text(echo.emoji)
-                    .font(.system(size: bubbleSize * 0.4))
-            }
-            .offset(y: floating ? -3 : 3)
-            .animation(
-                .easeInOut(duration: 3)
-                .repeatForever(autoreverses: true)
-                .delay(Double.random(in: 0...1)),
-                value: floating
-            )
-            .onAppear { floating = true }
-            
-            Text(echo.name)
-                .font(.custom("DMSans-Medium", size: 13))
-                .foregroundColor(.deepNavy)
-            
-            Text("\(count)")
-                .font(.custom("DMMono-Regular", size: 11))
-                .foregroundColor(.gray)
-        }
-    }
+    @State private var floatOffset: CGFloat = 0
     
     private var bubbleSize: CGFloat {
+        guard totalMemories > 0 else { return 64 }
+        let proportion = Double(count) / Double(totalMemories)
         let minSize: CGFloat = 56
         let maxSize: CGFloat = 100
-        
-        guard totalMemories > 0 else { return minSize }
-        
-        let proportion = Double(count) / Double(totalMemories)
-        
-        return minSize + (maxSize - minSize) * CGFloat(min(proportion * 3, 1.0))
+        let scaled = min(proportion * 3, 1.0)
+        return minSize + (maxSize - minSize) * CGFloat(scaled)
+    }
+    
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 4) {
+                ZStack {
+                    Circle()
+                        .fill(Color.oceanTeal.opacity(0.18))
+                        .frame(width: bubbleSize, height: bubbleSize)
+                    
+                    Text(echo.emoji)
+                        .font(.system(size: bubbleSize * 0.42))
+                }
+                
+                Text(echo.name)
+                    .font(.custom("DMSans-Medium", size: 13))
+                    .foregroundColor(.deepNavy)
+                
+                Text("\(count)")
+                    .font(.custom("DMMono-Regular", size: 11))
+                    .foregroundColor(.gray)
+            }
+            .offset(y: floatOffset)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
+                    floatOffset = -4
+                }
+            }
+            
+            if pendingCount > 0 {
+                ZStack {
+                    Circle()
+                        .fill(Color.coral)
+                        .frame(width: 20, height: 20)
+                    Text("\(pendingCount)")
+                        .font(.custom("DMSans-Medium", size: 11))
+                        .foregroundColor(.white)
+                }
+                .offset(x: 4, y: -2)
+            }
+        }
     }
 }
 
 #Preview {
     HStack {
-        EchoBubbleView(echo: Echo(name: "Gifts", emoji: "🎁"), count: 2, totalMemories: 20)
-        EchoBubbleView(echo: Echo(name: "Work", emoji: "💼"), count: 10, totalMemories: 20)
-        EchoBubbleView(echo: Echo(name: "Dining", emoji: "🍜"), count: 18, totalMemories: 20)
+        EchoBubbleView(echo: Echo(name: "Dining", emoji: "🍜"), count: 3, pendingCount: 0, totalMemories: 10)
+        EchoBubbleView(echo: Echo(name: "Work", emoji: "💼"), count: 8, pendingCount: 2, totalMemories: 10)
     }
 }

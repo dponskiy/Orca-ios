@@ -18,7 +18,42 @@ struct DropOverlayView: View {
     @State private var showBanner = false
     @State private var sonarResult: SonarResult?
     @State private var permissionDenied = false
+    @State private var editMemory: Memory? = nil
     
+    private func updateLastMemoryEcho(_ echoId: UUID) {
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        if let last = try? modelContext.fetch(descriptor).first {
+            last.echoId = echoId
+        }
+    }
+    private func handleRecipeFetch(_ recipe: RecipeResult) {
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        guard let memory = try? modelContext.fetch(descriptor).first else { return }
+        
+        // Update memory text with instructions
+        var parts: [String] = ["🍽 \(recipe.title)"]
+        var meta: [String] = []
+        if let prep = recipe.prepTime { meta.append("Prep: \(prep)") }
+        if let cook = recipe.cookTime { meta.append("Cook: \(cook)") }
+        if let srv  = recipe.servings { meta.append("Serves: \(srv)") }
+        if !meta.isEmpty { parts.append(meta.joined(separator: " · ")) }
+        if !recipe.instructions.isEmpty {
+            parts.append("\nInstructions:")
+            for (i, step) in recipe.instructions.enumerated() {
+                parts.append("\(i + 1). \(step)")
+            }
+        }
+        memory.text = parts.joined(separator: "\n")
+        
+        // Add ingredients as subtasks
+        if !recipe.ingredients.isEmpty {
+            memory.hasChecklist = true
+            for (index, ingredient) in recipe.ingredients.enumerated() {
+                let subTask = SubTask(memoryId: memory.id, text: ingredient, sortOrder: index)
+                modelContext.insert(subTask)
+            }
+        }
+    }
     private let sonarEngine = SonarEngine()
     
     var body: some View {
@@ -36,8 +71,21 @@ struct DropOverlayView: View {
                         transcription: audioService.transcription,
                         sonarResult: sonarResult,
                         echos: echos,
-                        onDone: { dismissAndClose() },
-                        onUndo: { undoAndClose() }
+                        onDone: { isTask in
+                            updateLastMemoryTask(isTask: isTask)
+                            dismissAndClose()
+                        },
+                        onUndo: { undoAndClose() },
+                        onEchoChanged: { newEchoId in
+                            updateLastMemoryEcho(newEchoId)
+                        },
+                        onRecipeFetched: { recipe in
+                            handleRecipeFetch(recipe)
+                        },
+                        onEdit: {
+                            let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+                            editMemory = try? modelContext.fetch(descriptor).first
+                        }
                     )
                 }
             } else if permissionDenied {
@@ -48,6 +96,9 @@ struct DropOverlayView: View {
         }
         .onAppear {
             checkAndStartRecording()
+        }
+                .sheet(item: $editMemory) { memory in
+                    MemoryEditView(memory: memory)
         }
     }
     
@@ -172,6 +223,17 @@ struct DropOverlayView: View {
             }
         }
     }
+
+    // MARK: - Update Last Memory
+
+    private func updateLastMemoryTask(isTask: Bool) {
+        let recent = try? modelContext.fetch(
+            FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        )
+        if let last = recent?.first {
+            last.isActionable = isTask
+        }
+    }
     
     // MARK: - Helpers
     
@@ -207,7 +269,21 @@ struct DropOverlayView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
+
+        // Detect URL
+        if let detectedURL = sonarEngine.detectURL(text: audioService.transcription) {
+            memory.url = detectedURL
+        }
         
+        // Detect checklist
+        if let checklistItems = sonarEngine.detectChecklist(text: audioService.transcription) {
+            memory.hasChecklist = true
+            for (index, item) in checklistItems.enumerated() {
+                let subTask = SubTask(memoryId: memory.id, text: item, sortOrder: index)
+                modelContext.insert(subTask)
+            }
+        }
+
         // Create Pings from suggestions
         if let result = sonarResult {
             for suggestion in result.pingSuggestions {
@@ -217,6 +293,7 @@ struct DropOverlayView: View {
                     ping.fireTime = fireTime
                 }
                 modelContext.insert(ping)
+                NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
             }
         }
         
