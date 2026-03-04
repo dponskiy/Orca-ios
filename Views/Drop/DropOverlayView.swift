@@ -269,7 +269,15 @@ struct DropOverlayView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
-
+        AnalyticsService.shared.trackMemoryDropped(
+            captureType: "voice",
+            echoName: sonarResult?.echoName ?? "Unknown",
+            hasPing: sonarResult?.shouldCreatePing ?? false,
+            hasDate: sonarResult?.detectedDate != nil,
+            hasURL: memory.url != nil,
+            hasChecklist: memory.hasChecklist,
+            wordCount: audioService.transcription.split(separator: " ").count
+        )
         // Detect URL
         if let detectedURL = sonarEngine.detectURL(text: audioService.transcription) {
             memory.url = detectedURL

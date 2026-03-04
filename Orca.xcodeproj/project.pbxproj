@@ -55,6 +55,8 @@
 		87CD0AF42F576FCC00CAAB4D /* RecipeExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AF32F576FC300CAAB4D /* RecipeExtractor.swift */; };
 		87CD0AF62F578BC300CAAB4D /* ManageEchosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AF52F578BC200CAAB4D /* ManageEchosView.swift */; };
 		87CD0AF72F57930700CAAB4D /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72412F4F23E7000A4AE3 /* OnboardingFlow.swift */; };
+		87CD0AFA2F57D99A00CAAB4D /* Mixpanel in Frameworks */ = {isa = PBXBuildFile; productRef = 87CD0AF92F57D99A00CAAB4D /* Mixpanel */; };
+		87CD0AFB2F57D9B100CAAB4D /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9E2F4EB40A0058324F /* AnalyticsService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -172,6 +174,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				87CD0AFA2F57D99A00CAAB4D /* Mixpanel in Frameworks */,
 				87CD0AEA2F529B4700CAAB4D /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -418,6 +421,7 @@
 			name = Orca;
 			packageProductDependencies = (
 				87CD0AE92F529B4700CAAB4D /* Supabase */,
+				87CD0AF92F57D99A00CAAB4D /* Mixpanel */,
 			);
 			productName = Orca;
 			productReference = 873C1B5B2F4EA59D0058324F /* Orca.app */;
@@ -503,6 +507,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				87CD0AE22F52928600CAAB4D /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				87CD0AF82F57D99A00CAAB4D /* XCRemoteSwiftPackageReference "mixpanel-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 873C1B5C2F4EA59D0058324F /* Products */;
@@ -573,6 +578,7 @@
 				872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */,
 				872F726F2F4FF511000A4AE3 /* TypeCaptureView.swift in Sources */,
 				872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */,
+				87CD0AFB2F57D9B100CAAB4D /* AnalyticsService.swift in Sources */,
 				87CD0AF62F578BC300CAAB4D /* ManageEchosView.swift in Sources */,
 				872F726D2F4FF4BC000A4AE3 /* CaptureDrawerView.swift in Sources */,
 				872F72602F4FDDBC000A4AE3 /* ContentView.swift in Sources */,
@@ -993,6 +999,14 @@
 				minimumVersion = 2.5.1;
 			};
 		};
+		87CD0AF82F57D99A00CAAB4D /* XCRemoteSwiftPackageReference "mixpanel-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mixpanel/mixpanel-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.2.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1000,6 +1014,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 87CD0AE22F52928600CAAB4D /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
+		};
+		87CD0AF92F57D99A00CAAB4D /* Mixpanel */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 87CD0AF82F57D99A00CAAB4D /* XCRemoteSwiftPackageReference "mixpanel-swift" */;
+			productName = Mixpanel;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

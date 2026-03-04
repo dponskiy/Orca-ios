@@ -51,6 +51,8 @@ class SonarEngine {
         ("Holidays", ["christmas", "thanksgiving", "easter", "halloween", "new year", "valentine", "fourth of july", "independence day", "labor day", "memorial day", "hanukkah", "kwanzaa", "diwali"], 16),
         ("Chores", ["laundry", "vacuum", "dishes", "clean", "trash", "recycle", "mop", "dust", "organize", "declutter", "iron", "sweep", "garbage", "errands"], 17),
         ("Games", ["xbox", "playstation", "nintendo", "switch", "steam", "gaming", "controller", "multiplayer", "level", "quest", "raid", "download", "dlc", "console"], 18),
+        ("Movies", ["movie", "film", "cinema", "theater", "theatre", "netflix", "hulu", "disney+", "hbo", "prime video", "streaming", "watch", "director", "actor", "actress", "sequel", "trailer", "blockbuster", "documentary", "series", "episode", "season", "binge", "screenplay", "imdb"], 19),
+        ("Books", ["book", "read", "reading", "novel", "author", "chapter", "kindle", "audible", "library", "bookstore", "fiction", "nonfiction", "memoir", "biography", "audiobook", "bestseller", "hardcover", "paperback", "goodreads", "page", "plot", "genre", "publisher", "literature"], 20),
     ]
     
     private let reminderKeywords = ["remind", "remember", "don't forget", "dont forget", "every monday", "every tuesday", "every wednesday", "every thursday", "every friday", "every saturday", "every sunday", "every week", "every month", "every year", "every day", "daily", "weekly", "monthly", "yearly", "annually", "appointment", "deadline", "due date"]

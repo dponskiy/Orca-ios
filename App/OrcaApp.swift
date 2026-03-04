@@ -31,6 +31,7 @@ struct OrcaApp: App {
             }
             .preferredColorScheme(.light)
             .onAppear {
+                AnalyticsService.shared.initialize()
                 seedNewEchosIfNeeded()
             }
         }
@@ -48,6 +49,8 @@ struct OrcaApp: App {
             ("Events", "🎉", 8),
             ("School", "📚", 11),
             ("Holidays", "🎄", 15),
+            ("Movies", "🎬", 18),
+            ("Books", "📖", 19),
         ]
         
         for (name, emoji, order) in newDefaults {

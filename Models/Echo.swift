@@ -47,6 +47,8 @@ class Echo {
             ("Holidays", "🎄"),
             ("Chores", "🧹"),
             ("Games", "🎮"),
+            ("Movies", "🎬"),
+            ("Books", "📖"),
         ]
         
         for (index, (name, emoji)) in defaults.enumerated() {

@@ -45,14 +45,24 @@ struct ContentView: View {
             // Drop button (FAB)
             VStack {
                 Spacer()
-                DropButton {
-                    showDrop = true
-                } onLongPress: {
-                    showDrawer = true
+                VStack(spacing: 4) {
+                    DropButton {
+                        showDrop = true
+                    } onLongPress: {
+                        showDrawer = true
+                    }
+                    
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.oceanTeal.opacity(0.8))
+                        .phaseAnimator([0.4, 0.8]) { view, opacity in
+                            view.opacity(opacity)
+                        } animation: { _ in
+                            .easeInOut(duration: 1.2)
+                        }
                 }
                 .padding(.bottom, 70)
             }
-            
             // Capture drawer
             if showDrawer {
                 Color.black.opacity(0.35)
