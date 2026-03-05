@@ -108,6 +108,16 @@ struct SearchView: View {
                         }
             .onAppear {
                 isFocused = true
+                AnalyticsService.shared.trackSearchOpened()
+            }
+            .onChange(of: searchText) { _, newValue in
+                if !newValue.isEmpty {
+                    AnalyticsService.shared.trackSearchPerformed(
+                        query: newValue,
+                        resultCount: results.count,
+                        usedVoice: false
+                    )
+                }
             }
             .navigationDestination(isPresented: $showBrowseAll) {
                 BrowseAllView()

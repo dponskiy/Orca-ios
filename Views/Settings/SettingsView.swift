@@ -119,12 +119,14 @@ struct SettingsView: View {
                 Section("Support") {
                     Button {
                         hasCompletedOnboarding = false
+                        AnalyticsService.shared.trackOnboardingReplayed()
                     } label: {
                         Label("Replay Onboarding", systemImage: "arrow.counterclockwise")
                             .foregroundColor(.deepNavy)
                     }
                     
                     Button {
+                        AnalyticsService.shared.trackAppRated()
                         if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                             AppStore.requestReview(in: scene)
                         }
@@ -134,6 +136,7 @@ struct SettingsView: View {
                     }
                     
                     Button {
+                        AnalyticsService.shared.trackFeedbackSent()
                         if let url = URL(string: "mailto:support@orca.app?subject=Orca%20Feedback") {
                             UIApplication.shared.open(url)
                         }
@@ -211,6 +214,7 @@ struct SettingsView: View {
     }
     
     private func clearAllMemories() {
+        AnalyticsService.shared.trackAllMemoriesCleared(count: memories.count)
         for memory in memories {
             modelContext.delete(memory)
         }

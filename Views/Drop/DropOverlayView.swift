@@ -12,6 +12,7 @@ import AVFoundation
 struct DropOverlayView: View {
     @Binding var isPresented: Bool
     @Environment(\.modelContext) private var modelContext
+    @Environment(AuthService.self) private var authService
     @Query private var echos: [Echo]
     
     @State private var audioService = AudioService()
@@ -19,6 +20,7 @@ struct DropOverlayView: View {
     @State private var sonarResult: SonarResult?
     @State private var permissionDenied = false
     @State private var editMemory: Memory? = nil
+    @State private var savedTranscription = ""
     
     private func updateLastMemoryEcho(_ echoId: UUID) {
         let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
@@ -68,7 +70,7 @@ struct DropOverlayView: View {
                 VStack {
                     Spacer()
                     ConfirmBannerView(
-                        transcription: audioService.transcription,
+                        transcription: savedTranscription,
                         sonarResult: sonarResult,
                         echos: echos,
                         onDone: { isTask in
@@ -252,16 +254,17 @@ struct DropOverlayView: View {
     
     private func stopAndProcess() {
         audioService.stopRecording()
+        savedTranscription = audioService.transcription
         
-        guard !audioService.transcription.isEmpty else {
+        guard !savedTranscription.isEmpty else {
             isPresented = false
             return
         }
         
-        sonarResult = sonarEngine.process(text: audioService.transcription, echos: echos)
+        sonarResult = sonarEngine.process(text: savedTranscription, echos: echos)
         
         let echoId = sonarResult?.echoId ?? echos.first?.id ?? UUID()
-        let memory = Memory(text: audioService.transcription, echoId: echoId)
+        let memory = Memory(text: savedTranscription, echoId: echoId)
         memory.tags = sonarResult?.tags ?? []
         memory.detectedDate = sonarResult?.detectedDate
         memory.echoConfidence = sonarResult?.echoConfidence ?? 1.0
@@ -269,6 +272,11 @@ struct DropOverlayView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
+        if let userId = authService.userId {
+            Task {
+                await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
+            }
+        }
         AnalyticsService.shared.trackMemoryDropped(
             captureType: "voice",
             echoName: sonarResult?.echoName ?? "Unknown",
@@ -276,15 +284,15 @@ struct DropOverlayView: View {
             hasDate: sonarResult?.detectedDate != nil,
             hasURL: memory.url != nil,
             hasChecklist: memory.hasChecklist,
-            wordCount: audioService.transcription.split(separator: " ").count
+            wordCount: savedTranscription.split(separator: " ").count
         )
         // Detect URL
-        if let detectedURL = sonarEngine.detectURL(text: audioService.transcription) {
+        if let detectedURL = sonarEngine.detectURL(text: savedTranscription) {
             memory.url = detectedURL
         }
         
         // Detect checklist
-        if let checklistItems = sonarEngine.detectChecklist(text: audioService.transcription) {
+        if let checklistItems = sonarEngine.detectChecklist(text: savedTranscription) {
             memory.hasChecklist = true
             for (index, item) in checklistItems.enumerated() {
                 let subTask = SubTask(memoryId: memory.id, text: item, sortOrder: index)
@@ -301,6 +309,11 @@ struct DropOverlayView: View {
                     ping.fireTime = fireTime
                 }
                 modelContext.insert(ping)
+                if let userId = authService.userId {
+                    Task {
+                        await SupabaseSyncService.shared.pushPing(ping, userId: userId)
+                    }
+                }
                 NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
             }
         }

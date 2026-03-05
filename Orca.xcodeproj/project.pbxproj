@@ -57,6 +57,7 @@
 		87CD0AF72F57930700CAAB4D /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72412F4F23E7000A4AE3 /* OnboardingFlow.swift */; };
 		87CD0AFA2F57D99A00CAAB4D /* Mixpanel in Frameworks */ = {isa = PBXBuildFile; productRef = 87CD0AF92F57D99A00CAAB4D /* Mixpanel */; };
 		87CD0AFB2F57D9B100CAAB4D /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9E2F4EB40A0058324F /* AnalyticsService.swift */; };
+		87CD0AFD2F59312F00CAAB4D /* SupabaseSyncServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AFC2F59311F00CAAB4D /* SupabaseSyncServices.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -136,6 +137,7 @@
 		87CD0AF12F57443300CAAB4D /* SubTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubTask.swift; sourceTree = "<group>"; };
 		87CD0AF32F576FC300CAAB4D /* RecipeExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeExtractor.swift; sourceTree = "<group>"; };
 		87CD0AF52F578BC200CAAB4D /* ManageEchosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageEchosView.swift; sourceTree = "<group>"; };
+		87CD0AFC2F59311F00CAAB4D /* SupabaseSyncServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseSyncServices.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -262,6 +264,7 @@
 		873C1B8D2F4EB2A60058324F /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				87CD0AFC2F59311F00CAAB4D /* SupabaseSyncServices.swift */,
 				87CD0AEF2F57357300CAAB4D /* OrcaShortcuts.swift */,
 				87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */,
 				873C1B9E2F4EB40A0058324F /* AnalyticsService.swift */,
@@ -583,6 +586,7 @@
 				872F726D2F4FF4BC000A4AE3 /* CaptureDrawerView.swift in Sources */,
 				872F72602F4FDDBC000A4AE3 /* ContentView.swift in Sources */,
 				87CD0AEE2F57300700CAAB4D /* PhotoCaptureView.swift in Sources */,
+				87CD0AFD2F59312F00CAAB4D /* SupabaseSyncServices.swift in Sources */,
 				872F72682F4FE746000A4AE3 /* CalendarTabView.swift in Sources */,
 				872F72642F4FE598000A4AE3 /* DashboardView.swift in Sources */,
 				872F725D2F4FDC77000A4AE3 /* Ping.swift in Sources */,

@@ -41,7 +41,7 @@ struct BrowseAllView: View {
         return result.sorted {
             let d1 = $0.detectedDate ?? $0.updatedAt
             let d2 = $1.detectedDate ?? $1.updatedAt
-            return d1 > d2
+            return d1 < d2
         }
     }
     
@@ -275,7 +275,7 @@ struct BrowseAllView: View {
         return grouped.sorted { pair1, pair2 in
             let d1 = pair1.value.first.flatMap { $0.detectedDate ?? $0.updatedAt } ?? Date.distantPast
             let d2 = pair2.value.first.flatMap { $0.detectedDate ?? $0.updatedAt } ?? Date.distantPast
-            return d1 > d2
+            return d1 < d2
         }
     }
     

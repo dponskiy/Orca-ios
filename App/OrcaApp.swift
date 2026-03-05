@@ -1,4 +1,3 @@
-
 //
 //  OrcaApp.swift
 //  Orca
@@ -15,6 +14,13 @@ struct OrcaApp: App {
     @AppStorage("hasSkippedAuth") private var hasSkippedAuth = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     
+    let modelContainer: ModelContainer = {
+        guard let container = try? ModelContainer(for: Memory.self, Echo.self, Ping.self, SubTask.self) else {
+            fatalError("Failed to create ModelContainer")
+        }
+        return container
+    }()
+    
     var body: some Scene {
         WindowGroup {
             Group {
@@ -29,18 +35,27 @@ struct OrcaApp: App {
                     }
                 }
             }
+            .onChange(of: authService.userId) { _, newUserId in
+                if let userId = newUserId {
+                    SupabaseSyncService.shared.configure(modelContext: modelContainer.mainContext)
+                    Task { @MainActor in
+                        await SupabaseSyncService.shared.startAutoSync(userId: userId)
+                    }
+                } else {
+                    SupabaseSyncService.shared.stopAutoSync()
+                }
+            }
             .preferredColorScheme(.light)
             .onAppear {
                 AnalyticsService.shared.initialize()
                 seedNewEchosIfNeeded()
             }
         }
-        .modelContainer(for: [Memory.self, Echo.self, Ping.self, SubTask.self])
+        .modelContainer(modelContainer)
     }
     
     private func seedNewEchosIfNeeded() {
-        guard let container = try? ModelContainer(for: Memory.self, Echo.self, Ping.self, SubTask.self) else { return }
-        let context = container.mainContext
+        let context = modelContainer.mainContext
         
         Echo.seedDefaults(context: context)
         

@@ -51,28 +51,42 @@ struct OnboardingFlow: View {
             }
             
             if step > 0 && step < 5 {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.4)) {
-                        step -= 1
+                            HStack {
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.4)) {
+                                        step -= 1
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "chevron.left")
+                                            .font(.system(size: 12, weight: .medium))
+                                        Text("Back")
+                                            .font(.custom("DMSans-Regular", size: 14))
+                                    }
+                                    .foregroundColor(.white.opacity(0.35))
+                                }
+                                
+                                Spacer()
+                                
+                                Button {
+                                    AnalyticsService.shared.trackOnboardingSkipped(atStep: step)
+                                    hasCompletedOnboarding = true
+                                } label: {
+                                    Text("Skip")
+                                        .font(.custom("DMSans-Regular", size: 14))
+                                        .foregroundColor(.white.opacity(0.35))
+                                }
+                            }
+                            .padding(.horizontal, 28)
+                            .padding(.bottom, 16)
+                        }
                     }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 12, weight: .medium))
-                        Text("Back")
-                            .font(.custom("DMSans-Regular", size: 14))
+                    .animation(.easeInOut(duration: 0.4), value: step)
+                    .onAppear {
+                        AnalyticsService.shared.trackOnboardingStarted()
+                        AnalyticsService.shared.trackOnboardingStepViewed(step: 0, name: "Splash")
                     }
-                    .foregroundColor(.white.opacity(0.35))
                 }
-                .padding(.bottom, 16)
-            }
-        }
-        .animation(.easeInOut(duration: 0.4), value: step)
-        .onAppear {
-            AnalyticsService.shared.trackOnboardingStarted()
-            AnalyticsService.shared.trackOnboardingStepViewed(step: 0, name: "Splash")
-        }
-    }
     
     // MARK: - Splash
     

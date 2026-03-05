@@ -11,6 +11,7 @@ import SwiftData
 struct TypeCaptureView: View {
     @Binding var isPresented: Bool
     @Environment(\.modelContext) private var modelContext
+    @Environment(AuthService.self) private var authService
     @Query private var echos: [Echo]
     
     @State private var text = ""
@@ -156,6 +157,11 @@ struct TypeCaptureView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
+        if let userId = authService.userId {
+            Task {
+                await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
+            }
+        }
         AnalyticsService.shared.trackMemoryDropped(
             captureType: "typed",
             echoName: sonarResult?.echoName ?? "Unknown",
@@ -187,6 +193,11 @@ struct TypeCaptureView: View {
                     ping.fireTime = fireTime
                 }
                 modelContext.insert(ping)
+                if let userId = authService.userId {
+                    Task {
+                        await SupabaseSyncService.shared.pushPing(ping, userId: userId)
+                    }
+                }
                 NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
             }
         }

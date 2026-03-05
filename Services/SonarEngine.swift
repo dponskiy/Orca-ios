@@ -216,6 +216,10 @@ class SonarEngine {
         let calendar = Calendar.current
         let hasEvery = text.contains("every")
         
+        // Detect specific time early so all blocks can use it
+        let hasSpecificTime = text.range(of: #"\bat\s+\d"#, options: .regularExpression) != nil ||
+                              text.range(of: #"\d+\s*(am|pm)"#, options: .regularExpression) != nil
+        
         // Check for weekday recurring ("every monday", "saturday and sunday")
         let weekdays = detectWeekdays(text: text)
         if !weekdays.isEmpty {
@@ -248,14 +252,14 @@ class SonarEngine {
             
             suggestions.append(PingSuggestion(
                 fireDate: eventDate,
-                fireTime: defaultTime,
+                fireTime: hasSpecificTime ? eventDate : defaultTime,
                 recurrence: .yearly
             ))
             
             if let reminderDate = dates.reminderDate {
                 suggestions.append(PingSuggestion(
                     fireDate: reminderDate,
-                    fireTime: dates.reminderTime,
+                    fireTime: dates.reminderTime ?? (hasSpecificTime ? eventDate : nil),
                     recurrence: Ping.Recurrence.none
                 ))
             }
@@ -268,7 +272,7 @@ class SonarEngine {
             let fireDate = dates.eventDate ?? Date()
             suggestions.append(PingSuggestion(
                 fireDate: fireDate,
-                fireTime: dates.eventDate,
+                fireTime: hasSpecificTime ? dates.eventDate : dates.eventDate,
                 recurrence: .daily
             ))
             return suggestions
@@ -278,7 +282,7 @@ class SonarEngine {
             let fireDate = dates.eventDate ?? Date()
             suggestions.append(PingSuggestion(
                 fireDate: fireDate,
-                fireTime: dates.eventDate,
+                fireTime: hasSpecificTime ? dates.eventDate : dates.eventDate,
                 recurrence: .weekly
             ))
             return suggestions
@@ -288,7 +292,7 @@ class SonarEngine {
             let fireDate = dates.eventDate ?? Date()
             suggestions.append(PingSuggestion(
                 fireDate: fireDate,
-                fireTime: dates.eventDate,
+                fireTime: hasSpecificTime ? dates.eventDate : dates.eventDate,
                 recurrence: .monthly
             ))
             return suggestions
@@ -298,28 +302,29 @@ class SonarEngine {
             let fireDate = dates.eventDate ?? Date()
             suggestions.append(PingSuggestion(
                 fireDate: fireDate,
-                fireTime: dates.eventDate,
+                fireTime: hasSpecificTime ? dates.eventDate : dates.eventDate,
                 recurrence: .yearly
             ))
             return suggestions
         }
         
         // Standard reminder detection
-        guard dates.eventDate != nil else { return [] }
+        guard let eventDate = dates.eventDate else { return [] }
         
         let hasReminderIntent = reminderKeywords.contains { text.contains($0) }
-        guard hasReminderIntent else { return [] }
+        
+        guard hasReminderIntent || hasSpecificTime else { return [] }
         
         if let reminderDate = dates.reminderDate {
             suggestions.append(PingSuggestion(
                 fireDate: reminderDate,
-                fireTime: dates.reminderTime,
+                fireTime: dates.reminderTime ?? (hasSpecificTime ? eventDate : nil),
                 recurrence: Ping.Recurrence.none
             ))
         } else {
             suggestions.append(PingSuggestion(
-                fireDate: dates.eventDate,
-                fireTime: nil,
+                fireDate: eventDate,
+                fireTime: hasSpecificTime ? eventDate : nil,
                 recurrence: Ping.Recurrence.none
             ))
         }
@@ -339,8 +344,6 @@ class SonarEngine {
             }
         }
         
-        // 2+ weekdays = recurring even without "every"
-        // 1 weekday = only recurring if "every" is present
         if weekdays.count >= 2 {
             return weekdays
         } else if weekdays.count == 1 && text.contains("every") {

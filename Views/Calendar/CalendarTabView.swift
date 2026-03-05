@@ -362,38 +362,54 @@ struct CalendarTabView: View {
         HStack(spacing: 12) {
             if memory.isActionable {
                 Button {
-                                    withAnimation(.spring(duration: 0.3)) {
-                                        memory.isCompleted.toggle()
-                                        memory.completedAt = memory.isCompleted ? Date() : nil
-                                        memory.updatedAt = Date()
-                                        
-                                        let memoryPings = pings.filter { $0.memoryId == memory.id }
-                                        for ping in memoryPings {
-                                            ping.isActive = !memory.isCompleted
-                                            if memory.isCompleted {
-                                                NotificationService.shared.cancelPing(pingId: ping.id)
-                                            } else {
-                                                NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
-                                            }
-                                        }
-                                    }
-                                } label: {
-                            if memory.isCompleted {
-                                ZStack {
-                                    Circle()
-                                        .fill(Color.oceanTeal)
-                                        .frame(width: 24, height: 24)
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundColor(.white)
+                    withAnimation(.spring(duration: 0.3)) {
+                        let memoryPings = pings.filter { $0.memoryId == memory.id }
+                        let isRecurring = memoryPings.contains { $0.recurrence != .none }
+                        
+                        if isRecurring {
+                            // Toggle completed for today only
+                            let completedToday = memory.completedAt.map {
+                                calendar.isDate($0, inSameDayAs: selectedDate)
+                            } ?? false
+                            
+                            memory.completedAt = completedToday ? nil : Date()
+                            memory.updatedAt = Date()
+                            // Don't touch pings
+                        } else {
+                            memory.isCompleted.toggle()
+                            memory.completedAt = memory.isCompleted ? Date() : nil
+                            memory.updatedAt = Date()
+                            for ping in memoryPings {
+                                ping.isActive = !memory.isCompleted
+                                if memory.isCompleted {
+                                    NotificationService.shared.cancelPing(pingId: ping.id)
+                                } else {
+                                    NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
                                 }
-                            } else {
-                                Circle()
-                                    .stroke(Color.oceanTeal, lineWidth: 2)
-                                    .frame(width: 24, height: 24)
                             }
                         }
-                    } else if let echo = echos.first(where: { $0.id == memory.echoId }) {
+                    }
+                } label: {
+                    let completedToday = memory.completedAt.map {
+                        calendar.isDate($0, inSameDayAs: selectedDate)
+                    } ?? false
+                    let showChecked = memory.isCompleted || completedToday
+                    
+                    if showChecked {
+                        ZStack {
+                            Circle()
+                                .fill(Color.oceanTeal)
+                                .frame(width: 24, height: 24)
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    } else {
+                        Circle()
+                            .stroke(Color.oceanTeal, lineWidth: 2)
+                            .frame(width: 24, height: 24)
+                    }
+                }                    } else if let echo = echos.first(where: { $0.id == memory.echoId }) {
                         Text(echo.emoji)
                             .font(.system(size: 16))
                             .frame(width: 24)
