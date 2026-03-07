@@ -15,7 +15,10 @@ struct EchoBubbleView: View {
     
     @State private var floatOffset: CGFloat = 0
     
+    private var isEmpty: Bool { count == 0 }
+    
     private var bubbleSize: CGFloat {
+        if isEmpty { return 40 } // smaller than min active size
         guard totalMemories > 0 else { return 64 }
         let proportion = Double(count) / Double(totalMemories)
         let minSize: CGFloat = 56
@@ -29,23 +32,27 @@ struct EchoBubbleView: View {
             VStack(spacing: 4) {
                 ZStack {
                     Circle()
-                        .fill(Color.oceanTeal.opacity(0.18))
+                        .fill(isEmpty ? Color.gray.opacity(0.08) : Color.oceanTeal.opacity(0.18))
                         .frame(width: bubbleSize, height: bubbleSize)
                     
                     Text(echo.emoji)
                         .font(.system(size: bubbleSize * 0.42))
+                        .opacity(isEmpty ? 0.4 : 1.0)
                 }
                 
                 Text(echo.name)
-                    .font(.custom("DMSans-Medium", size: 13))
-                    .foregroundColor(.deepNavy)
+                    .font(.custom("DMSans-Medium", size: isEmpty ? 11 : 13))
+                    .foregroundColor(isEmpty ? .gray.opacity(0.5) : .deepNavy)
                 
-                Text("\(count)")
-                    .font(.custom("DMMono-Regular", size: 11))
-                    .foregroundColor(.gray)
+                if !isEmpty {
+                    Text("\(count)")
+                        .font(.custom("DMMono-Regular", size: 11))
+                        .foregroundColor(.gray)
+                }
             }
             .offset(y: floatOffset)
             .onAppear {
+                guard !isEmpty else { return }
                 withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
                     floatOffset = -4
                 }
@@ -63,12 +70,5 @@ struct EchoBubbleView: View {
                 .offset(x: 4, y: -2)
             }
         }
-    }
-}
-
-#Preview {
-    HStack {
-        EchoBubbleView(echo: Echo(name: "Dining", emoji: "🍜"), count: 3, pendingCount: 0, totalMemories: 10)
-        EchoBubbleView(echo: Echo(name: "Work", emoji: "💼"), count: 8, pendingCount: 2, totalMemories: 10)
     }
 }

@@ -5,13 +5,6 @@
 //  Created by David Piliponskiy on 2/25/26.
 //
 
-//
-//  SettingsView.swift
-//  Orca
-//
-//  Created by David Piliponskiy on 2/25/26.
-//
-
 import SwiftUI
 import SwiftData
 import StoreKit
@@ -23,8 +16,10 @@ struct SettingsView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
     
     @Query private var memories: [Memory]
+    @Query private var pings: [Ping]
     @State private var showManageEchos = false
     @State private var showClearConfirm = false
+    @State private var showCleanUpSheet = false
     
     var body: some View {
         NavigationStack {
@@ -101,7 +96,6 @@ struct SettingsView: View {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
                             UIApplication.shared.open(url)
                         }
-
                     } label: {
                         Label("Set as Action Button", systemImage: "button.angledtop.vertical.right")
                             .foregroundColor(.deepNavy)
@@ -156,8 +150,15 @@ struct SettingsView: View {
                     }
                 }
                 
-                // MARK: - Danger Zone
+                // MARK: - Data
                 Section("Data") {
+                    Button {
+                        showCleanUpSheet = true
+                    } label: {
+                        Label("Clean Up Old Tasks", systemImage: "sparkles.rectangle.stack")
+                            .foregroundColor(.deepNavy)
+                    }
+                    
                     Button {
                         showClearConfirm = true
                     } label: {
@@ -190,6 +191,22 @@ struct SettingsView: View {
             .navigationDestination(isPresented: $showManageEchos) {
                 ManageEchosView()
             }
+            .sheet(isPresented: $showCleanUpSheet) {
+                CleanUpSheet(memories: memories, pings: pings) { toDelete in
+                    for memory in toDelete {
+                        let id = memory.id
+                        let memoryPings = pings.filter { $0.memoryId == memory.id }
+                        for ping in memoryPings {
+                            NotificationService.shared.cancelPing(pingId: ping.id)
+                            modelContext.delete(ping)
+                        }
+                        modelContext.delete(memory)
+                        Task {
+                            await SupabaseSyncService.shared.deleteMemory(id: id)
+                        }
+                    }
+                }
+            }
             .confirmationDialog(
                 "Clear all memories?",
                 isPresented: $showClearConfirm,
@@ -216,12 +233,141 @@ struct SettingsView: View {
     private func clearAllMemories() {
         AnalyticsService.shared.trackAllMemoriesCleared(count: memories.count)
         for memory in memories {
+            let id = memory.id
             modelContext.delete(memory)
+            Task {
+                await SupabaseSyncService.shared.deleteMemory(id: id)
+            }
+        }
+    }
+    
+    // MARK: - Clean Up Sheet
+    
+    struct CleanUpSheet: View {
+        let memories: [Memory]
+        let pings: [Ping]
+        let onConfirm: ([Memory]) -> Void
+        
+        @Environment(\.dismiss) private var dismiss
+        @State private var deselected: Set<UUID> = []
+        
+        private var candidates: [Memory] {
+            let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+            return memories.filter { memory in
+                guard memory.isActionable else { return false }
+                guard !memory.isPinned else { return false }
+                guard !memory.hasChecklist else { return false }
+                guard memory.url == nil || memory.url?.isEmpty == true else { return false }
+                let hasRecurringPing = pings.contains { $0.memoryId == memory.id && $0.recurrence != .none }
+                guard !hasRecurringPing else { return false }
+                if memory.isCompleted, let completedAt = memory.completedAt {
+                    return completedAt < cutoff
+                }
+                if let detectedDate = memory.detectedDate {
+                    return detectedDate < cutoff
+                }
+                return false
+            }
+            .sorted { ($0.completedAt ?? $0.detectedDate ?? $0.createdAt) < ($1.completedAt ?? $1.detectedDate ?? $1.createdAt) }
+        }
+        
+        private var toDelete: [Memory] {
+            candidates.filter { !deselected.contains($0.id) }
+        }
+        
+        var body: some View {
+            NavigationStack {
+                Group {
+                    if candidates.isEmpty {
+                        VStack(spacing: 16) {
+                            Spacer()
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 44))
+                                .foregroundColor(.seafoam.opacity(0.5))
+                            Text("All clean!")
+                                .font(.custom("DMSans-Medium", size: 20))
+                                .foregroundColor(.deepNavy)
+                            Text("No completed tasks older than 30 days.")
+                                .font(.custom("DMSans-Regular", size: 14))
+                                .foregroundColor(.gray)
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        List {
+                            Section {
+                                Text("Uncheck any tasks you want to keep. Everything else will be removed.")
+                                    .font(.custom("DMSans-Regular", size: 13))
+                                    .foregroundColor(.gray)
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                            }
+                            
+                            ForEach(candidates) { memory in
+                                let isSelected = !deselected.contains(memory.id)
+                                HStack(spacing: 12) {
+                                    Button {
+                                        if deselected.contains(memory.id) {
+                                            deselected.remove(memory.id)
+                                        } else {
+                                            deselected.insert(memory.id)
+                                        }
+                                    } label: {
+                                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                            .font(.system(size: 22))
+                                            .foregroundColor(isSelected ? .coral : .gray.opacity(0.4))
+                                    }
+                                    .buttonStyle(.plain)
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(memory.text)
+                                            .font(.custom("DMSans-Regular", size: 15))
+                                            .foregroundColor(isSelected ? .deepNavy : .gray)
+                                            .strikethrough(isSelected)
+                                            .lineLimit(2)
+                                        
+                                        if let date = memory.completedAt ?? memory.detectedDate {
+                                            Text(date, format: .dateTime.month(.abbreviated).day().year())
+                                                .font(.custom("DMMono-Regular", size: 12))
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                        .listStyle(.plain)
+                    }
+                }
+                .navigationTitle("Clean Up")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                            .foregroundColor(.gray)
+                    }
+                    
+                    if !candidates.isEmpty {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button {
+                                onConfirm(toDelete)
+                                dismiss()
+                            } label: {
+                                Text("Remove \(toDelete.count)")
+                                    .font(.custom("DMSans-Medium", size: 15))
+                                    .foregroundColor(toDelete.isEmpty ? .gray : .coral)
+                            }
+                            .disabled(toDelete.isEmpty)
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
         }
     }
 }
+    #Preview {
+        SettingsView()
+            .environment(AuthService())
+    }
 
-#Preview {
-    SettingsView()
-        .environment(AuthService())
-}

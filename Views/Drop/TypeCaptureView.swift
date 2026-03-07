@@ -54,7 +54,7 @@ struct TypeCaptureView: View {
             last.echoId = echoId
         }
     }
-
+    
     private let sonarEngine = SonarEngine()
     
     var body: some View {
@@ -74,18 +74,18 @@ struct TypeCaptureView: View {
                             updateLastMemoryTask(isTask: isTask)
                             isPresented = false
                         },
-                            onUndo: { undoMemory() },
-                            onEchoChanged: { newEchoId in
-                                updateLastMemoryEcho(newEchoId)
-                            },
-                            onRecipeFetched: { recipe in
-                                handleRecipeFetch(recipe)
-                            },
-                            onEdit: {
-                                let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
-                                editMemory = try? modelContext.fetch(descriptor).first
-                            }
-                        )
+                        onUndo: { undoMemory() },
+                        onEchoChanged: { newEchoId in
+                            updateLastMemoryEcho(newEchoId)
+                        },
+                        onRecipeFetched: { recipe in
+                            handleRecipeFetch(recipe)
+                        },
+                        onEdit: {
+                            let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+                            editMemory = try? modelContext.fetch(descriptor).first
+                        }
+                    )
                 }
             }
             else {
@@ -137,9 +137,9 @@ struct TypeCaptureView: View {
                     isFocused = true
                 }
             }
-                }
+        }
         .sheet(item: $editMemory) { memory in
-                    MemoryEditView(memory: memory)
+            MemoryEditView(memory: memory)
         }
     }
     
@@ -157,6 +157,7 @@ struct TypeCaptureView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
+        NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
         if let userId = authService.userId {
             Task {
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
@@ -184,7 +185,7 @@ struct TypeCaptureView: View {
                 modelContext.insert(subTask)
             }
         }
-
+        
         if let result = sonarResult {
             for suggestion in result.pingSuggestions {
                 let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
@@ -206,7 +207,7 @@ struct TypeCaptureView: View {
             showBanner = true
         }
     }
-
+    
     private func updateLastMemoryTask(isTask: Bool) {
         let recent = try? modelContext.fetch(
             FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
@@ -215,18 +216,21 @@ struct TypeCaptureView: View {
             last.isActionable = isTask
         }
     }
-
+    
     private func undoMemory() {
         let recent = try? modelContext.fetch(
             FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         )
         if let last = recent?.first {
+            let id = last.id
             modelContext.delete(last)
+            Task {
+                await SupabaseSyncService.shared.deleteMemory(id: id)
+            }
         }
     }
 }
-
-#Preview {
-    TypeCaptureView(isPresented: .constant(true))
-        .modelContainer(for: [Memory.self, Echo.self, Ping.self], inMemory: true)
-}
+    #Preview {
+        TypeCaptureView(isPresented: .constant(true))
+            .modelContainer(for: [Memory.self, Echo.self, Ping.self], inMemory: true)
+    }

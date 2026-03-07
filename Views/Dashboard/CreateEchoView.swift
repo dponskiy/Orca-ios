@@ -63,7 +63,7 @@ struct CreateEchoView: View {
                         .foregroundColor(.gray)
                     
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
-                        ForEach(emojiOptions, id: \.self) { emoji in
+                        ForEach(Array(emojiOptions.enumerated()), id: \.offset) { _, emoji in
                             Button {
                                 selectedEmoji = emoji
                             } label: {

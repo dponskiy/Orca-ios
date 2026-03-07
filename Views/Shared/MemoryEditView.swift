@@ -15,6 +15,7 @@ struct MemoryEditView: View {
     @Query private var echos: [Echo]
     @Query private var pings: [Ping]
     @Query private var subTasks: [SubTask]
+    @Environment(AuthService.self) private var authService
     
     @State private var editedText: String = ""
     @State private var selectedEchoId: UUID = UUID()
@@ -91,14 +92,6 @@ struct MemoryEditView: View {
                     // URL
                     urlSection
                     
-                    // Date
-                    dateSection
-                    
-                    // Ping
-                    if hasDate {
-                        pingSection
-                    }
-                    
                     // Pin
                     Toggle(isOn: Binding(
                         get: { memory.isPinned },
@@ -131,6 +124,15 @@ struct MemoryEditView: View {
                     }
                     .tint(.oceanTeal)
                     
+                    // Date
+                    dateSection
+                    
+                    // Ping
+                    if hasDate {
+                        pingSection
+                    }
+                    
+                    
                     // Convert to checklist button
                     if !memory.hasChecklist && memorySubTasks.isEmpty {
                         Button {
@@ -153,7 +155,11 @@ struct MemoryEditView: View {
                                         
                     // Delete
                     Button(role: .destructive) {
+                        let id = memory.id
                         modelContext.delete(memory)
+                        Task {
+                            await SupabaseSyncService.shared.deleteMemory(id: id)
+                        }
                         dismiss()
                     } label: {
                         HStack(spacing: 6) {

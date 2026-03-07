@@ -11,6 +11,7 @@ import AVFoundation
 
 struct DropOverlayView: View {
     @Binding var isPresented: Bool
+    var onComplete: ((String) -> Void)? = nil
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthService.self) private var authService
     @Query private var echos: [Echo]
@@ -28,11 +29,11 @@ struct DropOverlayView: View {
             last.echoId = echoId
         }
     }
+    
     private func handleRecipeFetch(_ recipe: RecipeResult) {
         let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         guard let memory = try? modelContext.fetch(descriptor).first else { return }
         
-        // Update memory text with instructions
         var parts: [String] = ["🍽 \(recipe.title)"]
         var meta: [String] = []
         if let prep = recipe.prepTime { meta.append("Prep: \(prep)") }
@@ -47,7 +48,6 @@ struct DropOverlayView: View {
         }
         memory.text = parts.joined(separator: "\n")
         
-        // Add ingredients as subtasks
         if !recipe.ingredients.isEmpty {
             memory.hasChecklist = true
             for (index, ingredient) in recipe.ingredients.enumerated() {
@@ -56,6 +56,7 @@ struct DropOverlayView: View {
             }
         }
     }
+    
     private let sonarEngine = SonarEngine()
     
     var body: some View {
@@ -99,8 +100,8 @@ struct DropOverlayView: View {
         .onAppear {
             checkAndStartRecording()
         }
-                .sheet(item: $editMemory) { memory in
-                    MemoryEditView(memory: memory)
+        .sheet(item: $editMemory) { memory in
+            MemoryEditView(memory: memory)
         }
     }
     
@@ -175,7 +176,6 @@ struct DropOverlayView: View {
                         Circle()
                             .fill(Color.coral)
                             .frame(width: 72, height: 72)
-                        
                         RoundedRectangle(cornerRadius: 6)
                             .fill(.white)
                             .frame(width: 24, height: 24)
@@ -225,9 +225,9 @@ struct DropOverlayView: View {
             }
         }
     }
-
+    
     // MARK: - Update Last Memory
-
+    
     private func updateLastMemoryTask(isTask: Bool) {
         let recent = try? modelContext.fetch(
             FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
@@ -272,11 +272,14 @@ struct DropOverlayView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
+        NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
+        
         if let userId = authService.userId {
             Task {
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
             }
         }
+        
         AnalyticsService.shared.trackMemoryDropped(
             captureType: "voice",
             echoName: sonarResult?.echoName ?? "Unknown",
@@ -286,12 +289,11 @@ struct DropOverlayView: View {
             hasChecklist: memory.hasChecklist,
             wordCount: savedTranscription.split(separator: " ").count
         )
-        // Detect URL
+        
         if let detectedURL = sonarEngine.detectURL(text: savedTranscription) {
             memory.url = detectedURL
         }
         
-        // Detect checklist
         if let checklistItems = sonarEngine.detectChecklist(text: savedTranscription) {
             memory.hasChecklist = true
             for (index, item) in checklistItems.enumerated() {
@@ -299,8 +301,7 @@ struct DropOverlayView: View {
                 modelContext.insert(subTask)
             }
         }
-
-        // Create Pings from suggestions
+        
         if let result = sonarResult {
             for suggestion in result.pingSuggestions {
                 let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
@@ -324,7 +325,13 @@ struct DropOverlayView: View {
     }
     
     private func dismissAndClose() {
+        let echoName = echos.first { $0.id == sonarResult?.echoId }?.name
+            ?? sonarResult?.echoName ?? "Memory"
+        let echoEmoji = echos.first { $0.name == echoName }?.emoji ?? "📝"
+        let message = "Dropped to \(echoName) \(echoEmoji)"
+        
         isPresented = false
+        onComplete?(message)
     }
     
     private func undoAndClose() {
@@ -332,7 +339,11 @@ struct DropOverlayView: View {
             FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         )
         if let last = recent?.first {
+            let id = last.id
             modelContext.delete(last)
+            Task {
+                await SupabaseSyncService.shared.deleteMemory(id: id)
+            }
         }
         isPresented = false
     }

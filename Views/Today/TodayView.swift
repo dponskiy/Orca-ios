@@ -587,7 +587,7 @@ struct TodayView: View {
                     let isRecurring = memoryPings.contains { $0.recurrence != .none }
                     
                     if isRecurring {
-                        memory.completedAt = Date()
+                        memory.completedAt = selectedDate
                         memory.updatedAt = Date()
                     } else {
                         memory.isCompleted = true

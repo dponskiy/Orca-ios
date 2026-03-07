@@ -15,6 +15,8 @@ struct ContentView: View {
     @State private var showTyped = false
     @State private var showSearch = false
     @State private var showScreenshot = false
+    @State private var showToast = false
+    @State private var toastMessage = ""
     
     var body: some View {
         ZStack {
@@ -63,6 +65,7 @@ struct ContentView: View {
                 }
                 .padding(.bottom, 70)
             }
+            
             // Capture drawer
             if showDrawer {
                 Color.black.opacity(0.35)
@@ -85,29 +88,61 @@ struct ContentView: View {
                 }
                 .transition(.move(edge: .bottom))
             }
+            
+            // Toast
+            if showToast {
+                VStack {
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 15))
+                            .foregroundColor(.oceanTeal)
+                        Text(toastMessage)
+                            .font(.custom("DMSans-Medium", size: 15))
+                            .foregroundColor(.deepNavy)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(.white)
+                    .clipShape(Capsule())
+                    .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+                    .padding(.bottom, 100)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
         }
         .animation(.spring(duration: 0.3), value: showDrawer)
         .fullScreenCover(isPresented: $showDrop) {
-            DropOverlayView(isPresented: $showDrop)
+            DropOverlayView(isPresented: $showDrop) { message in
+                toastMessage = message
+                withAnimation(.spring(duration: 0.4)) {
+                    showToast = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        showToast = false
+                    }
+                }
+            }
         }
         .fullScreenCover(isPresented: $showTyped) {
             TypeCaptureView(isPresented: $showTyped)
         }
         .fullScreenCover(isPresented: $showScreenshot) {
-                    PhotoCaptureView(isPresented: $showScreenshot)
-                }
+            PhotoCaptureView(isPresented: $showScreenshot)
+        }
         .fullScreenCover(isPresented: $showSearch) {
             SearchView(isPresented: $showSearch)
         }
         .onReceive(NotificationCenter.default.publisher(for: .openDropOverlay)) { _ in
-                    showDrop = true
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .openTypeCapture)) { _ in
-                    showTyped = true
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .openScreenshotCapture)) { _ in
-                    showScreenshot = true
-                }
+            showDrop = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openTypeCapture)) { _ in
+            showTyped = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openScreenshotCapture)) { _ in
+            showScreenshot = true
+        }
     }
 }
 

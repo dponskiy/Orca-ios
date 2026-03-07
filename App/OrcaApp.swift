@@ -38,8 +38,9 @@ struct OrcaApp: App {
             .onChange(of: authService.userId) { _, newUserId in
                 if let userId = newUserId {
                     SupabaseSyncService.shared.configure(modelContext: modelContainer.mainContext)
-                    Task { @MainActor in
-                        await SupabaseSyncService.shared.startAutoSync(userId: userId)
+                    SupabaseSyncService.shared.stopAutoSync() // cancel any existing
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        SupabaseSyncService.shared.startAutoSync(userId: userId)
                     }
                 } else {
                     SupabaseSyncService.shared.stopAutoSync()
@@ -66,6 +67,8 @@ struct OrcaApp: App {
             ("Holidays", "🎄", 15),
             ("Movies", "🎬", 18),
             ("Books", "📖", 19),
+            ("Clothes", "👕", 21),
+            ("Notes", "📝", 22)
         ]
         
         for (name, emoji, order) in newDefaults {

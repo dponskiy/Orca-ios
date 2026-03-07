@@ -18,6 +18,7 @@ import SwiftData
 struct ManageEchosView: View {
     @Query(sort: \Echo.sortOrder) private var echos: [Echo]
     @Environment(\.modelContext) private var modelContext
+    @Environment(AuthService.self) private var authService
     
     @State private var showAddEcho = false
     @State private var editingEcho: Echo?
@@ -49,7 +50,11 @@ struct ManageEchosView: View {
                     }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
+                            let id = echo.id
                             modelContext.delete(echo)
+                            Task {
+                                await SupabaseSyncService.shared.deleteEcho(id: id)
+                            }
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -127,7 +132,7 @@ struct EchoEditSheet: View {
                         .frame(height: 44)
                     
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
-                        ForEach(commonEmojis, id: \.self) { e in
+                        ForEach(Array(commonEmojis.enumerated()), id: \.offset) { _, e in
                             Button {
                                 emoji = e
                             } label: {

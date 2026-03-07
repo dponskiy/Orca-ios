@@ -343,6 +343,7 @@ struct PhotoCaptureView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
+        NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
         if let userId = authService.userId {
             Task {
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)

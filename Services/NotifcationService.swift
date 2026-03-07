@@ -72,7 +72,34 @@ class NotificationService {
         
         print("🔔 Scheduled notification for: \(memoryText) at \(triggerComponents)")
     }
-    
+    func scheduleInactivityReminder(afterDays days: Int = 5 ) {
+        // Cancel any existing inactivity reminder first
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["inactivity_reminder"])
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Your memory is fading 🐬"
+        content.body = "You haven't dropped anything in 5 days. Tap to capture something."
+        content.sound = .default
+        
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: TimeInterval(days * 24 * 60 * 60),
+            repeats: false
+        )
+        
+        let request = UNNotificationRequest(
+            identifier: "inactivity_reminder",
+            content: content,
+            trigger: trigger
+        )
+        
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    func cancelInactivityReminder() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: ["inactivity_reminder"]
+        )
+    }
     func cancelPing(pingId: UUID) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [pingId.uuidString])
         print("🔕 Cancelled notification: \(pingId)")

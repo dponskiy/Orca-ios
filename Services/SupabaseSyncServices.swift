@@ -39,6 +39,8 @@ class SupabaseSyncService {
         syncError = nil
         
         do {
+            try deduplicateLocal(context: context)
+            try await upsertUser(userId: userId)
             try await syncEchos(userId: userId, context: context)
             try await syncMemories(userId: userId, context: context)
             try await syncPings(userId: userId, context: context)
@@ -51,13 +53,65 @@ class SupabaseSyncService {
         isSyncing = false
     }
     
+    // MARK: - Deduplicate Local
+    
+    private func deduplicateLocal(context: ModelContext) throws {
+        let echos = try context.fetch(FetchDescriptor<Echo>())
+        var seenEchoIds = Set<UUID>()
+        for echo in echos {
+            if seenEchoIds.contains(echo.id) {
+                context.delete(echo)
+            } else {
+                seenEchoIds.insert(echo.id)
+            }
+        }
+        
+        let memories = try context.fetch(FetchDescriptor<Memory>())
+        var seenMemoryIds = Set<UUID>()
+        for memory in memories {
+            if seenMemoryIds.contains(memory.id) {
+                context.delete(memory)
+            } else {
+                seenMemoryIds.insert(memory.id)
+            }
+        }
+        
+        let pings = try context.fetch(FetchDescriptor<Ping>())
+        var seenPingIds = Set<UUID>()
+        for ping in pings {
+            if seenPingIds.contains(ping.id) {
+                context.delete(ping)
+            } else {
+                seenPingIds.insert(ping.id)
+            }
+        }
+        
+        try context.save()
+        print("✅ Local deduplication complete")
+    }
+    
+    // MARK: - Upsert User
+    
+    private func upsertUser(userId: UUID) async throws {
+        struct UserRow: Codable {
+            let id: String
+        }
+        let row = UserRow(id: userId.uuidString)
+        try await supabase
+            .from("users")
+            .upsert(row, onConflict: "id")
+            .execute()
+        print("✅ User upserted: \(userId)")
+    }
+    
     // MARK: - Sync Echos
     
     private func syncEchos(userId: UUID, context: ModelContext) async throws {
         let localEchos = try context.fetch(FetchDescriptor<Echo>())
         
-        let echoRows = localEchos.map { echo in
-            EchoRow(
+        let echoRows = localEchos.reduce(into: [EchoRow]()) { result, echo in
+            guard !result.contains(where: { $0.id == echo.id.uuidString }) else { return }
+            result.append(EchoRow(
                 id: echo.id.uuidString,
                 user_id: userId.uuidString,
                 name: echo.name,
@@ -65,7 +119,7 @@ class SupabaseSyncService {
                 is_default: echo.isDefault,
                 sort_order: echo.sortOrder,
                 created_at: ISO8601DateFormatter().string(from: echo.createdAt)
-            )
+            ))
         }
         
         if !echoRows.isEmpty {
@@ -85,8 +139,10 @@ class SupabaseSyncService {
             .value
         
         for remote in remoteEchos {
-            guard !localIds.contains(remote.id) else { continue }
+            guard !localIds.contains(remote.id.lowercased()) else { continue }
             guard let remoteId = UUID(uuidString: remote.id) else { continue }
+            let existing = localEchos.first { $0.id == remoteId }
+            guard existing == nil else { continue }
             
             let echo = Echo(
                 name: remote.name,
@@ -106,8 +162,9 @@ class SupabaseSyncService {
     private func syncMemories(userId: UUID, context: ModelContext) async throws {
         let localMemories = try context.fetch(FetchDescriptor<Memory>())
         
-        let memoryRows = localMemories.map { memory in
-            MemoryRow(
+        let memoryRows = localMemories.reduce(into: [MemoryRow]()) { result, memory in
+            guard !result.contains(where: { $0.id == memory.id.uuidString }) else { return }
+            result.append(MemoryRow(
                 id: memory.id.uuidString,
                 user_id: userId.uuidString,
                 text: memory.text,
@@ -124,7 +181,7 @@ class SupabaseSyncService {
                 was_edited: memory.wasEdited,
                 created_at: ISO8601DateFormatter().string(from: memory.createdAt),
                 updated_at: ISO8601DateFormatter().string(from: memory.updatedAt)
-            )
+            ))
         }
         
         if !memoryRows.isEmpty {
@@ -147,6 +204,8 @@ class SupabaseSyncService {
             guard !localIds.contains(remote.id) else { continue }
             guard let remoteId = UUID(uuidString: remote.id),
                   let echoId = UUID(uuidString: remote.echo_id) else { continue }
+            let existing = localMemories.first { $0.id == remoteId }
+            guard existing == nil else { continue }
             
             let memory = Memory(text: remote.text, echoId: echoId)
             memory.id = remoteId
@@ -186,8 +245,24 @@ class SupabaseSyncService {
     private func syncPings(userId: UUID, context: ModelContext) async throws {
         let localPings = try context.fetch(FetchDescriptor<Ping>())
         
-        let pingRows = localPings.map { ping in
-            PingRow(
+        // Only push pings whose memory exists in Supabase
+        struct MemoryIdRow: Codable {
+            let id: String
+        }
+
+        let remoteMemoryRows: [MemoryIdRow] = try await supabase
+            .from("memories")
+            .select("id")
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+
+        let safeMemoryIds = Set(remoteMemoryRows.map { $0.id })
+        
+        let pingRows = localPings.reduce(into: [PingRow]()) { result, ping in
+            guard !result.contains(where: { $0.id == ping.id.uuidString }) else { return }
+            guard safeMemoryIds.contains(ping.memoryId.uuidString) else { return }
+            result.append(PingRow(
                 id: ping.id.uuidString,
                 user_id: userId.uuidString,
                 memory_id: ping.memoryId.uuidString,
@@ -197,7 +272,7 @@ class SupabaseSyncService {
                 is_active: ping.isActive,
                 last_fired: ping.lastFired.map { ISO8601DateFormatter().string(from: $0) },
                 created_at: ISO8601DateFormatter().string(from: ping.createdAt)
-            )
+            ))
         }
         
         if !pingRows.isEmpty {
@@ -221,6 +296,8 @@ class SupabaseSyncService {
             guard let remoteId = UUID(uuidString: remote.id),
                   let memoryId = UUID(uuidString: remote.memory_id),
                   let fireDate = ISO8601DateFormatter().date(from: remote.fire_date) else { continue }
+            let existing = localPings.first { $0.id == remoteId }
+            guard existing == nil else { continue }
             
             let recurrence = Ping.Recurrence(rawValue: remote.recurrence) ?? .none
             let ping = Ping(memoryId: memoryId, fireDate: fireDate, recurrence: recurrence)
@@ -315,14 +392,27 @@ class SupabaseSyncService {
             print("❌ Failed to delete memory: \(error)")
         }
     }
-    
+    // MARK: - Delete Echo
+
+    func deleteEcho(id: UUID) async {
+        do {
+            try await supabase
+                .from("echos")
+                .delete()
+                .eq("id", value: id.uuidString)
+                .execute()
+            print("✅ Echo deleted from Supabase: \(id)")
+        } catch {
+            print("❌ Failed to delete echo: \(error)")
+        }
+    }
     // MARK: - Auto Sync
     
     func startAutoSync(userId: UUID) {
         syncTask?.cancel()
+        syncTask = nil
         syncTask = Task { @MainActor in
             await syncAll(userId: userId)
-            
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000)
                 if !Task.isCancelled {

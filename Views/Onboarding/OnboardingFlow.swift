@@ -295,11 +295,11 @@ struct OnboardingFlow: View {
         let bubbles: [(String, String)] = [
             ("🎂", "Mom's birthday August 15"),
             ("📶", "WiFi: BlueMountain2024"),
+            ("✈️", "London Arcade Bar: NQ64 Arcade Bar"),
             ("🍳", "NYT recipe — paste URL to import"),
             ("🐾", "Dog heartworm pill every 1st"),
             ("🍽️", "Carbone — try the lamb chops"),
-            ("⚽", "Kids cleats size 4"),
-            ("🎬", "Ready Player One, Highly Recommmend"),
+            ("👕", "Tux Size 40R"),
             ("💼", "Submit Timesheet every Friday"),
             ("📸", "Screenshot a recipe → auto-imports ingredients"),
             ("📖", "Dungeon Crawler Carl was Great, 5 Stars"),

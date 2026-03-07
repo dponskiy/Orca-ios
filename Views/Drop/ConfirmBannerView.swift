@@ -40,15 +40,21 @@ struct ConfirmBannerView: View {
             
             VStack(spacing: 16) {
                 // Header
-                HStack {
+                let echoName = echos.first { $0.id == selectedEchoId }?.name
+                    ?? sonarResult?.echoName
+                    ?? "Memory"
+                let echoEmoji = echos.first { $0.id == selectedEchoId }?.emoji
+                    ?? echos.first { $0.name == sonarResult?.echoName }?.emoji
+                    ?? "📝"
+                
+                HStack(spacing: 8) {
                     HStack(spacing: 4) {
-                        Text("Saved")
+                        Text("Dropped to \(echoName) \(echoEmoji)")
                             .font(.custom("DMSans-Medium", size: 16))
                             .foregroundColor(.deepNavy)
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(.oceanTeal)
-                        
                         if isPaused {
                             Text("· editing")
                                 .font(.custom("DMSans-Regular", size: 13))
@@ -61,6 +67,8 @@ struct ConfirmBannerView: View {
                     // Task toggle
                     Button {
                         isPaused = true
+                        let generator = UIImpactFeedbackGenerator(style: .light)
+                        generator.impactOccurred()
                         withAnimation(.spring(duration: 0.2)) {
                             isTask.toggle()
                         }
@@ -92,6 +100,8 @@ struct ConfirmBannerView: View {
                     }
                     
                     Button {
+                        let generator = UIImpactFeedbackGenerator(style: .light)
+                        generator.impactOccurred()
                         onDone(isTask)
                     } label: {
                         Text("Done")
@@ -137,24 +147,20 @@ struct ConfirmBannerView: View {
                             HStack(spacing: 4) {
                                 if let echoId = selectedEchoId,
                                    let echo = echos.first(where: { $0.id == echoId }) {
-                                    Text(echo.emoji)
-                                        .font(.system(size: 14))
+                                    Text(echo.emoji).font(.system(size: 14))
                                     Text(echo.name)
                                         .font(.custom("DMSans-Medium", size: 13))
                                         .foregroundColor(.deepNavy)
                                 } else {
                                     let echo = echos.first { $0.name == result.echoName }
-                                    Text(echo?.emoji ?? "📝")
-                                        .font(.system(size: 14))
+                                    Text(echo?.emoji ?? "📝").font(.system(size: 14))
                                     Text(result.echoName)
                                         .font(.custom("DMSans-Medium", size: 13))
                                         .foregroundColor(.deepNavy)
                                 }
-                                
                                 Image(systemName: "chevron.down")
                                     .font(.system(size: 9, weight: .bold))
                                     .foregroundColor(.gray)
-                                
                                 if result.echoConfidence < 0.7 {
                                     Text("?")
                                         .font(.custom("DMSans-Bold", size: 11))
@@ -173,12 +179,10 @@ struct ConfirmBannerView: View {
                         // Date chip
                         if let date = result.detectedDate {
                             HStack(spacing: 4) {
-                                Text("📅")
-                                    .font(.system(size: 14))
+                                Text("📅").font(.system(size: 14))
                                 Text(date, format: .dateTime.month(.abbreviated).day())
                                     .font(.custom("DMSans-Medium", size: 13))
                                     .foregroundColor(.deepNavy)
-                                
                                 if (result.dateConfidence ?? 0) < 0.7 {
                                     Text("?")
                                         .font(.custom("DMSans-Bold", size: 11))
@@ -197,8 +201,7 @@ struct ConfirmBannerView: View {
                         // Ping chip
                         if result.shouldCreatePing {
                             HStack(spacing: 4) {
-                                Text("🔔")
-                                    .font(.system(size: 14))
+                                Text("🔔").font(.system(size: 14))
                                 Text(result.pingRecurrence == .none ? "Ping" : result.pingRecurrence.rawValue.capitalized)
                                     .font(.custom("DMSans-Medium", size: 13))
                                     .foregroundColor(.deepNavy)
@@ -209,7 +212,6 @@ struct ConfirmBannerView: View {
                             .clipShape(Capsule())
                         }
                     }
-                    
                     Spacer()
                 }
                 
@@ -226,8 +228,7 @@ struct ConfirmBannerView: View {
                                     }
                                 } label: {
                                     HStack(spacing: 3) {
-                                        Text(echo.emoji)
-                                            .font(.system(size: 12))
+                                        Text(echo.emoji).font(.system(size: 12))
                                         Text(echo.name)
                                             .font(.custom("DMSans-Medium", size: 12))
                                             .foregroundColor(selectedEchoId == echo.id ? .white : .deepNavy)
@@ -245,14 +246,10 @@ struct ConfirmBannerView: View {
                 // Recipe fetch offer
                 if sonarResult?.shouldOfferRecipeFetch == true {
                     VStack(alignment: .leading, spacing: 6) {
-                        Button {
-                            fetchRecipe()
-                        } label: {
+                        Button { fetchRecipe() } label: {
                             HStack(spacing: 8) {
                                 if isFetchingRecipe {
-                                    ProgressView()
-                                        .scaleEffect(0.75)
-                                        .tint(.white)
+                                    ProgressView().scaleEffect(0.75).tint(.white)
                                 } else {
                                     Image(systemName: recipeFetchSuccess ? "checkmark" : "fork.knife")
                                         .font(.system(size: 13))
@@ -292,6 +289,8 @@ struct ConfirmBannerView: View {
             isTask = sonarResult?.isActionable ?? false
             selectedEchoId = echos.first { $0.name == sonarResult?.echoName }?.id
             startCountdown()
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
         }
     }
     
@@ -301,7 +300,6 @@ struct ConfirmBannerView: View {
         withAnimation(.linear(duration: 5)) {
             countdown = 0
         }
-        
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
             if !isPaused {
                 onDone(isTask)

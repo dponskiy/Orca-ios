@@ -13,6 +13,7 @@ struct BrowseAllView: View {
     @Query private var echos: [Echo]
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(AuthService.self) private var authService
     
     @State private var sortMode: SortMode = .byMonth
     @State private var selectedEchoId: UUID?
@@ -248,7 +249,11 @@ struct BrowseAllView: View {
         }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
+                let id = memory.id
                 modelContext.delete(memory)
+                Task {
+                    await SupabaseSyncService.shared.deleteMemory(id: id)
+                }
             } label: {
                 Label("Delete", systemImage: "trash")
             }

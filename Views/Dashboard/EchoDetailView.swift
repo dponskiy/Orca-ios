@@ -13,6 +13,7 @@ struct EchoDetailView: View {
     @Query private var memories: [Memory]
     @State private var editingMemory: Memory?
     @Environment(\.modelContext) private var modelContext
+    @Environment(AuthService.self) private var authService
     
     var filteredMemories: [Memory] {
         memories.filter { $0.echoId == echo.id }
@@ -35,16 +36,33 @@ struct EchoDetailView: View {
             
             if filteredMemories.isEmpty {
                 VStack(spacing: 12) {
-                    Text("No memories yet")
-                        .font(.custom("DMSans-Medium", size: 16))
+                    Text(echo.emoji)
+                        .font(.system(size: 44))
+                    
+                    Text("No memories in \(echo.name)")
+                        .font(.custom("DMSans-Medium", size: 18))
                         .foregroundColor(.deepNavy)
-                    Text("Drop a memory and Sonar will sort it here")
+                    
+                    Text("Drop a memory and say something about \(echo.name.lowercased()) — Sonar will sort it here automatically.")
                         .font(.custom("DMSans-Regular", size: 14))
                         .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                    
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.oceanTeal)
+                        Text("Tap the fin button to get started")
+                            .font(.custom("DMSans-Medium", size: 14))
+                            .foregroundColor(.oceanTeal)
+                    }
+                    .padding(.top, 4)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 40)
+                .padding(.vertical, 60)
                 .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             } else {
                 ForEach(filteredMemories) { memory in
                     HStack {
@@ -115,12 +133,15 @@ struct EchoDetailView: View {
                     }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
+                            let id = memory.id
                             modelContext.delete(memory)
+                            Task {
+                                await SupabaseSyncService.shared.deleteMemory(id: id)
+                            }
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
                         .tint(.red)
-                        
                         Button {
                             editingMemory = memory
                         } label: {

@@ -13,6 +13,7 @@ struct CalendarTabView: View {
     @Query private var pings: [Ping]
     @Query private var echos: [Echo]
     @Environment(\.modelContext) private var modelContext
+    @Environment(AuthService.self) private var authService
     
     @State private var selectedDate: Date = Date()
     @State private var displayedMonth: Date = Date()
@@ -152,7 +153,7 @@ struct CalendarTabView: View {
     
     private var dayOfWeekHeader: some View {
         HStack(spacing: 0) {
-            ForEach(daysOfWeek, id: \.self) { day in
+            ForEach(Array(daysOfWeek.enumerated()), id: \.offset) { _, day in
                 Text(day)
                     .font(.custom("DMSans-Medium", size: 12))
                     .foregroundColor(.gray)
@@ -326,7 +327,11 @@ struct CalendarTabView: View {
                                 .listRowBackground(Color.clear)
                                 .swipeActions(edge: .trailing) {
                                     Button(role: .destructive) {
+                                        let id = memory.id
                                         modelContext.delete(memory)
+                                        Task {
+                                            await SupabaseSyncService.shared.deleteMemory(id: id)
+                                        }
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
@@ -342,7 +347,11 @@ struct CalendarTabView: View {
                             .listRowBackground(Color.clear)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
+                                    let id = memory.id
                                     modelContext.delete(memory)
+                                    Task {
+                                        await SupabaseSyncService.shared.deleteMemory(id: id)
+                                    }
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
