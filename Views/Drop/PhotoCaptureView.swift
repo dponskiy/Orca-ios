@@ -24,6 +24,7 @@ struct PhotoCaptureView: View {
     @State private var sonarResult: SonarResult?
     @State private var showCamera = false
     @State private var editMemory: Memory? = nil
+    @State private var hasExtracted = false
     
     private func updateLastMemoryEcho(_ echoId: UUID) {
         let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
@@ -38,7 +39,6 @@ struct PhotoCaptureView: View {
         let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         guard let memory = try? modelContext.fetch(descriptor).first else { return }
         
-        // Update memory text with instructions
         var parts: [String] = ["🍽 \(recipe.title)"]
         var meta: [String] = []
         if let prep = recipe.prepTime { meta.append("Prep: \(prep)") }
@@ -53,7 +53,6 @@ struct PhotoCaptureView: View {
         }
         memory.text = parts.joined(separator: "\n")
         
-        // Add ingredients as subtasks
         if !recipe.ingredients.isEmpty {
             memory.hasChecklist = true
             for (index, ingredient) in recipe.ingredients.enumerated() {
@@ -62,6 +61,7 @@ struct PhotoCaptureView: View {
             }
         }
     }
+
     var body: some View {
         ZStack {
             if showBanner {
@@ -72,25 +72,25 @@ struct PhotoCaptureView: View {
                 VStack {
                     Spacer()
                     ConfirmBannerView(
-                        transcription: extractedText,
+                        transcription: extractedText.isEmpty ? "📷 Photo" : extractedText,
                         sonarResult: sonarResult,
                         echos: echos,
                         onDone: { isTask in
                             updateLastMemoryTask(isTask: isTask)
                             isPresented = false
                         },
-                            onUndo: { undoMemory() },
-                            onEchoChanged: { newEchoId in
-                                updateLastMemoryEcho(newEchoId)
-                            },
-                            onRecipeFetched: { recipe in
-                                handleRecipeFetch(recipe)
-                            },
-                            onEdit: {
-                                let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
-                                editMemory = try? modelContext.fetch(descriptor).first
-                            }
-                        )
+                        onUndo: { undoMemory() },
+                        onEchoChanged: { newEchoId in
+                            updateLastMemoryEcho(newEchoId)
+                        },
+                        onRecipeFetched: { recipe in
+                            handleRecipeFetch(recipe)
+                        },
+                        onEdit: {
+                            let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+                            editMemory = try? modelContext.fetch(descriptor).first
+                        }
+                    )
                 }
             } else if isProcessing {
                 processingView
@@ -103,11 +103,6 @@ struct PhotoCaptureView: View {
         .onChange(of: selectedItem) { _, newItem in
             if let newItem = newItem {
                 loadImage(from: newItem)
-            }
-        }
-        .onChange(of: selectedImage) { _, newImage in
-            if newImage != nil {
-                extractTextFromImage()
             }
         }
         .fullScreenCover(isPresented: $showCamera) {
@@ -136,7 +131,7 @@ struct PhotoCaptureView: View {
                     .font(.custom("DMSans-Medium", size: 20))
                     .foregroundColor(.white)
                 
-                Text("Take a photo or choose from your library.\nOrca will extract the text automatically.")
+                Text("Take a photo or choose from your library.")
                     .font(.custom("DMSans-Regular", size: 14))
                     .foregroundColor(.white.opacity(0.6))
                     .multilineTextAlignment(.center)
@@ -204,18 +199,19 @@ struct PhotoCaptureView: View {
                         selectedImage = nil
                         selectedItem = nil
                         extractedText = ""
+                        hasExtracted = false
                     }
                     .font(.custom("DMSans-Regular", size: 16))
                     .foregroundColor(.white.opacity(0.6))
                     
                     Spacer()
                     
+                    // Save is always enabled — uses extracted text or "📷 Photo" fallback
                     Button("Save") {
                         saveMemory()
                     }
                     .font(.custom("DMSans-Medium", size: 16))
-                    .foregroundColor(extractedText.isEmpty ? .white.opacity(0.3) : .oceanTeal)
-                    .disabled(extractedText.isEmpty)
+                    .foregroundColor(.oceanTeal)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
@@ -235,11 +231,28 @@ struct PhotoCaptureView: View {
                         Text("Extracted Text")
                             .font(.custom("DMSans-Medium", size: 13))
                             .foregroundColor(.oceanTeal)
+                        
+                        Spacer()
+                        
+                        // Extract button — only show if not yet extracted
+                        if !hasExtracted {
+                            Button {
+                                extractTextFromImage()
+                            } label: {
+                                Text("Extract Text")
+                                    .font(.custom("DMSans-Medium", size: 13))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.oceanTeal)
+                                    .clipShape(Capsule())
+                            }
+                        }
                     }
                     
                     if extractedText.isEmpty {
-                        Text("No text found in image")
-                            .font(.custom("DMSans-Regular", size: 15))
+                        Text(hasExtracted ? "No text found in image" : "Tap \"Extract Text\" to scan for text, or save as-is.")
+                            .font(.custom("DMSans-Regular", size: 14))
                             .foregroundColor(.white.opacity(0.4))
                     } else {
                         TextEditor(text: $extractedText)
@@ -286,6 +299,7 @@ struct PhotoCaptureView: View {
                 if let data = data, let uiImage = UIImage(data: data) {
                     DispatchQueue.main.async {
                         selectedImage = uiImage
+                        // No auto-extraction — user decides
                     }
                 }
             case .failure(let error):
@@ -304,6 +318,7 @@ struct PhotoCaptureView: View {
             guard let observations = request.results as? [VNRecognizedTextObservation] else {
                 DispatchQueue.main.async {
                     isProcessing = false
+                    hasExtracted = true
                 }
                 return
             }
@@ -315,6 +330,7 @@ struct PhotoCaptureView: View {
             DispatchQueue.main.async {
                 extractedText = text
                 isProcessing = false
+                hasExtracted = true
             }
         }
         
@@ -330,12 +346,12 @@ struct PhotoCaptureView: View {
     // MARK: - Save
     
     private func saveMemory() {
-        guard !extractedText.isEmpty else { return }
+        let textToSave = extractedText.isEmpty ? "📷 Photo" : extractedText
         
-        sonarResult = sonarEngine.process(text: extractedText, echos: echos)
+        sonarResult = sonarEngine.process(text: textToSave, echos: echos)
         
         let echoId = sonarResult?.echoId ?? echos.first?.id ?? UUID()
-        let memory = Memory(text: extractedText, echoId: echoId, captureType: .screenshot)
+        let memory = Memory(text: textToSave, echoId: echoId, captureType: .screenshot)
         memory.tags = sonarResult?.tags ?? []
         memory.detectedDate = sonarResult?.detectedDate
         memory.echoConfidence = sonarResult?.echoConfidence ?? 1.0
@@ -344,11 +360,13 @@ struct PhotoCaptureView: View {
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
         NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
+        
         if let userId = authService.userId {
             Task {
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
             }
         }
+        
         AnalyticsService.shared.trackMemoryDropped(
             captureType: "photo",
             echoName: sonarResult?.echoName ?? "Unknown",
@@ -356,15 +374,14 @@ struct PhotoCaptureView: View {
             hasDate: sonarResult?.detectedDate != nil,
             hasURL: memory.url != nil,
             hasChecklist: memory.hasChecklist,
-            wordCount: extractedText.split(separator: " ").count
+            wordCount: textToSave.split(separator: " ").count
         )
-        // Detect URL
-        if let detectedURL = sonarEngine.detectURL(text: extractedText) {
+        
+        if let detectedURL = sonarEngine.detectURL(text: textToSave) {
             memory.url = detectedURL
         }
         
-        // Detect checklist
-        if let checklistItems = sonarEngine.detectChecklist(text: extractedText) {
+        if let checklistItems = sonarEngine.detectChecklist(text: textToSave) {
             memory.hasChecklist = true
             for (index, item) in checklistItems.enumerated() {
                 let subTask = SubTask(memoryId: memory.id, text: item, sortOrder: index)
@@ -408,7 +425,11 @@ struct PhotoCaptureView: View {
             FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         )
         if let last = recent?.first {
+            let id = last.id
             modelContext.delete(last)
+            Task {
+                await SupabaseSyncService.shared.deleteMemory(id: id)
+            }
         }
     }
 }

@@ -313,8 +313,9 @@ class SonarEngine {
         guard let eventDate = dates.eventDate else { return [] }
         
         let hasReminderIntent = reminderKeywords.contains { text.contains($0) }
-        
-        guard hasReminderIntent || hasSpecificTime else { return [] }
+        let isActionable = detectAction(text: text)
+
+        guard hasReminderIntent || hasSpecificTime || isActionable else { return [] }
         
         if let reminderDate = dates.reminderDate {
             suggestions.append(PingSuggestion(

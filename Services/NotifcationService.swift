@@ -104,7 +104,20 @@ class NotificationService {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [pingId.uuidString])
         print("🔕 Cancelled notification: \(pingId)")
     }
-    
+    func cancelOrphanedNotifications(validPingIds: [UUID]) {
+        let validIds = Set(validPingIds.map { $0.uuidString })
+        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+            let orphaned = requests
+                .map { $0.identifier }
+                .filter { id in
+                    id != "inactivity_reminder" && !validIds.contains(id)
+                }
+            if !orphaned.isEmpty {
+                UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: orphaned)
+                print("🔕 Cancelled \(orphaned.count) orphaned notifications")
+            }
+        }
+    }
     func cancelAllPings() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }

@@ -100,7 +100,12 @@ struct DropOverlayView: View {
         .onAppear {
             checkAndStartRecording()
         }
-        .sheet(item: $editMemory) { memory in
+        .sheet(item: $editMemory, onDismiss: {
+            let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+            if let last = try? modelContext.fetch(descriptor).first {
+                savedTranscription = last.text
+            }
+        }) { memory in
             MemoryEditView(memory: memory)
         }
     }
@@ -325,8 +330,10 @@ struct DropOverlayView: View {
     }
     
     private func dismissAndClose() {
-        let echoName = echos.first { $0.id == sonarResult?.echoId }?.name
-            ?? sonarResult?.echoName ?? "Memory"
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        let lastMemory = try? modelContext.fetch(descriptor).first
+        
+        let echoName = echos.first { $0.id == lastMemory?.echoId }?.name ?? sonarResult?.echoName ?? "Memory"
         let echoEmoji = echos.first { $0.name == echoName }?.emoji ?? "📝"
         let message = "Dropped to \(echoName) \(echoEmoji)"
         

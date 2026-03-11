@@ -16,27 +16,35 @@ struct MemoryEditView: View {
     @Query private var pings: [Ping]
     @Query private var subTasks: [SubTask]
     @Environment(AuthService.self) private var authService
-    
+
     @State private var editedText: String = ""
+    @State private var originalText: String = ""
     @State private var selectedEchoId: UUID = UUID()
     @State private var selectedDate: Date?
     @State private var hasDate: Bool = false
     @State private var editedURL: String = ""
     @State private var newSubTaskText: String = ""
-    
+    @State private var audioEditService = AudioEditService()
+    @State private var showRerunSonar = false
+
+    // Multiple pings
+    @State private var pingEntries: [PingEntry] = []
+
     // Recipe fetch states
     @State private var isFetchingRecipe = false
     @State private var recipeErrorMessage: String? = nil
     @State private var showRecipeSuccess = false
-    
-    // Ping states
-    @State private var hasPing: Bool = false
-    @State private var pingRecurrence: Ping.Recurrence = Ping.Recurrence.none
-    @State private var pingLeadTime: PingLeadTime = .dayOf
-    @State private var pingTime: Date = Calendar.current.date(
-        bySettingHour: 9, minute: 0, second: 0, of: Date()
-    ) ?? Date()
-    
+
+    private let sonarEngine = SonarEngine()
+
+    struct PingEntry: Identifiable {
+        let id: UUID = UUID()
+        var existingPingId: UUID? = nil
+        var leadTime: PingLeadTime = .dayOf
+        var time: Date = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
+        var recurrence: Ping.Recurrence = .none
+    }
+
     enum PingLeadTime: String, CaseIterable {
         case dayOf = "Day of"
         case dayBefore = "1 day before"
@@ -44,7 +52,7 @@ struct MemoryEditView: View {
         case weekBefore = "1 week before"
         case twoWeeks = "2 weeks before"
         case monthBefore = "1 month before"
-        
+
         var days: Int {
             switch self {
             case .dayOf: return 0
@@ -56,46 +64,56 @@ struct MemoryEditView: View {
             }
         }
     }
-    
-    var existingPing: Ping? {
-        pings.first { $0.memoryId == memory.id }
+
+    var memoryPings: [Ping] {
+        pings.filter { $0.memoryId == memory.id }
     }
-    
+
     var memorySubTasks: [SubTask] {
         subTasks.filter { $0.memoryId == memory.id }
             .sorted { $0.sortOrder < $1.sortOrder }
     }
-    
-    // Show "Fetch Recipe" when there's a URL and echo is Cooking
+
     var isCookingEcho: Bool {
         echos.first { $0.id == selectedEchoId }?.name.lowercased().contains("cook") == true ||
         echos.first { $0.id == selectedEchoId }?.name.lowercased().contains("recipe") == true ||
         echos.first { $0.id == selectedEchoId }?.emoji == "🍳" ||
         echos.first { $0.id == selectedEchoId }?.emoji == "🍽️"
     }
-    
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Text
                     textSection
-                    
-                    // Echo
+
+                    if showRerunSonar {
+                        Button { rerunSonar() } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "waveform.badge.magnifyingglass")
+                                    .font(.system(size: 14))
+                                Text("Re-run Sonar")
+                                    .font(.custom("DMSans-Medium", size: 14))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.oceanTeal)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
+
                     echoSection
-                    
-                    // Checklist
+
                     if memory.hasChecklist || !memorySubTasks.isEmpty {
                         checklistSection
                     }
-                    
-                    // URL
+
                     urlSection
-                    
-                    // Pin
+
                     Toggle(isOn: Binding(
                         get: { memory.isPinned },
-                        set: { newValue in memory.isPinned = newValue }
+                        set: { memory.isPinned = $0 }
                     )) {
                         HStack(spacing: 6) {
                             Image(systemName: "pin.fill")
@@ -107,11 +125,10 @@ struct MemoryEditView: View {
                         }
                     }
                     .tint(.coral)
-                    
-                    // Task toggle
+
                     Toggle(isOn: Binding(
                         get: { memory.isActionable },
-                        set: { newValue in memory.isActionable = newValue }
+                        set: { memory.isActionable = $0 }
                     )) {
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.circle")
@@ -123,21 +140,15 @@ struct MemoryEditView: View {
                         }
                     }
                     .tint(.oceanTeal)
-                    
-                    // Date
+
                     dateSection
-                    
-                    // Ping
+
                     if hasDate {
                         pingSection
                     }
-                    
-                    
-                    // Convert to checklist button
+
                     if !memory.hasChecklist && memorySubTasks.isEmpty {
-                        Button {
-                            convertToChecklist()
-                        } label: {
+                        Button { convertToChecklist() } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "list.bullet")
                                     .font(.system(size: 14))
@@ -152,21 +163,16 @@ struct MemoryEditView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
                     }
-                                        
-                    // Delete
+
                     Button(role: .destructive) {
                         let id = memory.id
                         modelContext.delete(memory)
-                        Task {
-                            await SupabaseSyncService.shared.deleteMemory(id: id)
-                        }
+                        Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
                         dismiss()
                     } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 14))
-                            Text("Delete Memory")
-                                .font(.custom("DMSans-Medium", size: 14))
+                            Image(systemName: "trash").font(.system(size: 14))
+                            Text("Delete Memory").font(.custom("DMSans-Medium", size: 14))
                         }
                         .foregroundColor(.red)
                         .frame(maxWidth: .infinity)
@@ -182,11 +188,15 @@ struct MemoryEditView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundColor(.gray)
+                    Button("Cancel") {
+                        if audioEditService.isRecording { audioEditService.stopRecording() }
+                        dismiss()
+                    }
+                    .foregroundColor(.gray)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
+                        if audioEditService.isRecording { audioEditService.stopRecording() }
                         saveEdits()
                         dismiss()
                     }
@@ -194,19 +204,57 @@ struct MemoryEditView: View {
                     .foregroundColor(.oceanTeal)
                 }
             }
-            .onAppear {
-                loadState()
+            .onAppear { loadState() }
+            .onChange(of: editedText) { _, newValue in
+                showRerunSonar = newValue != originalText
             }
         }
     }
-    
+
     // MARK: - Text Section
     private var textSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Memory")
-                .font(.custom("DMSans-Medium", size: 14))
-                .foregroundColor(.gray)
-            
+            HStack {
+                Text("Memory")
+                    .font(.custom("DMSans-Medium", size: 14))
+                    .foregroundColor(.gray)
+                Spacer()
+                Button {
+                    if audioEditService.isRecording {
+                        audioEditService.stopRecording()
+                        if !audioEditService.transcription.isEmpty {
+                            editedText = audioEditService.transcription
+                        }
+                    } else {
+                        audioEditService.startRecording()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        if audioEditService.isRecording {
+                            Circle().fill(Color.coral).frame(width: 8, height: 8)
+                            Text("Stop").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.coral)
+                        } else {
+                            Image(systemName: "mic.fill").font(.system(size: 13)).foregroundColor(.oceanTeal)
+                            Text("Re-record").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(audioEditService.isRecording ? Color.coral.opacity(0.1) : Color.oceanTeal.opacity(0.1))
+                    .clipShape(Capsule())
+                }
+            }
+
+            if audioEditService.isRecording && !audioEditService.transcription.isEmpty {
+                Text(audioEditService.transcription)
+                    .font(.custom("DMSans-Regular", size: 14))
+                    .foregroundColor(.oceanTeal.opacity(0.8))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.oceanTeal.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
             TextEditor(text: $editedText)
                 .font(.custom("DMSans-Regular", size: 16))
                 .foregroundColor(.deepNavy)
@@ -215,20 +263,14 @@ struct MemoryEditView: View {
                 .padding(12)
                 .background(Color.pearl)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1)
-                )
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
         }
     }
-    
+
     // MARK: - Echo Section
     private var echoSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Echo")
-                .font(.custom("DMSans-Medium", size: 14))
-                .foregroundColor(.gray)
-            
+            Text("Echo").font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(echos.sorted { e1, e2 in
@@ -236,12 +278,9 @@ struct MemoryEditView: View {
                         if e2.id == selectedEchoId { return false }
                         return e1.sortOrder < e2.sortOrder
                     }) { echo in
-                        Button {
-                            selectedEchoId = echo.id
-                        } label: {
+                        Button { selectedEchoId = echo.id } label: {
                             HStack(spacing: 4) {
-                                Text(echo.emoji)
-                                    .font(.system(size: 14))
+                                Text(echo.emoji).font(.system(size: 14))
                                 Text(echo.name)
                                     .font(.custom("DMSans-Medium", size: 13))
                                     .foregroundColor(selectedEchoId == echo.id ? .white : .deepNavy)
@@ -256,83 +295,55 @@ struct MemoryEditView: View {
             }
         }
     }
-    
+
     // MARK: - Checklist Section
     private var checklistSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Checklist")
-                    .font(.custom("DMSans-Medium", size: 14))
-                    .foregroundColor(.gray)
-                
+                Text("Checklist").font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
                 Spacer()
-                
                 let completed = memorySubTasks.filter { $0.isCompleted }.count
                 let total = memorySubTasks.count
                 if total > 0 {
-                    Text("\(completed)/\(total)")
-                        .font(.custom("DMMono-Regular", size: 12))
-                        .foregroundColor(.gray)
+                    Text("\(completed)/\(total)").font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
                 }
             }
-            
+
             ForEach(memorySubTasks) { subTask in
                 HStack(spacing: 10) {
                     Button {
-                        withAnimation(.spring(duration: 0.2)) {
-                            subTask.isCompleted.toggle()
-                        }
+                        withAnimation(.spring(duration: 0.2)) { subTask.isCompleted.toggle() }
                     } label: {
                         if subTask.isCompleted {
                             ZStack {
-                                Circle()
-                                    .fill(Color.oceanTeal)
-                                    .frame(width: 22, height: 22)
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(.white)
+                                Circle().fill(Color.oceanTeal).frame(width: 22, height: 22)
+                                Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
                             }
                         } else {
-                            Circle()
-                                .stroke(Color.oceanTeal, lineWidth: 1.5)
-                                .frame(width: 22, height: 22)
+                            Circle().stroke(Color.oceanTeal, lineWidth: 1.5).frame(width: 22, height: 22)
                         }
                     }
-                    
                     Text(subTask.text)
                         .font(.custom("DMSans-Regular", size: 15))
                         .foregroundColor(subTask.isCompleted ? .gray : .deepNavy)
                         .strikethrough(subTask.isCompleted)
-                    
                     Spacer()
-                    
-                    Button {
-                        modelContext.delete(subTask)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.gray.opacity(0.5))
+                    Button { modelContext.delete(subTask) } label: {
+                        Image(systemName: "xmark").font(.system(size: 11, weight: .medium)).foregroundColor(.gray.opacity(0.5))
                     }
                 }
                 .padding(.vertical, 4)
             }
-            
-            // Add new item
+
             HStack(spacing: 10) {
-                Circle()
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 1.5)
-                    .frame(width: 22, height: 22)
-                
+                Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1.5).frame(width: 22, height: 22)
                 TextField("Add item...", text: $newSubTaskText)
                     .font(.custom("DMSans-Regular", size: 15))
                     .foregroundColor(.deepNavy)
                     .onSubmit { addSubTask() }
-                
                 if !newSubTaskText.isEmpty {
                     Button { addSubTask() } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.oceanTeal)
+                        Image(systemName: "plus.circle.fill").font(.system(size: 20)).foregroundColor(.oceanTeal)
                     }
                 }
             }
@@ -342,19 +353,13 @@ struct MemoryEditView: View {
         .background(Color.pearl)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
-    
+
     // MARK: - URL Section
     private var urlSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Link")
-                .font(.custom("DMSans-Medium", size: 14))
-                .foregroundColor(.gray)
-            
+            Text("Link").font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
             HStack(spacing: 8) {
-                Image(systemName: "link")
-                    .font(.system(size: 14))
-                    .foregroundColor(.gray)
-                
+                Image(systemName: "link").font(.system(size: 14)).foregroundColor(.gray)
                 TextField("Add a URL...", text: $editedURL)
                     .font(.custom("DMSans-Regular", size: 15))
                     .foregroundColor(.deepNavy)
@@ -365,98 +370,65 @@ struct MemoryEditView: View {
             .padding(12)
             .background(Color.pearl)
             .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1)
-            )
-            
-            // Action row: Open Link + Fetch Recipe
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
+
             if !editedURL.isEmpty {
                 HStack(spacing: 10) {
-                    // Open Link
                     if let url = URL(string: editedURL), UIApplication.shared.canOpenURL(url) {
-                        Button {
-                            UIApplication.shared.open(url)
-                        } label: {
+                        Button { UIApplication.shared.open(url) } label: {
                             HStack(spacing: 6) {
-                                Image(systemName: "arrow.up.right.square")
-                                    .font(.system(size: 13))
-                                Text("Open Link")
-                                    .font(.custom("DMSans-Medium", size: 13))
+                                Image(systemName: "arrow.up.right.square").font(.system(size: 13))
+                                Text("Open Link").font(.custom("DMSans-Medium", size: 13))
                             }
                             .foregroundColor(.oceanTeal)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12).padding(.vertical, 8)
                             .background(Color.oceanTeal.opacity(0.1))
                             .clipShape(Capsule())
                         }
                     }
-                    
-                    // Fetch Recipe button — always shown when URL present, highlighted for cooking echo
-                    Button {
-                        fetchRecipe()
-                    } label: {
+                    Button { fetchRecipe() } label: {
                         HStack(spacing: 6) {
                             if isFetchingRecipe {
-                                ProgressView()
-                                    .scaleEffect(0.75)
-                                    .tint(isCookingEcho ? .white : .oceanTeal)
+                                ProgressView().scaleEffect(0.75).tint(isCookingEcho ? .white : .oceanTeal)
                             } else {
-                                Image(systemName: showRecipeSuccess ? "checkmark" : "fork.knife")
-                                    .font(.system(size: 13))
+                                Image(systemName: showRecipeSuccess ? "checkmark" : "fork.knife").font(.system(size: 13))
                             }
                             Text(isFetchingRecipe ? "Fetching..." : showRecipeSuccess ? "Imported!" : "Fetch Recipe")
                                 .font(.custom("DMSans-Medium", size: 13))
                         }
                         .foregroundColor(isCookingEcho ? .white : .oceanTeal)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(isCookingEcho ? Color.oceanTeal : Color.oceanTeal.opacity(0.1))
                         .clipShape(Capsule())
                     }
                     .disabled(isFetchingRecipe)
                 }
-                
-                // Error message
                 if let error = recipeErrorMessage {
                     HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.circle")
-                            .font(.system(size: 12))
-                            .foregroundColor(.coral)
-                        Text(error)
-                            .font(.custom("DMSans-Regular", size: 12))
-                            .foregroundColor(.coral)
+                        Image(systemName: "exclamationmark.circle").font(.system(size: 12)).foregroundColor(.coral)
+                        Text(error).font(.custom("DMSans-Regular", size: 12)).foregroundColor(.coral)
                     }
                     .padding(.top, 2)
                 }
             }
         }
     }
-    
+
     // MARK: - Date Section
     private var dateSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Date")
-                .font(.custom("DMSans-Medium", size: 14))
-                .foregroundColor(.gray)
-            
+            Text("Date").font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
             Toggle(isOn: $hasDate) {
-                Text("Associated date")
-                    .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(.deepNavy)
+                Text("Associated date").font(.custom("DMSans-Regular", size: 15)).foregroundColor(.deepNavy)
             }
             .tint(.oceanTeal)
             .onChange(of: hasDate) { _, newValue in
-                if !newValue { hasPing = false }
+                if !newValue { pingEntries.removeAll() }
             }
-            
             if hasDate {
                 DatePicker(
                     "Date",
-                    selection: Binding(
-                        get: { selectedDate ?? Date() },
-                        set: { selectedDate = $0 }
-                    ),
+                    selection: Binding(get: { selectedDate ?? Date() }, set: { selectedDate = $0 }),
                     displayedComponents: [.date, .hourAndMinute]
                 )
                 .datePickerStyle(.graphical)
@@ -464,106 +436,51 @@ struct MemoryEditView: View {
             }
         }
     }
-    
-    // MARK: - Ping Section
+
+    // MARK: - Ping Section (Multiple)
     private var pingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Ping (Reminder)")
-                .font(.custom("DMSans-Medium", size: 14))
-                .foregroundColor(.gray)
-            
-            Toggle(isOn: $hasPing) {
-                HStack(spacing: 6) {
-                    Text("🔔")
-                        .font(.system(size: 16))
-                    Text("Remind me")
-                        .font(.custom("DMSans-Regular", size: 15))
-                        .foregroundColor(.deepNavy)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Pings (Reminders)")
+                    .font(.custom("DMSans-Medium", size: 14))
+                    .foregroundColor(.gray)
+                Spacer()
+                Button {
+                    pingEntries.append(PingEntry())
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
+                        Text("Add Ping").font(.custom("DMSans-Medium", size: 13))
+                    }
+                    .foregroundColor(.oceanTeal)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.oceanTeal.opacity(0.1))
+                    .clipShape(Capsule())
                 }
             }
-            .tint(.oceanTeal)
-            
-            if hasPing {
-                // Lead time
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("When")
-                        .font(.custom("DMSans-Medium", size: 13))
-                        .foregroundColor(.gray)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(PingLeadTime.allCases, id: \.self) { lead in
-                                Button {
-                                    pingLeadTime = lead
-                                } label: {
-                                    Text(lead.rawValue)
-                                        .font(.custom("DMSans-Medium", size: 13))
-                                        .foregroundColor(pingLeadTime == lead ? .white : .deepNavy)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(pingLeadTime == lead ? Color.oceanTeal : Color.mist)
-                                        .clipShape(Capsule())
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Time of day
-                DatePicker(
-                    "Time",
-                    selection: $pingTime,
-                    displayedComponents: .hourAndMinute
-                )
-                .font(.custom("DMSans-Regular", size: 15))
-                .tint(.oceanTeal)
-                
-                // Recurrence
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Repeat")
-                        .font(.custom("DMSans-Medium", size: 13))
-                        .foregroundColor(.gray)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach([
-                                (Ping.Recurrence.none, "One time"),
-                                (Ping.Recurrence.daily, "Daily"),
-                                (Ping.Recurrence.weekly, "Weekly"),
-                                (Ping.Recurrence.monthly, "Monthly"),
-                                (Ping.Recurrence.yearly, "Yearly"),
-                            ], id: \.0) { recurrence, label in
-                                Button {
-                                    pingRecurrence = recurrence
-                                } label: {
-                                    Text(label)
-                                        .font(.custom("DMSans-Medium", size: 13))
-                                        .foregroundColor(pingRecurrence == recurrence ? .white : .deepNavy)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(pingRecurrence == recurrence ? Color.oceanTeal : Color.mist)
-                                        .clipShape(Capsule())
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Preview
-                if let date = selectedDate {
-                    let fireDate = Calendar.current.date(byAdding: .day, value: -pingLeadTime.days, to: date) ?? date
+
+            if pingEntries.isEmpty {
+                Button {
+                    pingEntries.append(PingEntry())
+                } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "bell.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(.oceanTeal)
-                        Text("Will fire: \(fireDate, format: .dateTime.month(.abbreviated).day()) at \(pingTime, format: .dateTime.hour().minute())")
-                            .font(.custom("DMMono-Regular", size: 13))
+                        Text("🔔").font(.system(size: 16))
+                        Text("Add a reminder")
+                            .font(.custom("DMSans-Regular", size: 15))
                             .foregroundColor(.deepNavy)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray.opacity(0.5))
                     }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.mist)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(14)
+                    .background(Color.pearl)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            } else {
+                ForEach($pingEntries) { $entry in
+                    pingEntryRow(entry: $entry)
                 }
             }
         }
@@ -571,47 +488,110 @@ struct MemoryEditView: View {
         .background(Color.pearl)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
-    
-    // MARK: - Details Section
-    private var detailsSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Details")
-                .font(.custom("DMSans-Medium", size: 14))
-                .foregroundColor(.gray)
-            
+
+    @ViewBuilder
+    private func pingEntryRow(entry: Binding<PingEntry>) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header with delete button
             HStack {
-                Text("Captured")
-                    .font(.custom("DMSans-Regular", size: 13))
-                    .foregroundColor(.gray)
-                Spacer()
-                Text(memory.createdAt, format: .dateTime.month(.abbreviated).day().year().hour().minute())
-                    .font(.custom("DMMono-Regular", size: 13))
+                Text("🔔 Reminder \(pingEntries.firstIndex(where: { $0.id == entry.id }) .map { $0 + 1 } ?? 1)")
+                    .font(.custom("DMSans-Medium", size: 13))
                     .foregroundColor(.deepNavy)
+                Spacer()
+                Button {
+                    pingEntries.removeAll { $0.id == entry.id }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.gray.opacity(0.4))
+                }
             }
-            
-            HStack {
-                Text("Type")
-                    .font(.custom("DMSans-Regular", size: 13))
-                    .foregroundColor(.gray)
-                Spacer()
-                Text(memory.captureType.rawValue.capitalized)
-                    .font(.custom("DMMono-Regular", size: 13))
-                    .foregroundColor(.deepNavy)
+
+            // Lead time
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(PingLeadTime.allCases, id: \.self) { lead in
+                        Button { entry.wrappedValue.leadTime = lead } label: {
+                            Text(lead.rawValue)
+                                .font(.custom("DMSans-Medium", size: 12))
+                                .foregroundColor(entry.wrappedValue.leadTime == lead ? .white : .deepNavy)
+                                .padding(.horizontal, 10).padding(.vertical, 7)
+                                .background(entry.wrappedValue.leadTime == lead ? Color.oceanTeal : Color.mist)
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+
+            // Time picker
+            DatePicker("Time", selection: entry.time, displayedComponents: .hourAndMinute)
+                .font(.custom("DMSans-Regular", size: 14))
+                .tint(.oceanTeal)
+
+            // Recurrence
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach([
+                        (Ping.Recurrence.none, "One time"),
+                        (Ping.Recurrence.daily, "Daily"),
+                        (Ping.Recurrence.weekly, "Weekly"),
+                        (Ping.Recurrence.monthly, "Monthly"),
+                        (Ping.Recurrence.yearly, "Yearly"),
+                    ], id: \.0) { recurrence, label in
+                        Button { entry.wrappedValue.recurrence = recurrence } label: {
+                            Text(label)
+                                .font(.custom("DMSans-Medium", size: 12))
+                                .foregroundColor(entry.wrappedValue.recurrence == recurrence ? .white : .deepNavy)
+                                .padding(.horizontal, 10).padding(.vertical, 7)
+                                .background(entry.wrappedValue.recurrence == recurrence ? Color.oceanTeal : Color.mist)
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+
+            // Fire preview
+            if let date = selectedDate {
+                let fireDate = Calendar.current.date(byAdding: .day, value: -entry.wrappedValue.leadTime.days, to: date) ?? date
+                HStack(spacing: 6) {
+                    Image(systemName: "bell.fill").font(.system(size: 11)).foregroundColor(.oceanTeal)
+                    Text("Will fire: \(fireDate, format: .dateTime.month(.abbreviated).day()) at \(entry.wrappedValue.time, format: .dateTime.hour().minute())")
+                        .font(.custom("DMMono-Regular", size: 12))
+                        .foregroundColor(.deepNavy)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.mist)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
         .padding(12)
-        .background(Color.pearl)
+        .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.oceanTeal.opacity(0.15), lineWidth: 1))
     }
-    
+
+    // MARK: - Re-run Sonar
+    private func rerunSonar() {
+        let result = sonarEngine.process(text: editedText, echos: echos)
+        if let echoId = result.echoId { selectedEchoId = echoId }
+        if let detected = result.detectedDate { selectedDate = detected; hasDate = true }
+        if let suggestion = result.pingSuggestions.first {
+            var entry = PingEntry()
+            entry.recurrence = suggestion.recurrence
+            if let fireTime = suggestion.fireTime { entry.time = fireTime }
+            if pingEntries.isEmpty { pingEntries.append(entry) }
+        }
+        originalText = editedText
+        showRerunSonar = false
+    }
+
     // MARK: - Fetch Recipe
-    
     private func fetchRecipe() {
         guard !editedURL.isEmpty else { return }
         recipeErrorMessage = nil
         showRecipeSuccess = false
         isFetchingRecipe = true
-        
         Task {
             do {
                 let recipe = try await RecipeExtractor.shared.extract(from: editedURL)
@@ -619,7 +599,6 @@ struct MemoryEditView: View {
                     populateFromRecipe(recipe)
                     isFetchingRecipe = false
                     showRecipeSuccess = true
-                    // Reset success indicator after 2 seconds
                     Task {
                         try? await Task.sleep(nanoseconds: 2_000_000_000)
                         showRecipeSuccess = false
@@ -633,32 +612,21 @@ struct MemoryEditView: View {
             }
         }
     }
-    
+
     private func populateFromRecipe(_ recipe: RecipeResult) {
-        // Build instructions text
         var parts: [String] = []
         parts.append("🍽 \(recipe.title)")
-        
         var meta: [String] = []
-        if let prep = recipe.prepTime  { meta.append("Prep: \(prep)") }
-        if let cook = recipe.cookTime  { meta.append("Cook: \(cook)") }
-        if let srv  = recipe.servings  { meta.append("Serves: \(srv)") }
+        if let prep = recipe.prepTime { meta.append("Prep: \(prep)") }
+        if let cook = recipe.cookTime { meta.append("Cook: \(cook)") }
+        if let srv = recipe.servings { meta.append("Serves: \(srv)") }
         if !meta.isEmpty { parts.append(meta.joined(separator: " · ")) }
-        
         if !recipe.instructions.isEmpty {
             parts.append("\nInstructions:")
-            for (i, step) in recipe.instructions.enumerated() {
-                parts.append("\(i + 1). \(step)")
-            }
+            for (i, step) in recipe.instructions.enumerated() { parts.append("\(i + 1). \(step)") }
         }
-        
         editedText = parts.joined(separator: "\n")
-        
-        // Clear existing subtasks and replace with ingredients
-        for subTask in memorySubTasks {
-            modelContext.delete(subTask)
-        }
-        
+        for subTask in memorySubTasks { modelContext.delete(subTask) }
         if !recipe.ingredients.isEmpty {
             memory.hasChecklist = true
             for (index, ingredient) in recipe.ingredients.enumerated() {
@@ -666,21 +634,15 @@ struct MemoryEditView: View {
                 modelContext.insert(subTask)
             }
         }
-        
-        // Auto-switch echo to Cooking if one exists
         if !isCookingEcho {
             if let cookingEcho = echos.first(where: {
-                $0.name.lowercased().contains("cook") ||
-                $0.name.lowercased().contains("recipe") ||
+                $0.name.lowercased().contains("cook") || $0.name.lowercased().contains("recipe") ||
                 $0.emoji == "🍳" || $0.emoji == "🍽️"
-            }) {
-                selectedEchoId = cookingEcho.id
-            }
+            }) { selectedEchoId = cookingEcho.id }
         }
     }
-    
+
     // MARK: - Helpers
-    
     private func addSubTask() {
         guard !newSubTaskText.isEmpty else { return }
         let nextOrder = (memorySubTasks.last?.sortOrder ?? -1) + 1
@@ -689,12 +651,11 @@ struct MemoryEditView: View {
         memory.hasChecklist = true
         newSubTaskText = ""
     }
-    
+
     private func convertToChecklist() {
         let lines = editedText.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        
         if lines.count >= 2 {
             for (index, line) in lines.enumerated() {
                 let subTask = SubTask(memoryId: memory.id, text: line, sortOrder: index)
@@ -707,28 +668,30 @@ struct MemoryEditView: View {
             memory.hasChecklist = true
         }
     }
-    
+
     // MARK: - Load / Save
-    
     private func loadState() {
         editedText = memory.text
+        originalText = memory.text
         selectedEchoId = memory.echoId
         selectedDate = memory.detectedDate
         hasDate = memory.detectedDate != nil
         editedURL = memory.url ?? ""
-        
-        if let ping = existingPing {
-            hasPing = true
-            pingRecurrence = ping.recurrence
-            pingTime = ping.fireTime
-            
+
+        // Load all existing pings as entries
+        pingEntries = memoryPings.map { ping in
+            var entry = PingEntry()
+            entry.existingPingId = ping.id
+            entry.time = ping.fireTime
+            entry.recurrence = ping.recurrence
             if let memDate = memory.detectedDate {
                 let daysDiff = Calendar.current.dateComponents([.day], from: ping.fireDate, to: memDate).day ?? 0
-                pingLeadTime = PingLeadTime.allCases.first { $0.days == daysDiff } ?? .dayOf
+                entry.leadTime = PingLeadTime.allCases.first { $0.days == daysDiff } ?? .dayOf
             }
+            return entry
         }
     }
-    
+
     private func saveEdits() {
         memory.text = editedText
         memory.echoId = selectedEchoId
@@ -736,40 +699,47 @@ struct MemoryEditView: View {
         memory.wasEdited = true
         memory.updatedAt = Date()
         memory.url = editedURL.isEmpty ? nil : editedURL
-        
-        // Auto-complete memory if all subtasks are done
+
         if memory.hasChecklist && !memorySubTasks.isEmpty {
             let allDone = memorySubTasks.allSatisfy { $0.isCompleted }
-            if allDone {
-                memory.isCompleted = true
-                memory.completedAt = Date()
+            if allDone { memory.isCompleted = true; memory.completedAt = Date() }
+        }
+
+        // Delete pings that were removed
+        let keptIds = Set(pingEntries.compactMap { $0.existingPingId })
+        for ping in memoryPings {
+            if !keptIds.contains(ping.id) {
+                NotificationService.shared.cancelPing(pingId: ping.id)
+                modelContext.delete(ping)
             }
         }
-        
-        // Handle Ping
-        if hasPing, let date = selectedDate {
-            let fireDate = Calendar.current.date(byAdding: .day, value: -pingLeadTime.days, to: date) ?? date
-            
+
+        // Save each ping entry
+        guard hasDate, let date = selectedDate else { return }
+
+        for entry in pingEntries {
+            let fireDate = Calendar.current.date(byAdding: .day, value: -entry.leadTime.days, to: date) ?? date
             let calendar = Calendar.current
-            let timeComponents = calendar.dateComponents([.hour, .minute], from: pingTime)
-            let finalFireDate = calendar.date(bySettingHour: timeComponents.hour ?? 9, minute: timeComponents.minute ?? 0, second: 0, of: fireDate) ?? fireDate
-            
-            if let existing = existingPing {
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: entry.time)
+            let finalFireDate = calendar.date(
+                bySettingHour: timeComponents.hour ?? 9,
+                minute: timeComponents.minute ?? 0,
+                second: 0,
+                of: fireDate
+            ) ?? fireDate
+
+            if let existingId = entry.existingPingId,
+               let existing = memoryPings.first(where: { $0.id == existingId }) {
                 existing.fireDate = finalFireDate
-                existing.fireTime = pingTime
-                existing.recurrence = pingRecurrence
+                existing.fireTime = entry.time
+                existing.recurrence = entry.recurrence
                 existing.isActive = true
                 NotificationService.shared.schedulePing(ping: existing, memoryText: editedText)
             } else {
-                let ping = Ping(memoryId: memory.id, fireDate: finalFireDate, recurrence: pingRecurrence)
-                ping.fireTime = pingTime
+                let ping = Ping(memoryId: memory.id, fireDate: finalFireDate, recurrence: entry.recurrence)
+                ping.fireTime = entry.time
                 modelContext.insert(ping)
                 NotificationService.shared.schedulePing(ping: ping, memoryText: editedText)
-            }
-        } else {
-            if let existing = existingPing {
-                NotificationService.shared.cancelPing(pingId: existing.id)
-                modelContext.delete(existing)
             }
         }
     }
