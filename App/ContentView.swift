@@ -9,7 +9,7 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
-    @State private var selectedTab = 0
+    @State private var selectedTab = 1
     @State private var showDrop = false
     @State private var showDrawer = false
     @State private var showTyped = false
@@ -21,17 +21,17 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             TabView(selection: $selectedTab) {
-                DashboardView(showSearch: $showSearch)
-                    .tabItem {
-                        Image(systemName: "circle.grid.2x2.fill")
-                        Text("Dashboard")
-                    }
-                    .tag(0)
-                
                 TodayView()
                     .tabItem {
                         Image(systemName: "checkmark.circle")
                         Text("Today")
+                    }
+                    .tag(0)
+                
+                DashboardView(showSearch: $showSearch)
+                    .tabItem {
+                        Image(systemName: "circle.grid.2x2.fill")
+                        Text("Dashboard")
                     }
                     .tag(1)
                 

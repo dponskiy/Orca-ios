@@ -77,6 +77,19 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		878C036B2F63B8BF0016D38A /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		872F72262F4ED482000A4AE3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		872F72292F4ED482000A4AE3 /* OrcaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaApp.swift; sourceTree = "<group>"; };
@@ -129,6 +142,8 @@
 		873C1BA02F4EB4350058324F /* Memory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Memory.swift; sourceTree = "<group>"; };
 		873C1BA12F4EB43E0058324F /* Echo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Echo.swift; sourceTree = "<group>"; };
 		873C1BA22F4EB4440058324F /* Ping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ping.swift; sourceTree = "<group>"; };
+		878C03562F63B8BE0016D38A /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		878C03582F63B8BE0016D38A /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseManager.swift; sourceTree = "<group>"; };
 		87CD0AE62F52995300CAAB4D /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
@@ -399,6 +414,8 @@
 		87CD0AE82F529B4700CAAB4D /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				878C03562F63B8BE0016D38A /* WidgetKit.framework */,
+				878C03582F63B8BE0016D38A /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -413,6 +430,7 @@
 				873C1B572F4EA59D0058324F /* Sources */,
 				873C1B582F4EA59D0058324F /* Frameworks */,
 				873C1B592F4EA59D0058324F /* Resources */,
+				878C036B2F63B8BF0016D38A /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
@@ -483,7 +501,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2620;
+				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					873C1B5A2F4EA59D0058324F = {
@@ -758,7 +776,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -810,7 +828,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;

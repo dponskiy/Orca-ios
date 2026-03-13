@@ -131,7 +131,7 @@ struct SettingsView: View {
                     
                     Button {
                         AnalyticsService.shared.trackFeedbackSent()
-                        if let url = URL(string: "mailto:support@orca.app?subject=Orca%20Feedback") {
+                        if let url = URL(string: "mailto:support@orcadrop.app?subject=Orca%20Feedback") {
                             UIApplication.shared.open(url)
                         }
                     } label: {

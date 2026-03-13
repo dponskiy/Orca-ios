@@ -20,6 +20,7 @@ struct TodayView: View {
     @State private var showCompleted = false
     @State private var snoozeMemory: Memory?
     @State private var showSnoozeSheet = false
+    @State private var expandedMemoryIds: Set<UUID> = []
     
     private let calendar = Calendar.current
     
@@ -580,12 +581,26 @@ struct TodayView: View {
     // MARK: - Task Row
     
     private func taskRow(memory: Memory, isOverdue: Bool) -> some View {
+        let subTasks = memory.hasChecklist ? fetchSubTasks(for: memory) : []
+        let isExpanded = expandedMemoryIds.contains(memory.id)
+
+        return VStack(spacing: 0) {
+            taskRowHeader(memory: memory, isOverdue: isOverdue, subTasks: subTasks, isExpanded: isExpanded)
+            if isExpanded && !subTasks.isEmpty {
+                taskRowChecklist(memory: memory, subTasks: subTasks)
+            }
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
+    }
+
+    private func taskRowHeader(memory: Memory, isOverdue: Bool, subTasks: [SubTask], isExpanded: Bool) -> some View {
         HStack(spacing: 12) {
             Button {
                 withAnimation(.spring(duration: 0.3)) {
                     let memoryPings = pings.filter { $0.memoryId == memory.id }
                     let isRecurring = memoryPings.contains { $0.recurrence != .none }
-                    
                     if isRecurring {
                         memory.completedAt = selectedDate
                         memory.updatedAt = Date()
@@ -604,13 +619,12 @@ struct TodayView: View {
                     .stroke(isOverdue ? Color.coral : Color.oceanTeal, lineWidth: 2)
                     .frame(width: 24, height: 24)
             }
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(memory.text)
                     .font(.custom("DMSans-Regular", size: 15))
                     .foregroundColor(.deepNavy)
                     .lineLimit(2)
-                
                 HStack(spacing: 8) {
                     if let echo = echos.first(where: { $0.id == memory.echoId }) {
                         HStack(spacing: 3) {
@@ -629,12 +643,37 @@ struct TodayView: View {
                             .font(.custom("DMMono-Regular", size: 12))
                             .foregroundColor(isOverdue ? .coral : .gray)
                     }
+                    if !subTasks.isEmpty {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                if isExpanded {
+                                    expandedMemoryIds.remove(memory.id)
+                                } else {
+                                    expandedMemoryIds.insert(memory.id)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "list.bullet").font(.system(size: 10))
+                                Text("\(subTasks.filter { $0.isCompleted }.count)/\(subTasks.count)")
+                                    .font(.custom("DMMono-Regular", size: 11))
+                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 9))
+                            }
+                            .foregroundColor(.oceanTeal)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.oceanTeal.opacity(0.1))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
             .onTapGesture { editingMemory = memory }
-            
+
             Spacer()
-            
+
             HStack(spacing: 4) {
                 Button {
                     snoozeMemory = memory
@@ -646,7 +685,7 @@ struct TodayView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                
+
                 Button { editingMemory = memory } label: {
                     ZStack {
                         Circle().fill(Color.mist).frame(width: 32, height: 32)
@@ -657,11 +696,63 @@ struct TodayView: View {
             }
         }
         .padding(12)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
     }
-    
+
+    private func taskRowChecklist(memory: Memory, subTasks: [SubTask]) -> some View {
+        VStack(spacing: 0) {
+            Divider().padding(.horizontal, 12)
+            ForEach(subTasks) { subTask in
+                Button {
+                    withAnimation(.spring(duration: 0.2)) {
+                        subTask.isCompleted.toggle()
+                        let allDone = subTasks.allSatisfy { $0.isCompleted }
+                        if allDone {
+                            let memoryPings = pings.filter { $0.memoryId == memory.id }
+                            let isRecurring = memoryPings.contains { $0.recurrence != .none }
+                            if isRecurring {
+                                memory.completedAt = selectedDate
+                            } else {
+                                memory.isCompleted = true
+                                memory.completedAt = Date()
+                                for ping in memoryPings {
+                                    ping.isActive = false
+                                    NotificationService.shared.cancelPing(pingId: ping.id)
+                                }
+                            }
+                            expandedMemoryIds.remove(memory.id)
+                        }
+                        memory.updatedAt = Date()
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .stroke(Color.oceanTeal.opacity(0.4), lineWidth: 1.5)
+                                .frame(width: 18, height: 18)
+                            if subTask.isCompleted {
+                                Circle().fill(Color.oceanTeal).frame(width: 18, height: 18)
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        Text(subTask.text)
+                            .font(.custom("DMSans-Regular", size: 14))
+                            .foregroundColor(subTask.isCompleted ? .gray : .deepNavy)
+                            .strikethrough(subTask.isCompleted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+
+                if subTask.id != subTasks.last?.id {
+                    Divider().padding(.leading, 40)
+                }
+            }
+        }
+    }
     // MARK: - Completed Row
     
     private func completedRow(memory: Memory) -> some View {

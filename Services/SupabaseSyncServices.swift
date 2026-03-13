@@ -57,12 +57,12 @@ class SupabaseSyncService {
     
     private func deduplicateLocal(context: ModelContext) throws {
         let echos = try context.fetch(FetchDescriptor<Echo>())
-        var seenEchoIds = Set<UUID>()
+        var seenEchoNames = Set<String>()
         for echo in echos {
-            if seenEchoIds.contains(echo.id) {
+            if seenEchoNames.contains(echo.name) {
                 context.delete(echo)
             } else {
-                seenEchoIds.insert(echo.id)
+                seenEchoNames.insert(echo.name)
             }
         }
         
@@ -109,7 +109,45 @@ class SupabaseSyncService {
     private func syncEchos(userId: UUID, context: ModelContext) async throws {
         let localEchos = try context.fetch(FetchDescriptor<Echo>())
         
-        let echoRows = localEchos.reduce(into: [EchoRow]()) { result, echo in
+        // PULL FIRST — get remote echos
+        let remoteEchos: [EchoRow] = try await supabase
+            .from("echos")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+        
+        // Merge remote into local — match by name to avoid dupes
+        for remote in remoteEchos {
+            guard let remoteId = UUID(uuidString: remote.id) else { continue }
+            
+            // Already exists by ID — skip
+            if localEchos.contains(where: { $0.id == remoteId }) { continue }
+            
+            // Same name exists locally — update its ID to match remote
+            if let nameMatch = localEchos.first(where: { $0.name == remote.name }) {
+                nameMatch.id = remoteId
+                nameMatch.emoji = remote.emoji
+                nameMatch.sortOrder = remote.sort_order
+                continue
+            }
+            
+            // Truly new echo from remote — insert it
+            let echo = Echo(
+                name: remote.name,
+                emoji: remote.emoji,
+                isDefault: remote.is_default,
+                sortOrder: remote.sort_order
+            )
+            echo.id = remoteId
+            context.insert(echo)
+        }
+        
+        try context.save()
+        
+        // PUSH — now push merged local echos to Supabase
+        let mergedEchos = try context.fetch(FetchDescriptor<Echo>())
+        let echoRows = mergedEchos.reduce(into: [EchoRow]()) { result, echo in
             guard !result.contains(where: { $0.id == echo.id.uuidString }) else { return }
             result.append(EchoRow(
                 id: echo.id.uuidString,
@@ -127,31 +165,6 @@ class SupabaseSyncService {
                 .from("echos")
                 .upsert(echoRows, onConflict: "id")
                 .execute()
-        }
-        
-        let localIds = Set(localEchos.map { $0.id.uuidString })
-        
-        let remoteEchos: [EchoRow] = try await supabase
-            .from("echos")
-            .select()
-            .eq("user_id", value: userId.uuidString)
-            .execute()
-            .value
-        
-        for remote in remoteEchos {
-            guard !localIds.contains(remote.id.lowercased()) else { continue }
-            guard let remoteId = UUID(uuidString: remote.id) else { continue }
-            let existing = localEchos.first { $0.id == remoteId }
-            guard existing == nil else { continue }
-            
-            let echo = Echo(
-                name: remote.name,
-                emoji: remote.emoji,
-                isDefault: remote.is_default,
-                sortOrder: remote.sort_order
-            )
-            echo.id = remoteId
-            context.insert(echo)
         }
         
         print("✅ Echos synced")
@@ -245,7 +258,6 @@ class SupabaseSyncService {
     private func syncPings(userId: UUID, context: ModelContext) async throws {
         let localPings = try context.fetch(FetchDescriptor<Ping>())
         
-        // Only push pings whose memory exists in Supabase
         struct MemoryIdRow: Codable {
             let id: String
         }
@@ -392,6 +404,7 @@ class SupabaseSyncService {
             print("❌ Failed to delete memory: \(error)")
         }
     }
+    
     // MARK: - Delete Echo
 
     func deleteEcho(id: UUID) async {
@@ -406,6 +419,7 @@ class SupabaseSyncService {
             print("❌ Failed to delete echo: \(error)")
         }
     }
+    
     // MARK: - Auto Sync
     
     func startAutoSync(userId: UUID) {

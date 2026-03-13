@@ -18,11 +18,11 @@ struct EchoBubbleView: View {
     private var isEmpty: Bool { count == 0 }
     
     private var bubbleSize: CGFloat {
-        if isEmpty { return 40 } // smaller than min active size
-        guard totalMemories > 0 else { return 64 }
+        if isEmpty { return 32 } // smaller than min active size
+        guard totalMemories > 0 else { return 52 }
         let proportion = Double(count) / Double(totalMemories)
-        let minSize: CGFloat = 56
-        let maxSize: CGFloat = 100
+        let minSize: CGFloat = 44
+        let maxSize: CGFloat = 80
         let scaled = min(proportion * 3, 1.0)
         return minSize + (maxSize - minSize) * CGFloat(scaled)
     }

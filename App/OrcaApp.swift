@@ -50,8 +50,7 @@ struct OrcaApp: App {
             .onAppear {
                 AnalyticsService.shared.initialize()
                 seedNewEchosIfNeeded()
-                
-                // Cancel orphaned notifications from deleted memories
+
                 let validPingIds = (try? modelContainer.mainContext.fetch(FetchDescriptor<Ping>()))?.map { $0.id } ?? []
                 NotificationService.shared.cancelOrphanedNotifications(validPingIds: validPingIds)
             }
