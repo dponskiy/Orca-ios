@@ -7,6 +7,8 @@
 
 import SwiftUI
 import SwiftData
+import WeatherKit
+import CoreLocation
 
 struct TodayView: View {
     @Query(sort: \Memory.createdAt, order: .reverse) private var allMemories: [Memory]
@@ -21,6 +23,8 @@ struct TodayView: View {
     @State private var snoozeMemory: Memory?
     @State private var showSnoozeSheet = false
     @State private var expandedMemoryIds: Set<UUID> = []
+    @StateObject private var weatherService = WeatherService.shared
+    @StateObject private var locationService = LocationService.shared
     
     private let calendar = Calendar.current
     
@@ -77,10 +81,31 @@ struct TodayView: View {
     var overdueTasks: [Memory] {
         guard calendar.isDateInToday(selectedDate) else { return [] }
         return allMemories.filter { memory in
-            memory.isActionable && !memory.isCompleted &&
-            memory.detectedDate != nil &&
-            memory.detectedDate! < calendar.startOfDay(for: Date()) &&
-            !calendar.isDate(memory.detectedDate!, inSameDayAs: Date())
+            guard memory.isActionable && !memory.isCompleted else { return false }
+            guard let detectedDate = memory.detectedDate else { return false }
+
+            // Exclude recurring tasks completed today
+            let memoryPings = pings.filter { $0.memoryId == memory.id }
+            let isRecurring = memoryPings.contains { $0.recurrence != .none }
+            if isRecurring {
+                if let completedAt = memory.completedAt,
+                   calendar.isDate(completedAt, inSameDayAs: selectedDate) { return false }
+            }
+
+            // Never show recurring tasks as overdue
+            if isRecurring { return false }
+
+            // Don't show if already in todayTasks
+            if todayTasks.contains(where: { $0.id == memory.id }) { return false }
+
+            if let endDate = memory.endDate,
+               selectedDate >= calendar.startOfDay(for: detectedDate) &&
+               selectedDate <= calendar.startOfDay(for: endDate) {
+                return false
+            }
+
+            return detectedDate < calendar.startOfDay(for: Date()) &&
+                   !calendar.isDate(detectedDate, inSameDayAs: Date())
         }
         .sorted { ($0.detectedDate ?? $0.createdAt) < ($1.detectedDate ?? $1.createdAt) }
     }
@@ -97,19 +122,17 @@ struct TodayView: View {
         pings.filter { ping in
             guard ping.isActive,
                   let memory = allMemories.first(where: { $0.id == ping.memoryId }) else { return false }
-            
+            let alreadyShownAsTask = todayTasks.contains { $0.id == memory.id }
+            let alreadyShownAsEvent = todayEvents.contains { $0.id == memory.id }
+            if alreadyShownAsTask || alreadyShownAsEvent { return false }
             if memory.isActionable && ping.recurrence != .none { return false }
-            
             if calendar.isDate(ping.fireDate, inSameDayAs: selectedDate) { return true }
-            
             guard selectedDate >= calendar.startOfDay(for: ping.fireDate) else { return false }
-            
             if let eventDate = memory.detectedDate,
                !calendar.isDate(ping.fireDate, inSameDayAs: eventDate),
                selectedDate > calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: eventDate) ?? eventDate) {
                 return false
             }
-            
             switch ping.recurrence {
             case .daily: return true
             case .weekly:
@@ -148,33 +171,36 @@ struct TodayView: View {
         }
     }
     
+    // MARK: - Helpers
+    
+    private func hasPingToday(_ memory: Memory) -> Bool {
+        pings.contains { ping in
+            ping.memoryId == memory.id &&
+            ping.isActive &&
+            calendar.isDate(ping.fireDate, inSameDayAs: selectedDate)
+        }
+    }
+    
     // MARK: - Body
     
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 dateHeader
-                
-                if showWeekView {
-                    weekStrip
-                }
-                
+                if showWeekView { weekStrip }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         statsBar
-                        
                         if !overdueTasks.isEmpty { overdueSection }
                         if !todayTasks.isEmpty { todoSection }
                         if !todayPings.isEmpty { pingsSection }
                         if !todayEvents.isEmpty { eventsSection }
                         if !completedTasks.isEmpty { completedSection }
                         if !droppedToday.isEmpty { droppedSection }
-                        
                         if todayTasks.isEmpty && todayPings.isEmpty && todayEvents.isEmpty &&
                            droppedToday.isEmpty && completedTasks.isEmpty && overdueTasks.isEmpty {
                             emptyState
                         }
-                        
                         Spacer().frame(height: 100)
                     }
                     .padding(.horizontal, 20)
@@ -182,7 +208,21 @@ struct TodayView: View {
                 }
             }
             .background(Color.pearl)
-            .onAppear { selectedDate = Date() }
+            .onAppear {
+                selectedDate = Date()
+                if let location = locationService.location {
+                    Task { await weatherService.fetchWeather(for: location) }
+                }
+                locationService.requestLocation()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .resetToToday)) { _ in
+                selectedDate = Date()
+            }
+            .onChange(of: locationService.location) { _, location in
+                if let location = location {
+                    Task { await weatherService.fetchWeather(for: location) }
+                }
+            }
             .sheet(item: $editingMemory) { memory in
                 MemoryEditView(memory: memory)
             }
@@ -239,12 +279,24 @@ struct TodayView: View {
             
             Spacer()
             
-            Button {
-                selectedDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.oceanTeal)
+            HStack(spacing: 12) {
+                if calendar.isDateInToday(selectedDate) && !weatherService.temperature.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: weatherService.symbolName)
+                            .font(.system(size: 13))
+                            .foregroundColor(.oceanTeal)
+                        Text(weatherService.temperature)
+                            .font(.custom("DMMono-Regular", size: 13))
+                            .foregroundColor(.deepNavy)
+                    }
+                }
+                Button {
+                    selectedDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.oceanTeal)
+                }
             }
         }
         .padding(.horizontal, 20)
@@ -372,7 +424,7 @@ struct TodayView: View {
         }
     }
     
-    // MARK: - Pings Section
+    // MARK: - Fetch SubTasks
     
     private func fetchSubTasks(for memory: Memory) -> [SubTask] {
         let memoryId = memory.id
@@ -380,6 +432,8 @@ struct TodayView: View {
         let all = (try? modelContext.fetch(descriptor)) ?? []
         return all.filter { $0.memoryId == memoryId }
     }
+    
+    // MARK: - Pings Section
     
     private var pingsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -498,6 +552,16 @@ struct TodayView: View {
                                     .font(.custom("DMMono-Regular", size: 12))
                                     .foregroundColor(.gray)
                             }
+                            if hasPingToday(memory) {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "bell.fill")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.oceanTeal)
+                                    Text("Ping")
+                                        .font(.custom("DMMono-Regular", size: 11))
+                                        .foregroundColor(.oceanTeal)
+                                }
+                            }
                         }
                     }
                     .onTapGesture { editingMemory = memory }
@@ -540,7 +604,6 @@ struct TodayView: View {
                         .foregroundColor(.gray)
                 }
             }
-            
             if showCompleted {
                 ForEach(completedTasks) { memory in
                     completedRow(memory: memory)
@@ -557,7 +620,6 @@ struct TodayView: View {
                 .font(.custom("DMSans-Medium", size: 13))
                 .foregroundColor(.gray)
                 .tracking(1)
-            
             ForEach(droppedToday) { memory in
                 HStack(spacing: 12) {
                     if let echo = echos.first(where: { $0.id == memory.echoId }) {
@@ -583,7 +645,6 @@ struct TodayView: View {
     private func taskRow(memory: Memory, isOverdue: Bool) -> some View {
         let subTasks = memory.hasChecklist ? fetchSubTasks(for: memory) : []
         let isExpanded = expandedMemoryIds.contains(memory.id)
-
         return VStack(spacing: 0) {
             taskRowHeader(memory: memory, isOverdue: isOverdue, subTasks: subTasks, isExpanded: isExpanded)
             if isExpanded && !subTasks.isEmpty {
@@ -618,20 +679,24 @@ struct TodayView: View {
                 Circle()
                     .stroke(isOverdue ? Color.coral : Color.oceanTeal, lineWidth: 2)
                     .frame(width: 24, height: 24)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(memory.text)
                     .font(.custom("DMSans-Regular", size: 15))
                     .foregroundColor(.deepNavy)
                     .lineLimit(2)
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     if let echo = echos.first(where: { $0.id == memory.echoId }) {
                         HStack(spacing: 3) {
                             Text(echo.emoji).font(.system(size: 11))
                             Text(echo.name)
                                 .font(.custom("DMSans-Medium", size: 12))
                                 .foregroundColor(.deepNavy)
+                                .lineLimit(1)
+                                .fixedSize()
                         }
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -642,35 +707,48 @@ struct TodayView: View {
                         Text(date, format: .dateTime.month(.abbreviated).day())
                             .font(.custom("DMMono-Regular", size: 12))
                             .foregroundColor(isOverdue ? .coral : .gray)
+                            .fixedSize()
                     }
-                    if !subTasks.isEmpty {
-                        Button {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                if isExpanded {
-                                    expandedMemoryIds.remove(memory.id)
-                                } else {
-                                    expandedMemoryIds.insert(memory.id)
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "list.bullet").font(.system(size: 10))
-                                Text("\(subTasks.filter { $0.isCompleted }.count)/\(subTasks.count)")
-                                    .font(.custom("DMMono-Regular", size: 11))
-                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 9))
-                            }
-                            .foregroundColor(.oceanTeal)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.oceanTeal.opacity(0.1))
-                            .clipShape(Capsule())
+                    if hasPingToday(memory) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "bell.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(.oceanTeal)
+                            Text("Ping")
+                                .font(.custom("DMMono-Regular", size: 11))
+                                .foregroundColor(.oceanTeal)
+                                .fixedSize()
                         }
-                        .buttonStyle(.plain)
                     }
                 }
+                if !subTasks.isEmpty {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            if isExpanded {
+                                expandedMemoryIds.remove(memory.id)
+                            } else {
+                                expandedMemoryIds.insert(memory.id)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "list.bullet").font(.system(size: 10))
+                            Text("\(subTasks.filter { $0.isCompleted }.count)/\(subTasks.count)")
+                                .font(.custom("DMMono-Regular", size: 11))
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9))
+                        }
+                        .fixedSize()
+                        .foregroundColor(.oceanTeal)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.oceanTeal.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .onTapGesture { editingMemory = memory }
+            .simultaneousGesture(TapGesture().onEnded { editingMemory = memory })
 
             Spacer()
 
@@ -685,7 +763,6 @@ struct TodayView: View {
                     }
                 }
                 .buttonStyle(.plain)
-
                 Button { editingMemory = memory } label: {
                     ZStack {
                         Circle().fill(Color.mist).frame(width: 32, height: 32)
@@ -746,13 +823,13 @@ struct TodayView: View {
                     .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
-
                 if subTask.id != subTasks.last?.id {
                     Divider().padding(.leading, 40)
                 }
             }
         }
     }
+
     // MARK: - Completed Row
     
     private func completedRow(memory: Memory) -> some View {
@@ -761,7 +838,6 @@ struct TodayView: View {
                 withAnimation(.spring(duration: 0.3)) {
                     let memoryPings = pings.filter { $0.memoryId == memory.id }
                     let isRecurring = memoryPings.contains { $0.recurrence != .none }
-                    
                     if isRecurring {
                         memory.completedAt = nil
                         memory.updatedAt = Date()
@@ -783,13 +859,11 @@ struct TodayView: View {
                         .foregroundColor(.white)
                 }
             }
-            
             Text(memory.text)
                 .font(.custom("DMSans-Regular", size: 15))
                 .foregroundColor(.gray)
                 .strikethrough()
                 .lineLimit(2)
-            
             Spacer()
         }
         .padding(12)
@@ -806,7 +880,7 @@ struct TodayView: View {
             Image(systemName: "checkmark.circle")
                 .font(.system(size: 44))
                 .foregroundColor(.seafoam.opacity(0.4))
-            Text(calendar.isDateInToday(selectedDate) ? "All clear today" : "Nothing on this day")
+            Text(calendar.isDateInToday(selectedDate) ? "All clear today" : "No memories today")
                 .font(.custom("DMSans-Medium", size: 18))
                 .foregroundColor(.deepNavy)
             Text(calendar.isDateInToday(selectedDate) ? "Drop a memory with a task and it'll show up here" : "Tasks and memories for this day will appear here")
@@ -865,7 +939,6 @@ struct SnoozeSheet: View {
                     Text("Or pick a date")
                         .font(.custom("DMSans-Medium", size: 14))
                         .foregroundColor(.gray)
-                    
                     DatePicker(
                         "Snooze date",
                         selection: Binding(
@@ -882,7 +955,6 @@ struct SnoozeSheet: View {
                     .datePickerStyle(.compact)
                     .tint(.oceanTeal)
                 }
-                
                 Spacer()
             }
             .padding(20)

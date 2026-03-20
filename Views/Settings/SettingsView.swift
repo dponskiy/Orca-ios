@@ -201,6 +201,7 @@ struct SettingsView: View {
                             modelContext.delete(ping)
                         }
                         modelContext.delete(memory)
+                        SpotlightService.shared.removeMemory(id: memory.id)
                         Task {
                             await SupabaseSyncService.shared.deleteMemory(id: id)
                         }
@@ -235,6 +236,7 @@ struct SettingsView: View {
         for memory in memories {
             let id = memory.id
             modelContext.delete(memory)
+            SpotlightService.shared.removeMemory(id: memory.id)
             Task {
                 await SupabaseSyncService.shared.deleteMemory(id: id)
             }

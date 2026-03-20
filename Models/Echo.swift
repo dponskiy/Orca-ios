@@ -45,7 +45,7 @@ class Echo {
             ("Pets", "🐾"),
             ("Finance", "💰"),
             ("Holidays", "🎄"),
-            ("Chores", "🧹"),
+            ("To-Do", "📋"),
             ("Games", "🎮"),
             ("Movies", "🎬"),
             ("Books", "📖"),

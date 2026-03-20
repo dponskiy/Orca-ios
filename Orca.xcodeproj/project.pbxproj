@@ -42,6 +42,11 @@
 		872F72742F51256E000A4AE3 /* CreateEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72732F512563000A4AE3 /* CreateEchoView.swift */; };
 		872F72752F512601000A4AE3 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72442F4F240A000A4AE3 /* SettingsView.swift */; };
 		872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723D2F4F23C7000A4AE3 /* BrowseAllView.swift */; };
+		878C036F2F676FD70016D38A /* MemoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72452F4F2417000A4AE3 /* MemoryDetailView.swift */; };
+		878C03732F67A67E0016D38A /* RecipeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03722F67A67E0016D38A /* RecipeCaptureView.swift */; };
+		878C03752F6898970016D38A /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03742F68988D0016D38A /* WeatherService.swift */; };
+		878C03772F6898C10016D38A /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03762F6898B40016D38A /* LocationService.swift */; };
+		878C03792F68A8D00016D38A /* SpotLightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03782F68A8C00016D38A /* SpotLightService.swift */; };
 		87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */; };
 		87CD0AE12F52917B00CAAB4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B932F4EB2FB0058324F /* Config.swift */; };
 		87CD0AE42F52992800CAAB4D /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9C2F4EB3F30058324F /* AuthService.swift */; };
@@ -144,6 +149,10 @@
 		873C1BA22F4EB4440058324F /* Ping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ping.swift; sourceTree = "<group>"; };
 		878C03562F63B8BE0016D38A /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		878C03582F63B8BE0016D38A /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		878C03722F67A67E0016D38A /* RecipeCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeCaptureView.swift; sourceTree = "<group>"; };
+		878C03742F68988D0016D38A /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherService.swift; sourceTree = "<group>"; };
+		878C03762F6898B40016D38A /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
+		878C03782F68A8C00016D38A /* SpotLightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotLightService.swift; sourceTree = "<group>"; };
 		87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseManager.swift; sourceTree = "<group>"; };
 		87CD0AE62F52995300CAAB4D /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
@@ -279,6 +288,9 @@
 		873C1B8D2F4EB2A60058324F /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				878C03782F68A8C00016D38A /* SpotLightService.swift */,
+				878C03762F6898B40016D38A /* LocationService.swift */,
+				878C03742F68988D0016D38A /* WeatherService.swift */,
 				87CD0AFC2F59311F00CAAB4D /* SupabaseSyncServices.swift */,
 				87CD0AEF2F57357300CAAB4D /* OrcaShortcuts.swift */,
 				87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */,
@@ -339,6 +351,7 @@
 		873C1BA42F4EB4580058324F /* Drop */ = {
 			isa = PBXGroup;
 			children = (
+				878C03722F67A67E0016D38A /* RecipeCaptureView.swift */,
 				87CD0AED2F57300500CAAB4D /* PhotoCaptureView.swift */,
 				872F726E2F4FF50B000A4AE3 /* TypeCaptureView.swift */,
 				872F723A2F4F23AB000A4AE3 /* CaptureDrawerView.swift */,
@@ -598,8 +611,11 @@
 				87CD0AF42F576FCC00CAAB4D /* RecipeExtractor.swift in Sources */,
 				872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */,
 				872F726F2F4FF511000A4AE3 /* TypeCaptureView.swift in Sources */,
+				878C036F2F676FD70016D38A /* MemoryDetailView.swift in Sources */,
+				878C03732F67A67E0016D38A /* RecipeCaptureView.swift in Sources */,
 				872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */,
 				87CD0AFB2F57D9B100CAAB4D /* AnalyticsService.swift in Sources */,
+				878C03792F68A8D00016D38A /* SpotLightService.swift in Sources */,
 				87CD0AF62F578BC300CAAB4D /* ManageEchosView.swift in Sources */,
 				872F726D2F4FF4BC000A4AE3 /* CaptureDrawerView.swift in Sources */,
 				872F72602F4FDDBC000A4AE3 /* ContentView.swift in Sources */,
@@ -608,6 +624,7 @@
 				872F72682F4FE746000A4AE3 /* CalendarTabView.swift in Sources */,
 				872F72642F4FE598000A4AE3 /* DashboardView.swift in Sources */,
 				872F725D2F4FDC77000A4AE3 /* Ping.swift in Sources */,
+				878C03772F6898C10016D38A /* LocationService.swift in Sources */,
 				87CD0AF22F57443700CAAB4D /* SubTask.swift in Sources */,
 				872F725F2F4FDC8B000A4AE3 /* Memory.swift in Sources */,
 				87CD0AE72F52996100CAAB4D /* AuthView.swift in Sources */,
@@ -617,6 +634,7 @@
 				872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */,
 				872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */,
 				872F72632F4FE581000A4AE3 /* FinIcon.swift in Sources */,
+				878C03752F6898970016D38A /* WeatherService.swift in Sources */,
 				872F722D2F4ED482000A4AE3 /* OrcaApp.swift in Sources */,
 				872F72662F4FE723000A4AE3 /* SearchView.swift in Sources */,
 				87CD0AE52F52992E00CAAB4D /* SupabaseManager.swift in Sources */,
@@ -776,17 +794,29 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orca/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Orca;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Orca uses your camera to capture screenshots as memories";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Orca uses your location to show local weather";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orca needs your Microphone to capture voice memories";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Orca accesses your photos to capture screenshots as memories";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Orca uses speech recognition to transcribe your voice memories";
@@ -828,17 +858,29 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orca/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Orca;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Orca uses your camera to capture screenshots as memories";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Orca uses your location to show local weather";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orca needs your Microphone to capture voice memories";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Orca accesses your photos to capture screenshots as memories";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Orca uses speech recognition to transcribe your voice memories";

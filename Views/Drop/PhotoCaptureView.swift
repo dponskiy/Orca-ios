@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 import Vision
+import CoreSpotlight
 
 struct PhotoCaptureView: View {
     @Binding var isPresented: Bool
@@ -359,14 +360,25 @@ struct PhotoCaptureView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
+        SpotlightService.shared.indexMemory(memory, echoName: sonarResult?.echoName ?? "Notes", echoEmoji: echos.first { $0.id == memory.echoId }?.emoji ?? "📝")
         NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
         
-        if let userId = authService.userId {
+        if let userId = authService.userId, let result = sonarResult {
             Task {
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
+                for suggestion in result.pingSuggestions {
+                    let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
+                    let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
+                    if let fireTime = suggestion.fireTime {
+                        ping.fireTime = fireTime
+                    }
+                    modelContext.insert(ping)
+                    await SupabaseSyncService.shared.pushPing(ping, userId: userId)
+                    NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                }
             }
         }
-        
+
         AnalyticsService.shared.trackMemoryDropped(
             captureType: "photo",
             echoName: sonarResult?.echoName ?? "Unknown",
@@ -382,36 +394,19 @@ struct PhotoCaptureView: View {
         }
         
         if let checklistItems = sonarEngine.detectChecklist(text: textToSave) {
-            memory.hasChecklist = true
-            for (index, item) in checklistItems.enumerated() {
-                let subTask = SubTask(memoryId: memory.id, text: item, sortOrder: index)
-                modelContext.insert(subTask)
-            }
-        }
-
-        if let result = sonarResult {
-            for suggestion in result.pingSuggestions {
-                let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
-                let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
-                if let fireTime = suggestion.fireTime {
-                    ping.fireTime = fireTime
-                }
-                modelContext.insert(ping)
-                if let userId = authService.userId {
-                    Task {
-                        await SupabaseSyncService.shared.pushPing(ping, userId: userId)
+                    memory.hasChecklist = true
+                    for (index, item) in checklistItems.enumerated() {
+                        let subTask = SubTask(memoryId: memory.id, text: item, sortOrder: index)
+                        modelContext.insert(subTask)
                     }
                 }
-                NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                
+                withAnimation(.spring(duration: 0.4)) {
+                    showBanner = true
+                }
             }
-        }
-        
-        withAnimation(.spring(duration: 0.4)) {
-            showBanner = true
-        }
-    }
-    
-    private func updateLastMemoryTask(isTask: Bool) {
+
+            private func updateLastMemoryTask(isTask: Bool) {
         let recent = try? modelContext.fetch(
             FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         )

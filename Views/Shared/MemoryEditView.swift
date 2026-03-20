@@ -22,15 +22,14 @@ struct MemoryEditView: View {
     @State private var selectedEchoId: UUID = UUID()
     @State private var selectedDate: Date?
     @State private var hasDate: Bool = false
+    @State private var hasEndDate: Bool = false
+    @State private var selectedEndDate: Date = Date()
     @State private var editedURL: String = ""
     @State private var newSubTaskText: String = ""
     @State private var audioEditService = AudioEditService()
     @State private var showRerunSonar = false
 
-    // Multiple pings
     @State private var pingEntries: [PingEntry] = []
-
-    // Recipe fetch states
     @State private var isFetchingRecipe = false
     @State private var recipeErrorMessage: String? = nil
     @State private var showRecipeSuccess = false
@@ -167,6 +166,7 @@ struct MemoryEditView: View {
                     Button(role: .destructive) {
                         let id = memory.id
                         modelContext.delete(memory)
+                        SpotlightService.shared.removeMemory(id: memory.id)
                         Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
                         dismiss()
                     } label: {
@@ -423,16 +423,42 @@ struct MemoryEditView: View {
             }
             .tint(.oceanTeal)
             .onChange(of: hasDate) { _, newValue in
-                if !newValue { pingEntries.removeAll() }
+                if !newValue {
+                    pingEntries.removeAll()
+                    hasEndDate = false
+                }
             }
             if hasDate {
                 DatePicker(
-                    "Date",
+                    "Start Date",
                     selection: Binding(get: { selectedDate ?? Date() }, set: { selectedDate = $0 }),
                     displayedComponents: [.date, .hourAndMinute]
                 )
                 .datePickerStyle(.graphical)
                 .tint(.oceanTeal)
+
+                Toggle(isOn: $hasEndDate) {
+                    Text("Has end date (date range)")
+                        .font(.custom("DMSans-Regular", size: 15))
+                        .foregroundColor(.deepNavy)
+                }
+                .tint(.oceanTeal)
+                .onChange(of: hasEndDate) { _, newValue in
+                    if newValue && selectedEndDate <= (selectedDate ?? Date()) {
+                        selectedEndDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate ?? Date()) ?? Date()
+                    }
+                }
+
+                if hasEndDate {
+                    DatePicker(
+                        "End Date",
+                        selection: $selectedEndDate,
+                        in: (selectedDate ?? Date())...,
+                        displayedComponents: [.date]
+                    )
+                    .datePickerStyle(.compact)
+                    .tint(.oceanTeal)
+                }
             }
         }
     }
@@ -492,9 +518,8 @@ struct MemoryEditView: View {
     @ViewBuilder
     private func pingEntryRow(entry: Binding<PingEntry>) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Header with delete button
             HStack {
-                Text("🔔 Reminder \(pingEntries.firstIndex(where: { $0.id == entry.id }) .map { $0 + 1 } ?? 1)")
+                Text("🔔 Reminder \(pingEntries.firstIndex(where: { $0.id == entry.id }).map { $0 + 1 } ?? 1)")
                     .font(.custom("DMSans-Medium", size: 13))
                     .foregroundColor(.deepNavy)
                 Spacer()
@@ -507,7 +532,6 @@ struct MemoryEditView: View {
                 }
             }
 
-            // Lead time
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(PingLeadTime.allCases, id: \.self) { lead in
@@ -523,12 +547,10 @@ struct MemoryEditView: View {
                 }
             }
 
-            // Time picker
             DatePicker("Time", selection: entry.time, displayedComponents: .hourAndMinute)
                 .font(.custom("DMSans-Regular", size: 14))
                 .tint(.oceanTeal)
 
-            // Recurrence
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach([
@@ -550,7 +572,6 @@ struct MemoryEditView: View {
                 }
             }
 
-            // Fire preview
             if let date = selectedDate {
                 let fireDate = Calendar.current.date(byAdding: .day, value: -entry.wrappedValue.leadTime.days, to: date) ?? date
                 HStack(spacing: 6) {
@@ -576,6 +597,10 @@ struct MemoryEditView: View {
         let result = sonarEngine.process(text: editedText, echos: echos)
         if let echoId = result.echoId { selectedEchoId = echoId }
         if let detected = result.detectedDate { selectedDate = detected; hasDate = true }
+        if let end = result.endDate {
+            selectedEndDate = end
+            hasEndDate = true
+        }
         if let suggestion = result.pingSuggestions.first {
             var entry = PingEntry()
             entry.recurrence = suggestion.recurrence
@@ -676,9 +701,12 @@ struct MemoryEditView: View {
         selectedEchoId = memory.echoId
         selectedDate = memory.detectedDate
         hasDate = memory.detectedDate != nil
+        if let end = memory.endDate {
+            selectedEndDate = end
+            hasEndDate = true
+        }
         editedURL = memory.url ?? ""
 
-        // Load all existing pings as entries
         pingEntries = memoryPings.map { ping in
             var entry = PingEntry()
             entry.existingPingId = ping.id
@@ -696,6 +724,7 @@ struct MemoryEditView: View {
         memory.text = editedText
         memory.echoId = selectedEchoId
         memory.detectedDate = hasDate ? selectedDate : nil
+        memory.endDate = (hasDate && hasEndDate) ? selectedEndDate : nil
         memory.wasEdited = true
         memory.updatedAt = Date()
         memory.url = editedURL.isEmpty ? nil : editedURL
@@ -705,7 +734,6 @@ struct MemoryEditView: View {
             if allDone { memory.isCompleted = true; memory.completedAt = Date() }
         }
 
-        // Delete pings that were removed
         let keptIds = Set(pingEntries.compactMap { $0.existingPingId })
         for ping in memoryPings {
             if !keptIds.contains(ping.id) {
@@ -714,7 +742,6 @@ struct MemoryEditView: View {
             }
         }
 
-        // Save each ping entry
         guard hasDate, let date = selectedDate else { return }
 
         for entry in pingEntries {

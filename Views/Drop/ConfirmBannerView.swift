@@ -27,10 +27,10 @@ struct ConfirmBannerView: View {
     @State private var isFetchingRecipe = false
     @State private var recipeFetchError: String? = nil
     @State private var recipeFetchSuccess = false
+    @State private var wasCancelled = false
     
     var body: some View {
         VStack(spacing: 0) {
-            // Countdown bar
             GeometryReader { geo in
                 Rectangle()
                     .fill(Color.oceanTeal)
@@ -39,7 +39,6 @@ struct ConfirmBannerView: View {
             .frame(height: 3)
             
             VStack(spacing: 16) {
-                // Header
                 let echoName = echos.first { $0.id == selectedEchoId }?.name
                     ?? sonarResult?.echoName
                     ?? "Memory"
@@ -64,7 +63,6 @@ struct ConfirmBannerView: View {
                     
                     Spacer()
                     
-                    // Task toggle
                     Button {
                         isPaused = true
                         let generator = UIImpactFeedbackGenerator(style: .light)
@@ -74,20 +72,23 @@ struct ConfirmBannerView: View {
                         }
                     } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: isTask ? "checkmark.circle.fill" : "checkmark.circle")
+                            Image(systemName: isTask ? "checkmark.circle.fill" : "circle")
                                 .font(.system(size: 14))
-                                .foregroundColor(isTask ? .oceanTeal : .gray)
+                                .foregroundColor(isTask ? .white : .gray)
                             Text("Task")
                                 .font(.custom("DMSans-Medium", size: 13))
-                                .foregroundColor(isTask ? .oceanTeal : .gray)
+                                .foregroundColor(isTask ? .white : .gray)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(isTask ? Color.oceanTeal.opacity(0.12) : Color.mist)
+                        .background(isTask ? Color.oceanTeal : Color.mist)
                         .clipShape(Capsule())
                     }
                     
-                    Button(action: onUndo) {
+                    Button(action: {
+                        wasCancelled = true
+                        onUndo()
+                    }) {
                         Text("Undo")
                             .font(.custom("DMSans-Medium", size: 14))
                             .foregroundColor(.deepNavy)
@@ -114,7 +115,6 @@ struct ConfirmBannerView: View {
                     }
                 }
                 
-                // Transcription
                 VStack(alignment: .leading, spacing: 4) {
                     Text(transcription)
                         .font(.custom("DMSans-Regular", size: 15))
@@ -135,7 +135,6 @@ struct ConfirmBannerView: View {
                     onEdit?()
                 }
                 
-                // Echo chip + Date chip + Ping chip
                 HStack(spacing: 8) {
                     if let result = sonarResult {
                         Button {
@@ -176,13 +175,19 @@ struct ConfirmBannerView: View {
                             .clipShape(Capsule())
                         }
                         
-                        // Date chip
+                        // Date chip — shows range if endDate exists
                         if let date = result.detectedDate {
                             HStack(spacing: 4) {
                                 Text("📅").font(.system(size: 14))
-                                Text(date, format: .dateTime.month(.abbreviated).day())
-                                    .font(.custom("DMSans-Medium", size: 13))
-                                    .foregroundColor(.deepNavy)
+                                if let endDate = result.endDate {
+                                    Text("\(date.formatted(.dateTime.month(.abbreviated).day())) – \(endDate.formatted(.dateTime.month(.abbreviated).day()))")
+                                        .font(.custom("DMSans-Medium", size: 13))
+                                        .foregroundColor(.deepNavy)
+                                } else {
+                                    Text(date, format: .dateTime.month(.abbreviated).day())
+                                        .font(.custom("DMSans-Medium", size: 13))
+                                        .foregroundColor(.deepNavy)
+                                }
                                 if (result.dateConfidence ?? 0) < 0.7 {
                                     Text("?")
                                         .font(.custom("DMSans-Bold", size: 11))
@@ -198,7 +203,6 @@ struct ConfirmBannerView: View {
                             .clipShape(Capsule())
                         }
                         
-                        // Ping chip
                         if result.shouldCreatePing {
                             HStack(spacing: 4) {
                                 Text("🔔").font(.system(size: 14))
@@ -215,11 +219,10 @@ struct ConfirmBannerView: View {
                     Spacer()
                 }
                 
-                // Echo picker
                 if showEchoPicker {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
-                            ForEach(echos.sorted { $0.sortOrder < $1.sortOrder }) { echo in
+                            ForEach(echos.sorted { $0.sortOrder < $1.sortOrder }, id: \.id) { echo in
                                 Button {
                                     selectedEchoId = echo.id
                                     onEchoChanged?(echo.id)
@@ -243,7 +246,6 @@ struct ConfirmBannerView: View {
                     }
                 }
                 
-                // Recipe fetch offer
                 if sonarResult?.shouldOfferRecipeFetch == true {
                     VStack(alignment: .leading, spacing: 6) {
                         Button { fetchRecipe() } label: {
@@ -294,20 +296,16 @@ struct ConfirmBannerView: View {
         }
     }
     
-    // MARK: - Countdown
-    
     private func startCountdown() {
         withAnimation(.linear(duration: 5)) {
             countdown = 0
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-            if !isPaused {
+            if !isPaused && !wasCancelled {
                 onDone(isTask)
             }
         }
     }
-    
-    // MARK: - Fetch Recipe
     
     private func fetchRecipe() {
         let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)

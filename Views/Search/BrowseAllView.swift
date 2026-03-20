@@ -19,6 +19,9 @@ struct BrowseAllView: View {
     @State private var sortMode: SortMode = .byMonth
     @State private var selectedEchoId: UUID?
     @State private var editingMemory: Memory?
+    @State private var detailMemory: Memory?
+
+    private let calendar = Calendar.current
 
     enum SortMode: String, CaseIterable {
         case byMonth = "By Month"
@@ -46,12 +49,12 @@ struct BrowseAllView: View {
         }
     }
 
+    // MARK: - Expired Helper
     private func isExpired(_ memory: Memory) -> Bool {
-        guard let date = memory.detectedDate, date < Date() else { return false }
+        let expiryDate = memory.endDate ?? memory.detectedDate
+        guard let date = expiryDate, date < Date() else { return false }
         let memoryPings = pings.filter { $0.memoryId == memory.id }
-        // If any ping is recurring, never tint it
         if memoryPings.contains(where: { $0.recurrence != .none }) { return false }
-        // If any one-time ping fires in the future, not expired
         let hasFuturePing = memoryPings.contains { $0.fireDate > Date() }
         return !hasFuturePing
     }
@@ -195,6 +198,9 @@ struct BrowseAllView: View {
         .sheet(item: $editingMemory) { memory in
             MemoryEditView(memory: memory)
         }
+        .sheet(item: $detailMemory) { memory in
+            MemoryDetailView(memory: memory)
+        }
     }
 
     // MARK: - Memory Row
@@ -219,9 +225,15 @@ struct BrowseAllView: View {
 
                 HStack(spacing: 8) {
                     if let date = memory.detectedDate {
-                        Text(date, format: .dateTime.month(.abbreviated).day().year())
-                            .font(.custom("DMMono-Regular", size: 12))
-                            .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
+                        if let endDate = memory.endDate {
+                            Text("\(date.formatted(.dateTime.month(.abbreviated).day().year())) – \(endDate.formatted(.dateTime.month(.abbreviated).day().year()))")
+                                .font(.custom("DMMono-Regular", size: 12))
+                                .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
+                        } else {
+                            Text(date, format: .dateTime.month(.abbreviated).day().year())
+                                .font(.custom("DMMono-Regular", size: 12))
+                                .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
+                        }
                     } else {
                         Text(memory.createdAt, format: .dateTime.month(.abbreviated).day().year())
                             .font(.custom("DMMono-Regular", size: 12))
@@ -244,11 +256,18 @@ struct BrowseAllView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .listRowBackground(expired ? expiredBg : Color.white)
         .contentShape(Rectangle())
-        .onTapGesture { editingMemory = memory }
+        .onTapGesture {
+            if memory.hasChecklist || memory.text.count > 100 {
+                detailMemory = memory
+            } else {
+                editingMemory = memory
+            }
+        }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 let id = memory.id
                 modelContext.delete(memory)
+                SpotlightService.shared.removeMemory(id: memory.id)
                 Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
             } label: {
                 Label("Delete", systemImage: "trash")

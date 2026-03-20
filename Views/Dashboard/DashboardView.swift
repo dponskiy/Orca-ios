@@ -7,6 +7,8 @@
 
 import SwiftUI
 import SwiftData
+import WeatherKit
+import CoreLocation
 
 struct DashboardView: View {
     @Binding var showSearch: Bool
@@ -18,6 +20,8 @@ struct DashboardView: View {
     @State private var showUpcoming = true
     @State private var showPinned = true
     @State private var editingMemory: Memory?
+    @StateObject private var weatherService = WeatherService.shared
+    @StateObject private var locationService = LocationService.shared
 
     // MARK: - Computed Properties
 
@@ -46,15 +50,53 @@ struct DashboardView: View {
     var upcomingTasks: [Memory] {
         let now = Date()
         let window = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
-        return memories
-            .filter {
-                $0.isActionable &&
-                !$0.isCompleted &&
-                $0.detectedDate != nil &&
-                $0.detectedDate! > now &&
-                $0.detectedDate! <= window
+        
+        let withDate = memories.filter {
+            $0.isActionable &&
+            !$0.isCompleted &&
+            $0.detectedDate != nil &&
+            $0.detectedDate! > now &&
+            $0.detectedDate! <= window
+        }
+        
+        let withPing = memories.filter { memory in
+            guard !memory.isCompleted else { return false }
+            guard !withDate.contains(where: { $0.id == memory.id }) else { return false }
+            return pings.contains { ping in
+                guard ping.memoryId == memory.id && ping.isActive else { return false }
+                if ping.recurrence != .none {
+                    let completedToday = memory.completedAt.map {
+                        Calendar.current.isDate($0, inSameDayAs: Date())
+                    } ?? false
+                    if completedToday { return false }
+                    // For yearly pings check if next occurrence is within window
+                    if ping.recurrence == .yearly {
+                        let cal = Calendar.current
+                        var components = cal.dateComponents([.month, .day], from: ping.fireDate)
+                        components.year = cal.component(.year, from: now)
+                        var nextFire = cal.date(from: components) ?? ping.fireDate
+                        if nextFire < now {
+                            nextFire = cal.date(byAdding: .year, value: 1, to: nextFire) ?? nextFire
+                        }
+                        return nextFire <= window
+                    }
+                    return true
+                }
+                return ping.fireDate > now && ping.fireDate <= window
             }
-            .sorted { $0.detectedDate! < $1.detectedDate! }
+        }
+        func soonestDate(for memory: Memory) -> Date {
+            let pingDate = pings
+                .filter { $0.memoryId == memory.id && $0.isActive && $0.fireDate > now }
+                .map { $0.fireDate }
+                .min()
+            let dates = [memory.detectedDate, pingDate].compactMap { $0 }
+            return dates.min() ?? memory.createdAt
+        }
+        
+        return Array((withDate + withPing)
+            .sorted { soonestDate(for: $0) < soonestDate(for: $1) }
+            .prefix(3))
     }
 
     private var cleanUpCount: Int {
@@ -77,16 +119,15 @@ struct DashboardView: View {
     }
 
     // MARK: - Expired helper
+    // MARK: - Expired helper
     private func isExpired(_ memory: Memory) -> Bool {
-        guard let date = memory.detectedDate, date < Date() else { return false }
+        let expiryDate = memory.endDate ?? memory.detectedDate
+        guard let date = expiryDate, date < Date() else { return false }
         let memoryPings = pings.filter { $0.memoryId == memory.id }
-        // If any ping is recurring, never tint it
         if memoryPings.contains(where: { $0.recurrence != .none }) { return false }
-        // If any one-time ping fires in the future, not expired
         let hasFuturePing = memoryPings.contains { $0.fireDate > Date() }
         return !hasFuturePing
     }
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -94,23 +135,35 @@ struct DashboardView: View {
                     // Header
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(greeting)
-                                .font(.custom("InstrumentSerif-Regular", size: 28))
-                                .foregroundColor(.deepNavy)
+                            HStack(spacing: 8) {
+                                Text(greeting)
+                                    .font(.custom("InstrumentSerif-Regular", size: 28))
+                                    .foregroundColor(.deepNavy)
+                                Spacer()
+                                // Weather
+                                if !weatherService.temperature.isEmpty {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: weatherService.symbolName)
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.oceanTeal)
+                                        Text(weatherService.temperature)
+                                            .font(.custom("DMMono-Regular", size: 14))
+                                            .foregroundColor(.deepNavy)
+                                    }
+                                }
+                                NavigationLink(destination: SettingsView()) {
+                                    ZStack {
+                                        Circle().fill(Color.mist).frame(width: 36, height: 36)
+                                        Image(systemName: "person").font(.system(size: 15)).foregroundColor(.oceanTeal)
+                                    }
+                                }
+                            }
                             let activeCount = displayedEchos.filter { echo in
                                 memories.contains { $0.echoId == echo.id }
                             }.count
-
-                            Text("\(memories.count) memories across \(activeCount) \(activeCount == 1 ? "Echo" : "Echos")")
+                            Text("\(memories.count) \(memories.count == 1 ? "memory" : "memories") across \(activeCount) \(activeCount == 1 ? "Echo" : "Echos")")
                                 .font(.custom("DMSans-Regular", size: 14))
                                 .foregroundColor(.gray)
-                        }
-                        Spacer()
-                        NavigationLink(destination: SettingsView()) {
-                            ZStack {
-                                Circle().fill(Color.mist).frame(width: 36, height: 36)
-                                Image(systemName: "person").font(.system(size: 15)).foregroundColor(.oceanTeal)
-                            }
                         }
                     }
 
@@ -229,9 +282,17 @@ struct DashboardView: View {
             }
             .background(Color.pearl)
             .onAppear {
-                seedDefaultEchos()
                 showUpcoming = true
                 showPinned = true
+                if let location = locationService.location {
+                    Task { await weatherService.fetchWeather(for: location) }
+                }
+                locationService.requestLocation()
+            }
+            .onChange(of: locationService.location) { _, location in
+                if let location = location {
+                    Task { await weatherService.fetchWeather(for: location) }
+                }
             }
             .sheet(isPresented: $showCreateEcho) { CreateEchoView() }
             .sheet(item: $editingMemory) { memory in MemoryEditView(memory: memory) }
@@ -299,14 +360,44 @@ struct DashboardView: View {
                     .foregroundColor(expired ? .gray : .deepNavy)
                     .lineLimit(2)
 
-                if let date = memory.detectedDate {
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 10))
-                            .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
-                        Text(date, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
-                            .font(.custom("DMMono-Regular", size: 12))
-                            .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
+                let activePing = pings.first(where: { $0.memoryId == memory.id && $0.isActive })
+                let displayDate: Date? = {
+                    if let ping = activePing {
+                        if ping.recurrence == .daily {
+                            // Show tomorrow if already completed today
+                            let completedToday = memory.completedAt.map {
+                                Calendar.current.isDate($0, inSameDayAs: Date())
+                            } ?? false
+                            let base = completedToday ?
+                                (Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()) :
+                                Date()
+                            return base
+                        }
+                        return ping.recurrence != .none ? ping.fireDate : ping.fireDate
+                    }
+                    return memory.detectedDate
+                }()
+
+                if let date = displayDate {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 10))
+                                .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
+                            Text(date, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+                                .font(.custom("DMMono-Regular", size: 12))
+                                .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
+                        }
+                        let daysUntil = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()), to: Calendar.current.startOfDay(for: date)).day ?? 0
+                        if daysUntil == 0 {
+                            Text("Today")
+                                .font(.custom("DMSans-Medium", size: 11))
+                                .foregroundColor(.coral)
+                        } else if daysUntil > 0 {
+                            Text("in \(daysUntil) \(daysUntil == 1 ? "day" : "days")")
+                                .font(.custom("DMSans-Medium", size: 11))
+                                .foregroundColor(.oceanTeal.opacity(0.7))
+                        }
                     }
                 }
             }
@@ -358,19 +449,16 @@ struct DashboardView: View {
     // MARK: - Pending Count
     private func pendingCountFor(echo: Echo) -> Int {
         let echoMemories = memories.filter { $0.echoId == echo.id }
+        let now = Date()
         var count = 0
         for memory in echoMemories {
-            if memory.isActionable && !memory.isCompleted {
-                if let date = memory.detectedDate,
-                   date <= Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()) {
-                    count += 1
-                    continue
-                }
-            }
+            guard memory.isActionable && !memory.isCompleted else { continue }
+            // Only count if there's a ping firing today
             let memoryPings = pings.filter { $0.memoryId == memory.id && $0.isActive }
             for ping in memoryPings {
-                if Calendar.current.isDate(ping.fireDate, inSameDayAs: Date()) {
+                if Calendar.current.isDate(ping.fireDate, inSameDayAs: now) {
                     count += 1
+                    break
                 }
             }
         }

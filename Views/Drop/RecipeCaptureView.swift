@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import CoreSpotlight
 
 struct RecipeCaptureView: View {
     @Binding var isPresented: Bool
@@ -19,6 +20,7 @@ struct RecipeCaptureView: View {
     @State private var urlText: String = ""
     @State private var isFetching = false
     @State private var errorMessage: String? = nil
+    @State private var savedMemory: Memory? = nil
     @FocusState private var urlFocused: Bool
 
     var body: some View {
@@ -128,6 +130,12 @@ struct RecipeCaptureView: View {
                 }
             }
             .onAppear { urlFocused = true }
+            .sheet(item: $savedMemory, onDismiss: {
+                isPresented = false
+                onComplete?("Recipe saved to Cooking 👨‍🍳")
+            }) { memory in
+                MemoryDetailView(memory: memory)
+            }
         }
     }
 
@@ -179,6 +187,7 @@ struct RecipeCaptureView: View {
         memory.hasChecklist = !recipe.ingredients.isEmpty
 
         modelContext.insert(memory)
+        SpotlightService.shared.indexMemory(memory, echoName: cookingEcho?.name ?? "Cooking", echoEmoji: cookingEcho?.emoji ?? "🍳")
 
         for (index, ingredient) in recipe.ingredients.enumerated() {
             let subTask = SubTask(memoryId: memory.id, text: ingredient, sortOrder: index)
@@ -192,7 +201,6 @@ struct RecipeCaptureView: View {
         }
 
         isFetching = false
-        isPresented = false
-        onComplete?("Recipe saved to \(cookingEcho?.name ?? "Cooking") 👨‍🍳")
+        savedMemory = memory
     }
 }

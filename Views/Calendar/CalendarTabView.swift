@@ -7,6 +7,8 @@
 
 import SwiftUI
 import SwiftData
+import WeatherKit
+import CoreLocation
 
 struct CalendarTabView: View {
     @Query(sort: \Memory.createdAt, order: .reverse) private var memories: [Memory]
@@ -20,6 +22,8 @@ struct CalendarTabView: View {
     @State private var editingMemory: Memory?
     @State private var snoozeMemory: Memory?
     @State private var showSnoozeSheet = false
+    @StateObject private var weatherService = WeatherService.shared
+    @StateObject private var locationService = LocationService.shared
 
     private let calendar = Calendar.current
     private let daysOfWeek = ["S", "M", "T", "W", "T", "F", "S"]
@@ -27,11 +31,10 @@ struct CalendarTabView: View {
     // MARK: - Expired Helper
 
     private func isExpired(_ memory: Memory) -> Bool {
-        guard let date = memory.detectedDate, date < Date() else { return false }
+        let expiryDate = memory.endDate ?? memory.detectedDate
+        guard let date = expiryDate, date < Date() else { return false }
         let memoryPings = pings.filter { $0.memoryId == memory.id }
-        // If any ping is recurring, never tint it
         if memoryPings.contains(where: { $0.recurrence != .none }) { return false }
-        // If any one-time ping fires in the future, not expired
         let hasFuturePing = memoryPings.contains { $0.fireDate > Date() }
         return !hasFuturePing
     }
@@ -41,6 +44,10 @@ struct CalendarTabView: View {
     private var selectedDateMemories: [Memory] {
         memories.filter { memory in
             guard let detected = memory.detectedDate else { return false }
+            if let endDate = memory.endDate {
+                return selectedDate >= calendar.startOfDay(for: detected) &&
+                       selectedDate <= calendar.startOfDay(for: endDate)
+            }
             return calendar.isDate(detected, inSameDayAs: selectedDate)
         }
         .sorted {
@@ -53,7 +60,10 @@ struct CalendarTabView: View {
     private var selectedDatePings: [Ping] {
         pings.filter { ping in
             guard ping.isActive,
-                  let _ = memories.first(where: { $0.id == ping.memoryId }) else { return false }
+                  let memory = memories.first(where: { $0.id == ping.memoryId }) else { return false }
+
+            // Don't show if memory already appears in selectedDateMemories
+            if selectedDateMemories.contains(where: { $0.id == memory.id }) { return false }
 
             if calendar.isDate(ping.fireDate, inSameDayAs: selectedDate) { return true }
 
@@ -89,6 +99,17 @@ struct CalendarTabView: View {
             .background(Color.pearl)
             .navigationTitle("Calendar")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if let location = locationService.location {
+                    Task { await weatherService.fetchWeather(for: location) }
+                }
+                locationService.requestLocation()
+            }
+            .onChange(of: locationService.location) { _, location in
+                if let location = location {
+                    Task { await weatherService.fetchWeather(for: location) }
+                }
+            }
             .sheet(item: $editingMemory) { memory in MemoryEditView(memory: memory) }
             .sheet(isPresented: $showSnoozeSheet) {
                 if let memory = snoozeMemory {
@@ -198,6 +219,10 @@ struct CalendarTabView: View {
 
         let hasMemories = memories.contains { memory in
             guard let detected = memory.detectedDate else { return false }
+            if let endDate = memory.endDate {
+                return date >= calendar.startOfDay(for: detected) &&
+                       date <= calendar.startOfDay(for: endDate)
+            }
             return calendar.isDate(detected, inSameDayAs: date)
         }
 
@@ -283,6 +308,21 @@ struct CalendarTabView: View {
                         .foregroundColor(.deepNavy)
                 }
                 Spacer()
+                if calendar.isDateInToday(selectedDate) && !weatherService.temperature.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: weatherService.symbolName)
+                            .font(.system(size: 12))
+                            .foregroundColor(.oceanTeal)
+                        Text(weatherService.temperature)
+                            .font(.custom("DMMono-Regular", size: 12))
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white)
+                    .clipShape(Capsule())
+                    .shadow(color: .black.opacity(0.04), radius: 4, y: 1)
+                }
                 let total = selectedDateMemories.count + selectedDatePings.count
                 if total > 0 {
                     Text("\(total) \(total == 1 ? "item" : "items")")
@@ -300,7 +340,7 @@ struct CalendarTabView: View {
                     Image(systemName: "calendar")
                         .font(.system(size: 32))
                         .foregroundColor(.gray.opacity(0.3))
-                    Text("Nothing on this day")
+                    Text("No memories today")
                         .font(.custom("DMSans-Regular", size: 15))
                         .foregroundColor(.gray)
                 }
@@ -317,6 +357,7 @@ struct CalendarTabView: View {
                                     Button(role: .destructive) {
                                         let id = memory.id
                                         modelContext.delete(memory)
+                                        SpotlightService.shared.removeMemory(id: id)
                                         Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
                                     } label: {
                                         Label("Delete", systemImage: "trash")
@@ -335,6 +376,7 @@ struct CalendarTabView: View {
                                 Button(role: .destructive) {
                                     let id = memory.id
                                     modelContext.delete(memory)
+                                    SpotlightService.shared.removeMemory(id: id)
                                     Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
                                 } label: {
                                     Label("Delete", systemImage: "trash")
@@ -361,7 +403,6 @@ struct CalendarTabView: View {
                     withAnimation(.spring(duration: 0.3)) {
                         let memoryPings = pings.filter { $0.memoryId == memory.id }
                         let isRecurring = memoryPings.contains { $0.recurrence != .none }
-
                         if isRecurring {
                             let completedToday = memory.completedAt.map {
                                 calendar.isDate($0, inSameDayAs: selectedDate)
@@ -387,7 +428,6 @@ struct CalendarTabView: View {
                         calendar.isDate($0, inSameDayAs: selectedDate)
                     } ?? false
                     let showChecked = memory.isCompleted || completedToday
-
                     if showChecked {
                         ZStack {
                             Circle().fill(Color.oceanTeal).frame(width: 24, height: 24)
@@ -397,6 +437,7 @@ struct CalendarTabView: View {
                         Circle().stroke(Color.oceanTeal, lineWidth: 2).frame(width: 24, height: 24)
                     }
                 }
+                .buttonStyle(.plain)
             } else if let echo = echos.first(where: { $0.id == memory.echoId }) {
                 Text(echo.emoji)
                     .font(.system(size: 16))
@@ -424,11 +465,24 @@ struct CalendarTabView: View {
                         .background(Color.mist)
                         .clipShape(Capsule())
                     }
-
                     if let date = memory.detectedDate {
                         Text(date, format: .dateTime.hour().minute())
                             .font(.custom("DMMono-Regular", size: 12))
                             .foregroundColor(expired ? .gray.opacity(0.5) : .gray)
+                    }
+                    if pings.contains(where: {
+                        $0.memoryId == memory.id &&
+                        $0.isActive &&
+                        calendar.isDate($0.fireDate, inSameDayAs: selectedDate)
+                    }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "bell.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(.oceanTeal)
+                            Text("Ping")
+                                .font(.custom("DMMono-Regular", size: 11))
+                                .foregroundColor(.oceanTeal)
+                        }
                     }
                 }
             }
@@ -482,7 +536,6 @@ struct CalendarTabView: View {
                     Text(ping.fireTime, format: .dateTime.hour().minute())
                         .font(.custom("DMMono-Regular", size: 12))
                         .foregroundColor(.gray)
-
                     if ping.recurrence != .none {
                         Text(ping.recurrence.rawValue.capitalized)
                             .font(.custom("DMMono-Regular", size: 11))

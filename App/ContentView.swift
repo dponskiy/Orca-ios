@@ -16,11 +16,20 @@ struct ContentView: View {
     @State private var showSearch = false
     @State private var showScreenshot = false
     @State private var showToast = false
+    @State private var showRecipe = false
     @State private var toastMessage = ""
     
     var body: some View {
         ZStack {
-            TabView(selection: $selectedTab) {
+            TabView(selection: Binding(
+                get: { selectedTab },
+                set: { newTab in
+                    if newTab == 0 {
+                        NotificationCenter.default.post(name: .resetToToday, object: nil)
+                    }
+                    selectedTab = newTab
+                }
+            )) {
                 TodayView()
                     .tabItem {
                         Image(systemName: "checkmark.circle")
@@ -54,14 +63,18 @@ struct ContentView: View {
                         showDrawer = true
                     }
                     
-                    Image(systemName: "chevron.up")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.oceanTeal.opacity(0.8))
-                        .phaseAnimator([0.4, 0.8]) { view, opacity in
-                            view.opacity(opacity)
-                        } animation: { _ in
-                            .easeInOut(duration: 1.2)
-                        }
+                    HStack(spacing: 3) {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("swipe up")
+                            .font(.custom("DMSans-Medium", size: 11))
+                    }
+                    .foregroundColor(.oceanTeal)
+                    .phaseAnimator([0.5, 1.0]) { view, opacity in
+                        view.opacity(opacity)
+                    } animation: { _ in
+                        .easeInOut(duration: 1.2)
+                    }
                 }
                 .padding(.bottom, 70)
             }
@@ -81,6 +94,7 @@ struct ContentView: View {
                             case .voice: showDrop = true
                             case .typed: showTyped = true
                             case .screenshot: showScreenshot = true
+                            case .recipe: showRecipe = true
                             }
                         },
                         onCancel: { showDrawer = false }
@@ -114,6 +128,19 @@ struct ContentView: View {
         .animation(.spring(duration: 0.3), value: showDrawer)
         .fullScreenCover(isPresented: $showDrop) {
             DropOverlayView(isPresented: $showDrop) { message in
+                toastMessage = message
+                withAnimation(.spring(duration: 0.4)) {
+                    showToast = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        showToast = false
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showRecipe) {
+            RecipeCaptureView(isPresented: $showRecipe) { message in
                 toastMessage = message
                 withAnimation(.spring(duration: 0.4)) {
                     showToast = true

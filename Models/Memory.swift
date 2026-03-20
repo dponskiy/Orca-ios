@@ -15,6 +15,7 @@ class Memory {
     var echoId: UUID
     var tags: [String] = []
     var detectedDate: Date?
+    var endDate: Date?
     var imageData: Data?
     var captureType: CaptureType = CaptureType.voice
     var sonarConfidence: Double = 1.0
@@ -29,7 +30,7 @@ class Memory {
     var syncStatus: SyncStatus = SyncStatus.pending
     var isPinned: Bool = false
     var url: String?
-        var hasChecklist: Bool = false
+    var hasChecklist: Bool = false
     
     enum CaptureType: String, Codable {
         case voice, screenshot, typed

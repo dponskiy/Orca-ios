@@ -84,6 +84,7 @@ struct OrcaShortcuts: AppShortcutsProvider {
 
 extension Notification.Name {
     @MainActor static let openDropOverlay = Notification.Name("openDropOverlay")
+    @MainActor static let resetToToday = Notification.Name("resetToToday")
     @MainActor static let openTypeCapture = Notification.Name("openTypeCapture")
     @MainActor static let openScreenshotCapture = Notification.Name("openScreenshotCapture")
 }

@@ -7,6 +7,8 @@
 
 import SwiftUI
 import SwiftData
+import UserNotifications
+import CoreSpotlight
 
 @main
 struct OrcaApp: App {
@@ -38,8 +40,8 @@ struct OrcaApp: App {
             .onChange(of: authService.userId) { _, newUserId in
                 if let userId = newUserId {
                     SupabaseSyncService.shared.configure(modelContext: modelContainer.mainContext)
-                    SupabaseSyncService.shared.stopAutoSync() // cancel any existing
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    SupabaseSyncService.shared.stopAutoSync()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         SupabaseSyncService.shared.startAutoSync(userId: userId)
                     }
                 } else {
@@ -49,39 +51,27 @@ struct OrcaApp: App {
             .preferredColorScheme(.light)
             .onAppear {
                 AnalyticsService.shared.initialize()
-                seedNewEchosIfNeeded()
-
+                requestNotificationPermission()
+                LocationService.shared.requestLocation()
                 let validPingIds = (try? modelContainer.mainContext.fetch(FetchDescriptor<Ping>()))?.map { $0.id } ?? []
                 NotificationService.shared.cancelOrphanedNotifications(validPingIds: validPingIds)
+            }
+            .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                if let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
+                    print("✅ Spotlight deep link: \(identifier)")
+                    NotificationCenter.default.post(name: .openDropOverlay, object: nil)
+                }
             }
         }
         .modelContainer(modelContainer)
     }
     
-    private func seedNewEchosIfNeeded() {
-        let context = modelContainer.mainContext
-        
-        Echo.seedDefaults(context: context)
-        
-        let newDefaults: [(String, String, Int)] = [
-            ("Birthday", "🎂", 2),
-            ("Events", "🎉", 8),
-            ("School", "📚", 11),
-            ("Holidays", "🎄", 15),
-            ("Movies", "🎬", 18),
-            ("Books", "📖", 19),
-            ("Clothes", "👕", 21),
-            ("Notes", "📝", 22)
-        ]
-        
-        for (name, emoji, order) in newDefaults {
-            let descriptor = FetchDescriptor<Echo>(predicate: #Predicate { echo in
-                echo.name == name
-            })
-            let exists = (try? context.fetchCount(descriptor)) ?? 0
-            if exists == 0 {
-                let echo = Echo(name: name, emoji: emoji, sortOrder: order)
-                context.insert(echo)
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if granted {
+                print("✅ Notifications granted")
+            } else {
+                print("❌ Notifications denied: \(String(describing: error))")
             }
         }
     }

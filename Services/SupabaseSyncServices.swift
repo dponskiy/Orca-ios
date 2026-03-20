@@ -107,8 +107,6 @@ class SupabaseSyncService {
     // MARK: - Sync Echos
     
     private func syncEchos(userId: UUID, context: ModelContext) async throws {
-        let localEchos = try context.fetch(FetchDescriptor<Echo>())
-        
         // PULL FIRST — get remote echos
         let remoteEchos: [EchoRow] = try await supabase
             .from("echos")
@@ -116,14 +114,49 @@ class SupabaseSyncService {
             .eq("user_id", value: userId.uuidString)
             .execute()
             .value
-        
-        // Merge remote into local — match by name to avoid dupes
+
+        let localEchos = try context.fetch(FetchDescriptor<Echo>())
+
+        if remoteEchos.isEmpty {
+            // First time user — seed defaults locally and push to Supabase in one shot
+            if localEchos.isEmpty {
+                Echo.seedDefaults(context: context)
+            }
+            try context.save()
+            let seededEchos = try context.fetch(FetchDescriptor<Echo>())
+            let echoRows = seededEchos.map { echo in
+                EchoRow(
+                    id: echo.id.uuidString,
+                    user_id: userId.uuidString,
+                    name: echo.name,
+                    emoji: echo.emoji,
+                    is_default: echo.isDefault,
+                    sort_order: echo.sortOrder,
+                    created_at: ISO8601DateFormatter().string(from: echo.createdAt)
+                )
+            }
+            if !echoRows.isEmpty {
+                try await supabase
+                    .from("echos")
+                    .upsert(echoRows, onConflict: "id")
+                    .execute()
+            }
+            print("✅ Echos seeded and pushed for new user")
+            return
+        }
+
+        // Remote has echos — merge into local by name, don't create duplicates
         for remote in remoteEchos {
             guard let remoteId = UUID(uuidString: remote.id) else { continue }
-            
-            // Already exists by ID — skip
-            if localEchos.contains(where: { $0.id == remoteId }) { continue }
-            
+
+            // Already exists by ID — update name/emoji in case they changed
+            if let existing = localEchos.first(where: { $0.id == remoteId }) {
+                existing.name = remote.name
+                existing.emoji = remote.emoji
+                existing.sortOrder = remote.sort_order
+                continue
+            }
+
             // Same name exists locally — update its ID to match remote
             if let nameMatch = localEchos.first(where: { $0.name == remote.name }) {
                 nameMatch.id = remoteId
@@ -131,7 +164,7 @@ class SupabaseSyncService {
                 nameMatch.sortOrder = remote.sort_order
                 continue
             }
-            
+
             // Truly new echo from remote — insert it
             let echo = Echo(
                 name: remote.name,
@@ -142,31 +175,32 @@ class SupabaseSyncService {
             echo.id = remoteId
             context.insert(echo)
         }
-        
+
         try context.save()
-        
-        // PUSH — now push merged local echos to Supabase
+
+        // PUSH only echos that don't exist in remote yet
         let mergedEchos = try context.fetch(FetchDescriptor<Echo>())
-        let echoRows = mergedEchos.reduce(into: [EchoRow]()) { result, echo in
-            guard !result.contains(where: { $0.id == echo.id.uuidString }) else { return }
-            result.append(EchoRow(
-                id: echo.id.uuidString,
-                user_id: userId.uuidString,
-                name: echo.name,
-                emoji: echo.emoji,
-                is_default: echo.isDefault,
-                sort_order: echo.sortOrder,
-                created_at: ISO8601DateFormatter().string(from: echo.createdAt)
-            ))
-        }
-        
-        if !echoRows.isEmpty {
+        let remoteIds = Set(remoteEchos.map { $0.id })
+        let newLocalEchos = mergedEchos.filter { !remoteIds.contains($0.id.uuidString) }
+
+        if !newLocalEchos.isEmpty {
+            let echoRows = newLocalEchos.map { echo in
+                EchoRow(
+                    id: echo.id.uuidString,
+                    user_id: userId.uuidString,
+                    name: echo.name,
+                    emoji: echo.emoji,
+                    is_default: echo.isDefault,
+                    sort_order: echo.sortOrder,
+                    created_at: ISO8601DateFormatter().string(from: echo.createdAt)
+                )
+            }
             try await supabase
                 .from("echos")
                 .upsert(echoRows, onConflict: "id")
                 .execute()
         }
-        
+
         print("✅ Echos synced")
     }
     
@@ -184,6 +218,7 @@ class SupabaseSyncService {
                 echo_id: memory.echoId.uuidString,
                 tags: memory.tags,
                 detected_date: memory.detectedDate.map { ISO8601DateFormatter().string(from: $0) },
+                end_date: memory.endDate.map { ISO8601DateFormatter().string(from: $0) },
                 capture_type: memory.captureType.rawValue,
                 sonar_confidence: memory.sonarConfidence,
                 echo_confidence: memory.echoConfidence,
@@ -232,6 +267,9 @@ class SupabaseSyncService {
             
             if let dateStr = remote.detected_date {
                 memory.detectedDate = ISO8601DateFormatter().date(from: dateStr)
+            }
+            if let endDateStr = remote.end_date {
+                memory.endDate = ISO8601DateFormatter().date(from: endDateStr)
             }
             if let completedStr = remote.completed_at {
                 memory.completedAt = ISO8601DateFormatter().date(from: completedStr)
@@ -341,6 +379,7 @@ class SupabaseSyncService {
             echo_id: memory.echoId.uuidString,
             tags: memory.tags,
             detected_date: memory.detectedDate.map { ISO8601DateFormatter().string(from: $0) },
+            end_date: memory.endDate.map { ISO8601DateFormatter().string(from: $0) },
             capture_type: memory.captureType.rawValue,
             sonar_confidence: memory.sonarConfidence,
             echo_confidence: memory.echoConfidence,
@@ -461,6 +500,7 @@ struct MemoryRow: Codable {
     let echo_id: String
     let tags: [String]
     let detected_date: String?
+    let end_date: String?
     let capture_type: String?
     let sonar_confidence: Double
     let echo_confidence: Double

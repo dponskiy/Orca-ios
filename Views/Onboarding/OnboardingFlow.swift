@@ -27,21 +27,25 @@ struct OnboardingFlow: View {
                 step = 2
             })
             case 2: ThoughtBubblesScreen(onNext: {
-                AnalyticsService.shared.trackOnboardingStepViewed(step: 3, name: "First Drop")
+                AnalyticsService.shared.trackOnboardingStepViewed(step: 3, name: "Recipe URL")
                 step = 3
             })
-            case 3: FirstDropScreen(
+            case 3: RecipeURLScreen(onNext: {
+                AnalyticsService.shared.trackOnboardingStepViewed(step: 4, name: "First Drop")
+                step = 4
+            })
+            case 4: FirstDropScreen(
                 onNext: {
-                    AnalyticsService.shared.trackOnboardingStepViewed(step: 4, name: "Notifications")
-                    step = 4
+                    AnalyticsService.shared.trackOnboardingStepViewed(step: 5, name: "Notifications")
+                    step = 5
                 },
                 onMemorySaved: { text in firstMemoryText = text }
             )
-            case 4: NotificationsScreen(onNext: {
-                AnalyticsService.shared.trackOnboardingStepViewed(step: 5, name: "All Set")
-                step = 5
+            case 5: NotificationsScreen(onNext: {
+                AnalyticsService.shared.trackOnboardingStepViewed(step: 6, name: "All Set")
+                step = 6
             }, memoryText: firstMemoryText)
-            case 5: AllSetScreen(onDone: {
+            case 6: AllSetScreen(onDone: {
                 AnalyticsService.shared.trackOnboardingCompleted(droppedFirstMemory: !firstMemoryText.isEmpty)
                 hasCompletedOnboarding = true
             })
@@ -49,44 +53,44 @@ struct OnboardingFlow: View {
                 hasCompletedOnboarding = true
             })
             }
-            
-            if step > 0 && step < 5 {
-                            HStack {
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.4)) {
-                                        step -= 1
-                                    }
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "chevron.left")
-                                            .font(.system(size: 12, weight: .medium))
-                                        Text("Back")
-                                            .font(.custom("DMSans-Regular", size: 14))
-                                    }
-                                    .foregroundColor(.white.opacity(0.35))
-                                }
-                                
-                                Spacer()
-                                
-                                Button {
-                                    AnalyticsService.shared.trackOnboardingSkipped(atStep: step)
-                                    hasCompletedOnboarding = true
-                                } label: {
-                                    Text("Skip")
-                                        .font(.custom("DMSans-Regular", size: 14))
-                                        .foregroundColor(.white.opacity(0.35))
-                                }
-                            }
-                            .padding(.horizontal, 28)
-                            .padding(.bottom, 16)
+
+            if step > 0 && step < 6 {
+                HStack {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            step -= 1
                         }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 12, weight: .medium))
+                            Text("Back")
+                                .font(.custom("DMSans-Regular", size: 14))
+                        }
+                        .foregroundColor(.white.opacity(0.35))
                     }
-                    .animation(.easeInOut(duration: 0.4), value: step)
-                    .onAppear {
-                        AnalyticsService.shared.trackOnboardingStarted()
-                        AnalyticsService.shared.trackOnboardingStepViewed(step: 0, name: "Splash")
+
+                    Spacer()
+
+                    Button {
+                        AnalyticsService.shared.trackOnboardingSkipped(atStep: step)
+                        hasCompletedOnboarding = true
+                    } label: {
+                        Text("Skip")
+                            .font(.custom("DMSans-Regular", size: 14))
+                            .foregroundColor(.white.opacity(0.35))
                     }
                 }
+                .padding(.horizontal, 28)
+                .padding(.bottom, 16)
+            }
+        }
+        .animation(.easeInOut(duration: 0.4), value: step)
+        .onAppear {
+            AnalyticsService.shared.trackOnboardingStarted()
+            AnalyticsService.shared.trackOnboardingStepViewed(step: 0, name: "Splash")
+        }
+    }
     
     // MARK: - Splash
     
@@ -192,7 +196,7 @@ struct OnboardingFlow: View {
         @State private var itemsVisible = false
         
         let features: [(String, String, String)] = [
-            ("mic.fill", "Drop it in seconds", "Voice, text, or screenshot — Orca captures anything in under 5 seconds."),
+            ("mic.fill", "Drop it in seconds", "Voice, text, URL or screenshot — Orca captures anything in under 5 seconds."),
             ("sparkles", "Sonar sorts it", "Orca reads what you said and files it in the right place automatically."),
             ("bell.fill", "Pings bring it back", "Set it and forget it. Orca reminds you exactly when it matters."),
         ]
@@ -296,7 +300,7 @@ struct OnboardingFlow: View {
             ("🎂", "Mom's birthday August 15"),
             ("📶", "WiFi: BlueMountain2024"),
             ("✈️", "London Arcade Bar: NQ64 Arcade Bar"),
-            ("🍳", "NYT recipe — paste URL to import"),
+            ("🍳", "Paste a recipe URL → ingredients auto-imported"),
             ("🐾", "Dog heartworm pill every 1st"),
             ("🍽️", "Carbone — try the lamb chops"),
             ("👕", "Tux Size 40R"),
@@ -421,6 +425,192 @@ struct OnboardingFlow: View {
         }
     }
     
+    // MARK: - Recipe URL Demo
+
+    struct RecipeURLScreen: View {
+        let onNext: () -> Void
+        @State private var contentVisible = false
+        @State private var showURL = false
+        @State private var showArrow = false
+        @State private var showCard = false
+        @State private var checkItem1 = false
+        @State private var checkItem2 = false
+        @State private var checkItem3 = false
+
+        var body: some View {
+            ZStack {
+                LinearGradient(
+                    colors: [Color(hex: "0B1D33"), Color(hex: "1A3A5C")],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    Spacer().frame(height: 60)
+
+                    VStack(spacing: 8) {
+                        Text("Save recipes in seconds")
+                            .font(.custom("DMSans-Medium", size: 28))
+                            .foregroundColor(.white)
+                        Text("Paste any recipe URL and Orca imports\ningredients and instructions automatically.")
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.white.opacity(0.5))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 28)
+                    }
+                    .opacity(contentVisible ? 1 : 0)
+                    .animation(.easeOut(duration: 0.4), value: contentVisible)
+
+                    Spacer()
+
+                    VStack(spacing: 16) {
+                        // URL input mock
+                        HStack(spacing: 10) {
+                            Image(systemName: "link")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white.opacity(0.5))
+                            Text("https://nytcooking.com/recipes/...")
+                                .font(.custom("DMSans-Regular", size: 14))
+                                .foregroundColor(.white.opacity(0.7))
+                            Spacer()
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.oceanTeal)
+                                    .frame(width: 32, height: 32)
+                                Image(systemName: "arrow.down")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .padding(14)
+                        .background(.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.15), lineWidth: 1))
+                        .opacity(showURL ? 1 : 0)
+                        .offset(y: showURL ? 0 : 10)
+                        .animation(.easeOut(duration: 0.4), value: showURL)
+
+                        // Arrow
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundColor(.oceanTeal)
+                            .opacity(showArrow ? 1 : 0)
+                            .animation(.easeOut(duration: 0.3), value: showArrow)
+
+                        // Recipe card
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 10) {
+                                Text("🍽")
+                                    .font(.system(size: 24))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Sheet-Pan Chicken Tikka")
+                                        .font(.custom("DMSans-Medium", size: 15))
+                                        .foregroundColor(.deepNavy)
+                                    Text("Prep: 15m · Cook: 30m · Serves: 4")
+                                        .font(.custom("DMMono-Regular", size: 11))
+                                        .foregroundColor(.gray)
+                                }
+                                Spacer()
+                                Text("🍳")
+                                    .font(.system(size: 16))
+                                    .padding(6)
+                                    .background(Color.mist)
+                                    .clipShape(Capsule())
+                            }
+
+                            Divider()
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("INGREDIENTS")
+                                    .font(.custom("DMSans-Medium", size: 11))
+                                    .foregroundColor(.oceanTeal)
+                                    .tracking(1)
+
+                                ingredientRow(text: "1 kg chicken thighs", checked: checkItem1)
+                                    .opacity(showCard ? 1 : 0)
+                                    .animation(.easeOut(duration: 0.3).delay(0.1), value: showCard)
+                                ingredientRow(text: "2 tbsp tikka masala paste", checked: checkItem2)
+                                    .opacity(showCard ? 1 : 0)
+                                    .animation(.easeOut(duration: 0.3).delay(0.2), value: showCard)
+                                ingredientRow(text: "200ml coconut cream", checked: checkItem3)
+                                    .opacity(showCard ? 1 : 0)
+                                    .animation(.easeOut(duration: 0.3).delay(0.3), value: showCard)
+                            }
+                        }
+                        .padding(16)
+                        .background(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+                        .opacity(showCard ? 1 : 0)
+                        .offset(y: showCard ? 0 : 20)
+                        .animation(.spring(duration: 0.5, bounce: 0.3), value: showCard)
+                    }
+                    .padding(.horizontal, 28)
+
+                    Spacer()
+
+                    Button {
+                        onNext()
+                    } label: {
+                        Text("Nice, let's continue")
+                            .font(.custom("DMSans-Medium", size: 17))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                LinearGradient(
+                                    colors: [.oceanTeal, .seafoam],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .shadow(color: .oceanTeal.opacity(0.4), radius: 12, y: 4)
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 52)
+                    .opacity(showCard ? 1 : 0)
+                    .animation(.easeOut(duration: 0.4).delay(0.4), value: showCard)
+                }
+            }
+            .onAppear {
+                contentVisible = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { showURL = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { showArrow = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { showCard = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                    withAnimation(.spring(duration: 0.3)) { checkItem1 = true }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    withAnimation(.spring(duration: 0.3)) { checkItem2 = true }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+                    withAnimation(.spring(duration: 0.3)) { checkItem3 = true }
+                }
+            }
+        }
+
+        private func ingredientRow(text: String, checked: Bool) -> some View {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.oceanTeal.opacity(0.4), lineWidth: 1.5)
+                        .frame(width: 18, height: 18)
+                    if checked {
+                        Circle()
+                            .fill(Color.oceanTeal)
+                            .frame(width: 18, height: 18)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                Text(text)
+                    .font(.custom("DMSans-Regular", size: 14))
+                    .foregroundColor(checked ? .gray : .deepNavy)
+                    .strikethrough(checked)
+            }
+        }
+    }
     // MARK: - First Real Drop
     
     struct FirstDropScreen: View {
@@ -663,6 +853,7 @@ struct OnboardingFlow: View {
             let memory = Memory(text: savedTranscription, echoId: echoId)
             memory.tags = sonarResult?.tags ?? []
             memory.detectedDate = sonarResult?.detectedDate
+            memory.endDate = sonarResult?.endDate
             memory.echoConfidence = sonarResult?.echoConfidence ?? 1.0
             memory.dateConfidence = sonarResult?.dateConfidence
             memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
@@ -865,6 +1056,7 @@ struct OnboardingFlow: View {
         let tips: [(String, String)] = [
             ("🎙️", "Tap the fin for instant voice capture"),
             ("↑",   "Swipe up on the fin for more options"),
+            ("🍳", "Swipe up → Recipe to save from a URL"),
             ("🔍", "Search with \"Dive into memories\""),
             ("⚙️", "Set Orca as your Action Button in Settings"),
         ]

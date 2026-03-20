@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import AVFoundation
+import CoreSpotlight
 
 struct DropOverlayView: View {
     @Binding var isPresented: Bool
@@ -272,16 +273,28 @@ struct DropOverlayView: View {
         let memory = Memory(text: savedTranscription, echoId: echoId)
         memory.tags = sonarResult?.tags ?? []
         memory.detectedDate = sonarResult?.detectedDate
+        memory.endDate = sonarResult?.endDate
         memory.echoConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.dateConfidence = sonarResult?.dateConfidence
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         modelContext.insert(memory)
+        SpotlightService.shared.indexMemory(memory, echoName: sonarResult?.echoName ?? "Notes", echoEmoji: echos.first { $0.id == memory.echoId }?.emoji ?? "📝")
         NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
         
-        if let userId = authService.userId {
+        if let userId = authService.userId, let result = sonarResult {
             Task {
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
+                for suggestion in result.pingSuggestions {
+                    let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
+                    let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
+                    if let fireTime = suggestion.fireTime {
+                        ping.fireTime = fireTime
+                    }
+                    modelContext.insert(ping)
+                    await SupabaseSyncService.shared.pushPing(ping, userId: userId)
+                    NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                }
             }
         }
         
@@ -306,24 +319,7 @@ struct DropOverlayView: View {
                 modelContext.insert(subTask)
             }
         }
-        
-        if let result = sonarResult {
-            for suggestion in result.pingSuggestions {
-                let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
-                let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
-                if let fireTime = suggestion.fireTime {
-                    ping.fireTime = fireTime
-                }
-                modelContext.insert(ping)
-                if let userId = authService.userId {
-                    Task {
-                        await SupabaseSyncService.shared.pushPing(ping, userId: userId)
-                    }
-                }
-                NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
-            }
-        }
-        
+                
         withAnimation(.spring(duration: 0.4)) {
             showBanner = true
         }
@@ -355,3 +351,4 @@ struct DropOverlayView: View {
         isPresented = false
     }
 }
+
