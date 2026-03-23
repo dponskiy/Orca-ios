@@ -49,14 +49,16 @@ struct BrowseAllView: View {
         }
     }
 
-    // MARK: - Expired Helper
+    private func shouldOpenDetail(_ memory: Memory) -> Bool {
+        true
+    }
+
     private func isExpired(_ memory: Memory) -> Bool {
         let expiryDate = memory.endDate ?? memory.detectedDate
         guard let date = expiryDate, date < Date() else { return false }
         let memoryPings = pings.filter { $0.memoryId == memory.id }
         if memoryPings.contains(where: { $0.recurrence != .none }) { return false }
-        let hasFuturePing = memoryPings.contains { $0.fireDate > Date() }
-        return !hasFuturePing
+        return !memoryPings.contains { $0.fireDate > Date() }
     }
 
     var body: some View {
@@ -239,11 +241,15 @@ struct BrowseAllView: View {
                             .font(.custom("DMMono-Regular", size: 12))
                             .foregroundColor(.gray)
                     }
-
                     if memory.wasEdited {
                         Text("edited")
                             .font(.custom("DMMono-Regular", size: 11))
                             .foregroundColor(.gray)
+                    }
+                    if memory.locationName != nil {
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.coral)
                     }
                 }
             }
@@ -257,7 +263,7 @@ struct BrowseAllView: View {
         .listRowBackground(expired ? expiredBg : Color.white)
         .contentShape(Rectangle())
         .onTapGesture {
-            if memory.hasChecklist || memory.text.count > 100 {
+            if shouldOpenDetail(memory) {
                 detailMemory = memory
             } else {
                 editingMemory = memory
@@ -266,13 +272,17 @@ struct BrowseAllView: View {
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 let id = memory.id
+                let memoryPings = pings.filter { $0.memoryId == memory.id }
+                for ping in memoryPings {
+                    NotificationService.shared.cancelPing(pingId: ping.id)
+                    modelContext.delete(ping)
+                }
                 modelContext.delete(memory)
-                SpotlightService.shared.removeMemory(id: memory.id)
+                SpotlightService.shared.removeMemory(id: id)
                 Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
             } label: {
                 Label("Delete", systemImage: "trash")
             }
-
             Button { editingMemory = memory } label: {
                 Label("Edit", systemImage: "pencil")
             }

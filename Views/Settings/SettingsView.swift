@@ -19,6 +19,7 @@ struct SettingsView: View {
     @Query private var pings: [Ping]
     @State private var showManageEchos = false
     @State private var showClearConfirm = false
+    @State private var showClearConfirmFinal = false
     @State private var showCleanUpSheet = false
     
     var body: some View {
@@ -208,17 +209,23 @@ struct SettingsView: View {
                     }
                 }
             }
-            .confirmationDialog(
-                "Clear all memories?",
-                isPresented: $showClearConfirm,
-                titleVisibility: .visible
-            ) {
+            // First confirmation — centered alert, Cancel + Clear All
+            .alert("Clear all memories?", isPresented: $showClearConfirm) {
+                Button("Clear All", role: .destructive) {
+                    showClearConfirmFinal = true
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete all \(memories.count) memories. This cannot be undone.")
+            }
+            // Second confirmation — are you sure?
+            .alert("Are you sure?", isPresented: $showClearConfirmFinal) {
                 Button("Clear All", role: .destructive) {
                     clearAllMemories()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This will permanently delete all \(memories.count) memories. This cannot be undone.")
+                Text("All \(memories.count) memories will be gone forever.")
             }
         }
     }
@@ -235,8 +242,13 @@ struct SettingsView: View {
         AnalyticsService.shared.trackAllMemoriesCleared(count: memories.count)
         for memory in memories {
             let id = memory.id
+            let memoryPings = pings.filter { $0.memoryId == memory.id }
+            for ping in memoryPings {
+                NotificationService.shared.cancelPing(pingId: ping.id)
+                modelContext.delete(ping)
+            }
             modelContext.delete(memory)
-            SpotlightService.shared.removeMemory(id: memory.id)
+            SpotlightService.shared.removeMemory(id: id)
             Task {
                 await SupabaseSyncService.shared.deleteMemory(id: id)
             }
@@ -368,8 +380,8 @@ struct SettingsView: View {
         }
     }
 }
-    #Preview {
-        SettingsView()
-            .environment(AuthService())
-    }
 
+#Preview {
+    SettingsView()
+        .environment(AuthService())
+}

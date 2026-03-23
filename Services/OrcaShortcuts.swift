@@ -88,3 +88,6 @@ extension Notification.Name {
     @MainActor static let openTypeCapture = Notification.Name("openTypeCapture")
     @MainActor static let openScreenshotCapture = Notification.Name("openScreenshotCapture")
 }
+extension Notification.Name {
+    static let groceryModeHint = Notification.Name("groceryModeHint")
+}

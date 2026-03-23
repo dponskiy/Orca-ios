@@ -1,11 +1,4 @@
 //
-//  Untitled.swift
-//  Orca
-//
-//  Created by David Piliponskiy on 3/3/26.
-//
-
-//
 //  ManageEchosView.swift
 //  Orca
 //
@@ -19,10 +12,10 @@ struct ManageEchosView: View {
     @Query(sort: \Echo.sortOrder) private var echos: [Echo]
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthService.self) private var authService
-    
+
     @State private var showAddEcho = false
     @State private var editingEcho: Echo?
-    
+
     var body: some View {
         List {
             Section {
@@ -31,23 +24,18 @@ struct ManageEchosView: View {
                         Text(echo.emoji)
                             .font(.system(size: 24))
                             .frame(width: 36)
-                        
                         VStack(alignment: .leading, spacing: 2) {
                             Text(echo.name)
                                 .font(.custom("DMSans-Medium", size: 16))
                                 .foregroundColor(.deepNavy)
                         }
-                        
                         Spacer()
-                        
                         Image(systemName: "line.3.horizontal")
                             .font(.system(size: 14))
                             .foregroundColor(.gray.opacity(0.5))
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        editingEcho = echo
-                    }
+                    .onTapGesture { editingEcho = echo }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             let id = echo.id
@@ -73,7 +61,7 @@ struct ManageEchosView: View {
                     .foregroundColor(.gray)
                     .textCase(nil)
             }
-            
+
             Section {
                 Button {
                     showAddEcho = true
@@ -91,9 +79,7 @@ struct ManageEchosView: View {
         }
         .navigationTitle("Manage Echos")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            EditButton()
-        }
+        .toolbar { EditButton() }
         .sheet(isPresented: $showAddEcho) {
             EchoEditSheet(echo: nil)
         }
@@ -109,43 +95,71 @@ struct EchoEditSheet: View {
     let echo: Echo?
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(AuthService.self) private var authService
     @Query(sort: \Echo.sortOrder) private var echos: [Echo]
-    
+
     @State private var name: String = ""
     @State private var emoji: String = ""
-    
-    let commonEmojis = ["📝", "🏥", "👨‍👩‍👧", "🎂", "🎁", "✈️", "🍳", "🍽️", "🏆", "🛍️", "🏠", "🎓", "💼", "🐾", "💰", "🎉", "🧹", "🎮", "❤️", "🌟"]
-    
+
+    let commonEmojis = [
+        "📝","🏥","👨‍👩‍👧","🎂","🎁","✈️","🍳","🍽️","🏆","🛍️",
+        "🏠","🎓","💼","🐾","💰","🎉","🧹","🎮","❤️","🌟",
+        "🧠","🎸","🎨","🌿","📷","🏋️","🐕","🐈","🚗","🚀",
+        "💡","🔑","🛠️","📦","🧳","🎯","🌊","🍎","☕","🍕",
+        "🎵","🏖️","⚽","🎬","📚","🎤","🌙","🌈","🔥","💎",
+        "🧘","🪴","🦋","🎠","🧩","🪄","🎪","🌺","🦊","🐬"
+    ]
+
     var isEditing: Bool { echo != nil }
-    
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("Name") {
-                    TextField("e.g. Cooking, Travel, Work...", text: $name)
+                    TextField("e.g. Michael, Side Project, Garage...", text: $name)
                         .font(.custom("DMSans-Regular", size: 16))
                 }
-                
-                Section("Emoji") {
-                    TextField("Paste or type an emoji", text: $emoji)
-                        .font(.system(size: 24))
-                        .frame(height: 44)
-                    
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
+
+                Section("Icon") {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.mist)
+                                .frame(width: 52, height: 52)
+                            Text(emoji.isEmpty ? "?" : emoji)
+                                .font(.system(size: 28))
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Type or paste any emoji")
+                                .font(.custom("DMSans-Medium", size: 14))
+                                .foregroundColor(.deepNavy)
+                            TextField("🎯", text: $emoji)
+                                .font(.system(size: 24))
+                                .frame(height: 36)
+                                .onChange(of: emoji) { _, newValue in
+                                    let filtered = newValue.filter { $0.isEmoji }
+                                    emoji = String(filtered.prefix(1))
+                                }
+                        }
+                    }
+                    .padding(.vertical, 4)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 10) {
                         ForEach(Array(commonEmojis.enumerated()), id: \.offset) { _, e in
                             Button {
                                 emoji = e
                             } label: {
                                 Text(e)
-                                    .font(.system(size: 28))
-                                    .frame(width: 52, height: 52)
+                                    .font(.system(size: 24))
+                                    .frame(width: 44, height: 44)
                                     .background(emoji == e ? Color.oceanTeal.opacity(0.15) : Color.mist)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
                                     .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
+                                        RoundedRectangle(cornerRadius: 8)
                                             .stroke(emoji == e ? Color.oceanTeal : Color.clear, lineWidth: 2)
                                     )
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.vertical, 8)
@@ -169,29 +183,49 @@ struct EchoEditSheet: View {
                 }
             }
             .onAppear {
-                if let echo = echo {
+                if let echo {
                     name = echo.name
                     emoji = echo.emoji
                 }
             }
         }
     }
-    
+
     var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty &&
         !emoji.trimmingCharacters(in: .whitespaces).isEmpty
     }
-    
+
     private func saveEcho() {
         if let existing = echo {
             existing.name = name.trimmingCharacters(in: .whitespaces)
             existing.emoji = emoji.trimmingCharacters(in: .whitespaces)
+            if let userId = authService.userId {
+                Task { await SupabaseSyncService.shared.pushEcho(existing, userId: userId) }
+            }
         } else {
             let nextOrder = (echos.last?.sortOrder ?? -1) + 1
-            let newEcho = Echo(name: name.trimmingCharacters(in: .whitespaces),
-                               emoji: emoji.trimmingCharacters(in: .whitespaces),
-                               sortOrder: nextOrder)
+            let newEcho = Echo(
+                name: name.trimmingCharacters(in: .whitespaces),
+                emoji: emoji.trimmingCharacters(in: .whitespaces),
+                isDefault: false,
+                sortOrder: nextOrder
+            )
             modelContext.insert(newEcho)
+            if let userId = authService.userId {
+                Task { await SupabaseSyncService.shared.pushEcho(newEcho, userId: userId) }
+            }
         }
+    }
+}
+
+// MARK: - Character emoji detection
+
+private extension Character {
+    var isEmoji: Bool {
+        unicodeScalars.first.map {
+            $0.properties.isEmojiPresentation ||
+            ($0.value >= 0x1F600 && $0.value <= 0x1FFFF)
+        } ?? false
     }
 }

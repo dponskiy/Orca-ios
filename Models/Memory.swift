@@ -31,7 +31,11 @@ class Memory {
     var isPinned: Bool = false
     var url: String?
     var hasChecklist: Bool = false
-    
+    var locationName: String?
+    var locationAddress: String?
+    var latitude: Double?
+    var longitude: Double?
+
     enum CaptureType: String, Codable {
         case voice, screenshot, typed
     }

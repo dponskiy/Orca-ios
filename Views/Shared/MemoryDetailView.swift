@@ -7,15 +7,18 @@
 
 import SwiftUI
 import SwiftData
+import MapKit
 
 struct MemoryDetailView: View {
-    let memory: Memory
+    @Bindable var memory: Memory  // FIX: was `let` — now reactive to location saves
     @Query private var subTasks: [SubTask]
     @Query private var echos: [Echo]
     @Query private var pings: [Ping]
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var editingMemory: Memory?
+    @State private var showMapOptions = false
+    @State private var addressCopied = false
 
     var memorySubTasks: [SubTask] {
         subTasks.filter { $0.memoryId == memory.id }
@@ -94,6 +97,13 @@ struct MemoryDetailView: View {
                             .background(Color.oceanTeal.opacity(0.1))
                             .clipShape(Capsule())
                         }
+                    }
+
+                    // Location block
+                    if let name = memory.locationName,
+                       let lat = memory.latitude,
+                       let lng = memory.longitude {
+                        locationBlock(name: name, lat: lat, lng: lng)
                     }
 
                     // Checklist / Ingredients
@@ -200,17 +210,106 @@ struct MemoryDetailView: View {
                         .foregroundColor(.oceanTeal)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        editingMemory = memory
-                    } label: {
-                        Image(systemName: "pencil")
-                            .foregroundColor(.oceanTeal)
+                    Button { editingMemory = memory } label: {
+                        Image(systemName: "pencil").foregroundColor(.oceanTeal)
                     }
                 }
             }
             .sheet(item: $editingMemory) { memory in
                 MemoryEditView(memory: memory)
             }
+        }
+    }
+
+    // MARK: - Location Block
+    @ViewBuilder
+    private func locationBlock(name: String, lat: Double, lng: Double) -> some View {
+        let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lng)
+        let region = MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+        )
+
+        VStack(alignment: .leading, spacing: 10) {
+            // Mini map
+            ZStack {
+                Map(position: .constant(.region(region))) {
+                    Marker(name, coordinate: coordinate)
+                        .tint(Color.coral)
+                }
+                .frame(height: 160)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .disabled(true)
+
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { showMapOptions = true }
+            }
+            .frame(height: 160)
+
+            // Place name + address + copy
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "mappin.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.coral)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .font(.custom("DMSans-Medium", size: 15))
+                        .foregroundColor(.deepNavy)
+                    if let address = memory.locationAddress {
+                        Text(address)
+                            .font(.custom("DMSans-Regular", size: 13))
+                            .foregroundColor(.gray)
+                    }
+                }
+
+                Spacer()
+
+                // Copy button
+                Button {
+                    let textToCopy = [name, memory.locationAddress]
+                        .compactMap { $0 }
+                        .joined(separator: ", ")
+                    UIPasteboard.general.string = textToCopy
+                    withAnimation(.easeInOut(duration: 0.2)) { addressCopied = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation(.easeInOut(duration: 0.2)) { addressCopied = false }
+                    }
+                } label: {
+                    Image(systemName: addressCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 15))
+                        .foregroundColor(addressCopied ? .seafoam : .gray)
+                }
+            }
+
+            // Open in Maps
+            Button { showMapOptions = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "map").font(.system(size: 13))
+                    Text("Open in Maps").font(.custom("DMSans-Medium", size: 13))
+                }
+                .foregroundColor(.oceanTeal)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.oceanTeal.opacity(0.1))
+                .clipShape(Capsule())
+            }
+        }
+        .confirmationDialog("Open in Maps", isPresented: $showMapOptions, titleVisibility: .hidden) {
+            Button("Apple Maps") {
+                let item = MKMapItem(placemark: MKPlacemark(coordinate: coordinate, addressDictionary: nil))
+                item.name = name
+                item.openInMaps()
+            }
+            if UIApplication.shared.canOpenURL(URL(string: "comgooglemaps://")!) {
+                Button("Google Maps") {
+                    if let url = URL(string: "comgooglemaps://?q=\(lat),\(lng)&zoom=15") {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
         }
     }
 }

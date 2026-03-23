@@ -26,6 +26,8 @@ struct TypeCaptureView: View {
     @State private var recipeError: String? = nil
     @State private var savedMemory: Memory? = nil
     
+    private let sonarEngine = SonarEngine()
+
     private func handleRecipeFetch(_ recipe: RecipeResult) {
         guard let memory = savedMemory else { return }
         
@@ -58,8 +60,20 @@ struct TypeCaptureView: View {
             last.echoId = echoId
         }
     }
-    
-    private let sonarEngine = SonarEngine()
+
+    private func updateLastMemoryLocation(name: String, address: String?, lat: Double, lng: Double) {
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        if let last = try? modelContext.fetch(descriptor).first {
+            last.locationName = name
+            last.locationAddress = address
+            last.latitude = lat
+            last.longitude = lng
+            try? modelContext.save()
+            if let userId = authService.userId {
+                Task { await SupabaseSyncService.shared.pushMemory(last, userId: userId) }
+            }
+        }
+    }
     
     var body: some View {
         ZStack {
@@ -88,6 +102,15 @@ struct TypeCaptureView: View {
                         onEdit: {
                             let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
                             editMemory = try? modelContext.fetch(descriptor).first
+                        },
+                        onLocationSet: { name, address, lat, lng in
+                            updateLastMemoryLocation(name: name, address: address, lat: lat, lng: lng)
+                        },
+                        onGroceryHint: {
+                            NotificationCenter.default.post(
+                                name: .groceryModeHint,
+                                object: nil
+                            )
                         }
                     )
                 }
@@ -309,7 +332,7 @@ struct TypeCaptureView: View {
         }
         
         if recipeFetched {
-            // ingredients will be added via handleRecipeFetch in banner
+            // ingredients added via handleRecipeFetch in banner
         } else if let checklistItems = sonarEngine.detectChecklist(text: text) {
             memory.hasChecklist = true
             for (index, item) in checklistItems.enumerated() {

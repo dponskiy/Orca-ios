@@ -17,7 +17,7 @@ struct OrcaApp: App {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     
     let modelContainer: ModelContainer = {
-        guard let container = try? ModelContainer(for: Memory.self, Echo.self, Ping.self, SubTask.self) else {
+        guard let container = try? ModelContainer(for: Memory.self, Echo.self, Ping.self, SubTask.self, GroceryList.self) else {
             fatalError("Failed to create ModelContainer")
         }
         return container

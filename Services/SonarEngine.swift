@@ -29,6 +29,8 @@ struct SonarResult {
     let pingFireTime: Date?
     let pingSuggestions: [PingSuggestion]
     let shouldOfferRecipeFetch: Bool
+    let suggestedLocationName: String?
+    let hasRestaurantSignal: Bool
 }
 
 class SonarEngine {
@@ -40,7 +42,7 @@ class SonarEngine {
         ("Gifts", ["present", "gift", "christmas gift", "anniversary gift", "wishes", "wants", "wish list", "registry", "surprise", "wrapping", "send gift", "gift card"], 4),
         ("Travel", ["flight", "hotel", "airport", "vacation", "trip", "booking", "passport", "luggage", "airbnb", "rental car", "itinerary", "resort", "cruise", "destination", "departure", "arrival", "layover", "boarding", "check-in", "check in", "visa", "packing", "suitcase", "travel insurance", "jet lag", "timezone"], 5),
         ("Cooking", ["recipe", "ingredient", "cook", "bake", "tablespoon", "teaspoon", "oven", "stove", "marinade", "seasoning", "prep", "simmer", "saute", "roast", "grill", "homemade", "meal prep", "leftovers", "slow cooker", "instant pot", "air fryer", "degrees fahrenheit", "degrees celsius", "preheat", "chop", "dice", "mince", "boil", "fry", "whisk", "fold", "knead"], 6),
-        ("Dining", ["restaurant", "reservation", "menu", "waiter", "takeout", "delivery", "brunch", "lunch", "cafe", "appetizer", "entree", "dessert", "cocktail", "bar", "don't order", "dont order", "avoid ordering", "never order", "skip the", "dish was", "food was", "place was", "ate at", "eating at", "tried at", "recommend", "good at", "bad at", "overrated", "underrated", "must try", "never again", "great spot", "good spot", "yelp", "opentable", "resy", "uber eats", "doordash", "grubhub", "table for", "outdoor seating", "happy hour", "prix fixe", "tasting menu", "michelin", "omakase"], 7),
+        ("Dining", ["restaurant", "reservation", "menu", "waiter", "takeout", "delivery", "brunch", "lunch", "cafe", "appetizer", "entree", "dessert", "cocktail", "bar", "don't order", "dont order", "avoid ordering", "never order", "skip the", "dish was", "food was", "place was", "ate at", "eating at", "tried at", "recommend", "good at", "bad at", "overrated", "underrated", "must try", "never again", "great spot", "good spot", "yelp", "opentable", "resy", "uber eats", "doordash", "grubhub", "table for", "outdoor seating", "happy hour", "prix fixe", "tasting menu", "michelin", "omakase", "want to try", "looking to try", "have to try", "need to try", "heard about", "been meaning to", "wanna try", "dying to try", "check out this place", "great place", "this place"], 7),
         ("Sports", ["game", "score", "team", "season", "ticket", "stadium", "coach", "player", "league", "tournament", "playoffs", "workout", "gym", "match", "training", "practice", "race", "marathon", "yoga", "pilates", "crossfit", "lifting", "cardio", "spin class", "personal trainer", "sports bar", "fantasy league", "draft"], 8),
         ("Events", ["concert", "show", "festival", "conference", "expo", "recital", "performance", "gala", "ceremony", "graduation", "prom", "meetup", "gathering", "networking", "keynote", "panel", "workshop", "seminar", "opening night", "premiere", "launch event", "happy hour", "cocktail party", "wedding", "engagement", "baby shower", "retirement party"], 9),
         ("Shopping", ["price", "store", "coupon", "sale", "amazon", "size", "return", "shipping", "discount", "brand", "mall", "target", "walmart", "costco", "online order", "tracking number", "out of stock", "waitlist", "sold out", "best buy", "apple store", "wish list", "add to cart", "checkout"], 10),
@@ -75,13 +77,29 @@ class SonarEngine {
         ("saturday", 7), ("saturdays", 7),
     ]
 
+    private let diningContextWords = [
+        "eat", "ate", "food", "dish", "order", "menu", "lunch", "dinner", "brunch",
+        "breakfast", "taste", "flavor", "delicious", "portions", "service", "waiter",
+        "try", "tried", "trying", "dining", "restaurant", "reservations", "takeout",
+        "delivery", "cuisine", "spot", "place", "eats"
+    ]
+
+    private let restaurantCommonWords = Set([
+        "the", "a", "an", "for", "at", "in", "on", "to", "of", "and", "with",
+        "from", "by", "i", "we", "my", "our", "is", "are", "was", "were",
+        "tomorrow", "today", "tonight", "dinner", "lunch", "brunch", "breakfast",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "pm", "am", "next", "this", "going", "want", "lets", "let"
+    ])
+
     // MARK: - Main Process
 
     func process(text: String, echos: [Echo]) -> SonarResult {
         let lower = text.lowercased()
 
         let entities = extractEntities(text: text)
-        let echoResult = assignEcho(text: lower, echos: echos, entities: entities)
+        // FIX: pass both original and lowercased text so proper noun detection works
+        let echoResult = assignEcho(text: lower, originalText: text, echos: echos, entities: entities)
         let dateResults = detectDates(text: text)
         let tags = generateTags(text: text, echoName: echoResult.name, entities: entities)
         let actionable = detectAction(text: lower)
@@ -93,6 +111,9 @@ class SonarEngine {
         let isCookingEcho = echoResult.name.lowercased().contains("cook") ||
                             echoResult.name.lowercased().contains("recipe")
         let shouldOfferRecipeFetch = isCookingEcho && detectedURL != nil
+
+        let hasDiningContext = diningContextWords.contains { lower.contains($0) }
+        let hasRestaurantSignal = !entities.organizations.isEmpty && hasDiningContext
 
         return SonarResult(
             echoId: echoResult.id,
@@ -108,7 +129,9 @@ class SonarEngine {
             pingFireDate: primary?.fireDate,
             pingFireTime: primary?.fireTime,
             pingSuggestions: pingSuggestions,
-            shouldOfferRecipeFetch: shouldOfferRecipeFetch
+            shouldOfferRecipeFetch: shouldOfferRecipeFetch,
+            suggestedLocationName: entities.organizations.first,
+            hasRestaurantSignal: hasRestaurantSignal
         )
     }
 
@@ -138,74 +161,102 @@ class SonarEngine {
 
     private func detectAction(text: String) -> Bool {
         let lower = text.lowercased()
-        // Don't mark as actionable if it's a negative command or observation
         if negativePatterns.contains(where: { lower.contains($0) }) { return false }
-        // Don't mark as actionable for pure observations/notes about food/places
         let observationPatterns = ["was great", "was amazing", "was terrible", "was good", "was bad", "is great", "is amazing", "tasted", "loved the", "hated the", "tried the"]
         if observationPatterns.contains(where: { lower.contains($0) }) { return false }
         return actionKeywords.contains { keyword in lower.contains(keyword) }
     }
 
     // MARK: - Echo Assignment
+    // FIX: now takes originalText for proper noun casing detection
 
-    private func assignEcho(text: String, echos: [Echo], entities: (people: [String], places: [String], organizations: [String])) -> (id: UUID?, name: String, confidence: Double) {
+    private func assignEcho(text: String, originalText: String, echos: [Echo], entities: (people: [String], places: [String], organizations: [String])) -> (id: UUID?, name: String, confidence: Double) {
         var scores: [(name: String, score: Double, priority: Int)] = []
 
-        // Keyword matching
         for entry in keywordMap {
             let matchCount = entry.keywords.filter { text.contains($0) }.count
             if matchCount > 0 {
-                let baseScore = Double(matchCount)
-                scores.append((entry.echo, baseScore, entry.priority))
+                scores.append((entry.echo, Double(matchCount), entry.priority))
             }
         }
 
+        let hasDiningContext = diningContextWords.contains { text.contains($0) }
+
         // NL Entity boosting
-        // Organizations boost Dining (restaurants), Work, or Events
         for org in entities.organizations {
             let orgLower = org.lowercased()
-            // Food-related org names boost Dining
             let foodIndicators = ["restaurant", "cafe", "kitchen", "grill", "bar", "bistro", "eatery", "diner", "brasserie", "tavern", "pub", "house", "garden", "table", "shanghai", "tokyo", "thai", "sushi", "pizza", "burger", "taco", "bbq", "noodle", "dumpling"]
+
             if foodIndicators.contains(where: { orgLower.contains($0) }) {
                 if let idx = scores.firstIndex(where: { $0.name == "Dining" }) {
                     scores[idx].score += 2.0
+                } else {
+                    scores.append(("Dining", 2.0, 7))
+                }
+            } else if hasDiningContext {
+                if let idx = scores.firstIndex(where: { $0.name == "Dining" }) {
+                    scores[idx].score += 1.5
                 } else {
                     scores.append(("Dining", 1.5, 7))
                 }
             }
         }
 
-        // Place names with food context boost Dining
-        let textLower = text.lowercased()
-        let diningContextWords = ["eat", "ate", "food", "dish", "order", "menu", "lunch", "dinner", "brunch", "breakfast", "taste", "flavor", "delicious", "portions", "service", "waiter"]
-        let hasDiningContext = diningContextWords.contains { textLower.contains($0) }
         if !entities.organizations.isEmpty && hasDiningContext {
             if let idx = scores.firstIndex(where: { $0.name == "Dining" }) {
-                scores[idx].score += 1.5
-            } else {
-                scores.append(("Dining", 1.5, 7))
+                scores[idx].score += 1.0
             }
         }
 
-        // People names with health context boost Health
+        // FIX: use originalText (not lowercased) for proper noun detection
+        let words = originalText.components(separatedBy: .whitespaces)
+        let properNouns = words.filter { word in
+            let clean = word.trimmingCharacters(in: .punctuationCharacters)
+            return clean.count > 2 &&
+                   clean.first?.isUppercase == true &&
+                   !restaurantCommonWords.contains(clean.lowercased())
+        }
+        let likelyRestaurantName = !properNouns.isEmpty && properNouns.count <= 3
+        if likelyRestaurantName && hasDiningContext {
+            let boost = properNouns.count == 1 ? 2.5 : 2.0
+            if let idx = scores.firstIndex(where: { $0.name == "Dining" }) {
+                scores[idx].score += boost
+            } else {
+                scores.append(("Dining", boost, 7))
+            }
+        }
+
+        // People names with health context
         let healthContextWords = ["doctor", "dr.", "appointment", "prescription", "diagnosis", "symptoms", "hospital", "clinic", "therapy"]
-        let hasHealthContext = healthContextWords.contains { textLower.contains($0) }
+        let hasHealthContext = healthContextWords.contains { text.contains($0) }
         if !entities.people.isEmpty && hasHealthContext {
             if let idx = scores.firstIndex(where: { $0.name == "Health" }) {
                 scores[idx].score += 1.0
             }
         }
 
-        // People names with work context boost Work
+        // People names with work context
         let workContextWords = ["meeting", "call", "email", "project", "deadline", "client", "office", "zoom", "slack", "presentation"]
-        let hasWorkContext = workContextWords.contains { textLower.contains($0) }
+        let hasWorkContext = workContextWords.contains { text.contains($0) }
         if !entities.people.isEmpty && hasWorkContext {
             if let idx = scores.firstIndex(where: { $0.name == "Work" }) {
                 scores[idx].score += 1.0
             }
         }
 
-        // Find best match — highest score, tiebreak by priority
+        // Learned keywords pass
+        for echo in echos where !echo.learnedKeywords.isEmpty {
+            let matchCount = echo.learnedKeywords.filter { text.contains($0) }.count
+            if matchCount > 0 {
+                let boost = Double(matchCount) * 2.0
+                if let idx = scores.firstIndex(where: { $0.name == echo.name }) {
+                    scores[idx].score += boost
+                } else {
+                    scores.append((echo.name, boost, 0))
+                }
+            }
+        }
+
         if let best = scores.max(by: { a, b in
             a.score < b.score || (a.score == b.score && a.priority > b.priority)
         }) {
@@ -224,7 +275,7 @@ class SonarEngine {
         let lower = text.lowercased()
         let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue)
 
-        let rangeKeywords = [" through ", " until ", " thru ", " - ", "–", "—"]
+        let rangeKeywords = [" through ", " until ", " thru ", " to ", " - ", "–", "—"]
         for keyword in rangeKeywords {
             if lower.contains(keyword), let splitRange = lower.range(of: keyword) {
                 var firstHalf = String(text[text.startIndex..<splitRange.lowerBound])
@@ -304,6 +355,26 @@ class SonarEngine {
         return nil
     }
 
+    // MARK: - Extract All Times
+
+    private func extractAllTimes(from text: String) -> [Date] {
+        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue)
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = detector?.matches(in: text, range: range) ?? []
+        let dates = matches.compactMap { $0.date }
+
+        let calendar = Calendar.current
+        var seen = Set<String>()
+        return dates.filter { date in
+            let h = calendar.component(.hour, from: date)
+            let m = calendar.component(.minute, from: date)
+            let key = "\(h):\(m)"
+            guard !seen.contains(key) else { return false }
+            seen.insert(key)
+            return true
+        }.sorted()
+    }
+
     // MARK: - Ping Suggestions Builder
 
     private func buildPingSuggestions(text: String, dates: (eventDate: Date?, endDate: Date?, eventConfidence: Double?, reminderDate: Date?, reminderTime: Date?)) -> [PingSuggestion] {
@@ -347,11 +418,19 @@ class SonarEngine {
             return suggestions
         }
 
-        if text.contains("every day") || text.contains("daily") {
+        if text.contains("every day") || text.contains("everyday") || text.contains("daily") {
+            let allTimes = extractAllTimes(from: text)
+            if allTimes.count > 1 {
+                for time in allTimes {
+                    suggestions.append(PingSuggestion(fireDate: time, fireTime: time, recurrence: .daily))
+                }
+                return suggestions
+            }
             let fireDate = dates.eventDate ?? Date()
             suggestions.append(PingSuggestion(fireDate: fireDate, fireTime: dates.eventDate, recurrence: .daily))
             return suggestions
         }
+
         if text.contains("every week") || text.contains("weekly") {
             let fireDate = dates.eventDate ?? Date()
             suggestions.append(PingSuggestion(fireDate: fireDate, fireTime: dates.eventDate, recurrence: .weekly))
@@ -445,12 +524,10 @@ class SonarEngine {
     private func generateTags(text: String, echoName: String, entities: (people: [String], places: [String], organizations: [String])) -> [String] {
         var tags: [String] = []
 
-        // Add named entities as tags first — highest quality
         for person in entities.people { if !tags.contains(person) && person.count > 2 { tags.append(person) } }
         for place in entities.places { if !tags.contains(place) && place.count > 2 { tags.append(place) } }
         for org in entities.organizations { if !tags.contains(org) && org.count > 2 { tags.append(org) } }
 
-        // Fill remaining slots with nouns
         let tagger = NLTagger(tagSchemes: [.lexicalClass])
         tagger.string = text
         tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .lexicalClass, options: [.omitWhitespace, .omitPunctuation]) { tag, range in
@@ -464,5 +541,37 @@ class SonarEngine {
 
         if !tags.contains(echoName.lowercased()) { tags.append(echoName.lowercased()) }
         return Array(tags.prefix(6))
+    }
+
+    // MARK: - Learn Keywords from Confirmed Memory
+
+    static func learnKeywords(from text: String, echo: Echo) {
+        let tagger = NLTagger(tagSchemes: [.nameType, .lexicalClass])
+        tagger.string = text
+        var keywords: [String] = []
+
+        tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word,
+                             scheme: .nameType,
+                             options: [.omitWhitespace, .omitPunctuation, .joinNames]) { tag, range in
+            if tag != nil {
+                let word = String(text[range]).lowercased()
+                if word.count > 2 { keywords.append(word) }
+            }
+            return true
+        }
+
+        tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word,
+                             scheme: .lexicalClass,
+                             options: [.omitWhitespace, .omitPunctuation]) { tag, range in
+            if tag == .noun {
+                let word = String(text[range]).lowercased()
+                if word.count > 3 { keywords.append(word) }
+            }
+            return true
+        }
+
+        for keyword in keywords where !echo.learnedKeywords.contains(keyword) {
+            echo.learnedKeywords.append(keyword)
+        }
     }
 }

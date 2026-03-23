@@ -26,7 +26,6 @@ struct RecipeCaptureView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                // Icon
                 ZStack {
                     Circle()
                         .fill(Color.oceanTeal.opacity(0.12))
@@ -48,7 +47,6 @@ struct RecipeCaptureView: View {
                         .padding(.horizontal, 20)
                 }
 
-                // URL input
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Recipe URL")
                         .font(.custom("DMSans-Medium", size: 14))
@@ -93,7 +91,6 @@ struct RecipeCaptureView: View {
                     .padding(.horizontal, 20)
                 }
 
-                // Fetch button
                 Button {
                     fetchRecipe()
                 } label: {
@@ -133,6 +130,12 @@ struct RecipeCaptureView: View {
             .sheet(item: $savedMemory, onDismiss: {
                 isPresented = false
                 onComplete?("Recipe saved to Cooking 👨‍🍳")
+                if !UserDefaults.standard.bool(forKey: "orcaShownGroceryHint") {
+                        UserDefaults.standard.set(true, forKey: "orcaShownGroceryHint")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            NotificationCenter.default.post(name: .groceryModeHint, object: nil)
+                        }
+                    }
             }) { memory in
                 MemoryDetailView(memory: memory)
             }
@@ -187,7 +190,11 @@ struct RecipeCaptureView: View {
         memory.hasChecklist = !recipe.ingredients.isEmpty
 
         modelContext.insert(memory)
-        SpotlightService.shared.indexMemory(memory, echoName: cookingEcho?.name ?? "Cooking", echoEmoji: cookingEcho?.emoji ?? "🍳")
+        SpotlightService.shared.indexMemory(
+            memory,
+            echoName: cookingEcho?.name ?? "Cooking",
+            echoEmoji: cookingEcho?.emoji ?? "🍳"
+        )
 
         for (index, ingredient) in recipe.ingredients.enumerated() {
             let subTask = SubTask(memoryId: memory.id, text: ingredient, sortOrder: index)
@@ -199,7 +206,6 @@ struct RecipeCaptureView: View {
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
             }
         }
-
         isFetching = false
         savedMemory = memory
     }

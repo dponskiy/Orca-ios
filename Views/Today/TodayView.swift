@@ -21,7 +21,6 @@ struct TodayView: View {
     @State private var editingMemory: Memory?
     @State private var showCompleted = false
     @State private var snoozeMemory: Memory?
-    @State private var showSnoozeSheet = false
     @State private var expandedMemoryIds: Set<UUID> = []
     @StateObject private var weatherService = WeatherService.shared
     @StateObject private var locationService = LocationService.shared
@@ -226,12 +225,9 @@ struct TodayView: View {
             .sheet(item: $editingMemory) { memory in
                 MemoryEditView(memory: memory)
             }
-            .sheet(isPresented: $showSnoozeSheet) {
-                if let memory = snoozeMemory {
-                    SnoozeSheet(memory: memory) {
-                        showSnoozeSheet = false
-                        snoozeMemory = nil
-                    }
+            .sheet(item: $snoozeMemory) { memory in
+                SnoozeSheet(memory: memory) {
+                    snoozeMemory = nil
                 }
             }
         }
@@ -487,7 +483,6 @@ struct TodayView: View {
                         HStack(spacing: 4) {
                             Button {
                                 snoozeMemory = memory
-                                showSnoozeSheet = true
                             } label: {
                                 ZStack {
                                     Circle().fill(Color.mist).frame(width: 32, height: 32)
@@ -755,7 +750,6 @@ struct TodayView: View {
             HStack(spacing: 4) {
                 Button {
                     snoozeMemory = memory
-                    showSnoozeSheet = true
                 } label: {
                     ZStack {
                         Circle().fill(Color.mist).frame(width: 32, height: 32)

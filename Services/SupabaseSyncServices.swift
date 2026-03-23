@@ -12,32 +12,32 @@ import Supabase
 @MainActor
 class SupabaseSyncService {
     static let shared = SupabaseSyncService()
-    
+
     var isSyncing = false
     var lastSyncDate: Date?
     var syncError: String?
-    
+
     private var supabase: SupabaseClient { SupabaseManager.shared.client }
     private var syncTask: Task<Void, Never>?
     private var modelContext: ModelContext?
-    
+
     private init() {}
-    
+
     // MARK: - Setup
-    
+
     func configure(modelContext: ModelContext) {
         self.modelContext = modelContext
     }
-    
+
     // MARK: - Full Sync
-    
+
     func syncAll(userId: UUID) async {
         guard !isSyncing else { return }
         guard let context = modelContext else { return }
-        
+
         isSyncing = true
         syncError = nil
-        
+
         do {
             try deduplicateLocal(context: context)
             try await upsertUser(userId: userId)
@@ -49,12 +49,12 @@ class SupabaseSyncService {
             syncError = error.localizedDescription
             print("❌ Sync failed: \(error)")
         }
-        
+
         isSyncing = false
     }
-    
+
     // MARK: - Deduplicate Local
-    
+
     private func deduplicateLocal(context: ModelContext) throws {
         let echos = try context.fetch(FetchDescriptor<Echo>())
         var seenEchoNames = Set<String>()
@@ -65,7 +65,7 @@ class SupabaseSyncService {
                 seenEchoNames.insert(echo.name)
             }
         }
-        
+
         let memories = try context.fetch(FetchDescriptor<Memory>())
         var seenMemoryIds = Set<UUID>()
         for memory in memories {
@@ -75,7 +75,7 @@ class SupabaseSyncService {
                 seenMemoryIds.insert(memory.id)
             }
         }
-        
+
         let pings = try context.fetch(FetchDescriptor<Ping>())
         var seenPingIds = Set<UUID>()
         for ping in pings {
@@ -85,13 +85,13 @@ class SupabaseSyncService {
                 seenPingIds.insert(ping.id)
             }
         }
-        
+
         try context.save()
         print("✅ Local deduplication complete")
     }
-    
+
     // MARK: - Upsert User
-    
+
     private func upsertUser(userId: UUID) async throws {
         struct UserRow: Codable {
             let id: String
@@ -103,11 +103,10 @@ class SupabaseSyncService {
             .execute()
         print("✅ User upserted: \(userId)")
     }
-    
+
     // MARK: - Sync Echos
-    
+
     private func syncEchos(userId: UUID, context: ModelContext) async throws {
-        // PULL FIRST — get remote echos
         let remoteEchos: [EchoRow] = try await supabase
             .from("echos")
             .select()
@@ -116,99 +115,82 @@ class SupabaseSyncService {
             .value
 
         let localEchos = try context.fetch(FetchDescriptor<Echo>())
+        let didSeed = UserDefaults.standard.bool(forKey: "orcaDidSeedDefaults")
 
-        if remoteEchos.isEmpty {
-            // First time user — seed defaults locally and push to Supabase in one shot
+        if remoteEchos.isEmpty && !didSeed {
+            // True new user — seed regardless of local state
             if localEchos.isEmpty {
                 Echo.seedDefaults(context: context)
             }
+            UserDefaults.standard.set(true, forKey: "orcaDidSeedDefaults")
             try context.save()
+
             let seededEchos = try context.fetch(FetchDescriptor<Echo>())
-            let echoRows = seededEchos.map { echo in
-                EchoRow(
-                    id: echo.id.uuidString,
-                    user_id: userId.uuidString,
-                    name: echo.name,
-                    emoji: echo.emoji,
-                    is_default: echo.isDefault,
-                    sort_order: echo.sortOrder,
-                    created_at: ISO8601DateFormatter().string(from: echo.createdAt)
-                )
-            }
+            let echoRows = seededEchos.map { EchoRow(from: $0, userId: userId) }
             if !echoRows.isEmpty {
-                try await supabase
-                    .from("echos")
-                    .upsert(echoRows, onConflict: "id")
-                    .execute()
+                try await supabase.from("echos").upsert(echoRows, onConflict: "id").execute()
             }
             print("✅ Echos seeded and pushed for new user")
             return
         }
 
-        // Remote has echos — merge into local by name, don't create duplicates
+        // Mark as seeded if remote has echos (returning user / reinstall)
+        if !didSeed && !remoteEchos.isEmpty {
+            UserDefaults.standard.set(true, forKey: "orcaDidSeedDefaults")
+        }
+
+        // Merge remote into local
         for remote in remoteEchos {
             guard let remoteId = UUID(uuidString: remote.id) else { continue }
 
-            // Already exists by ID — update name/emoji in case they changed
             if let existing = localEchos.first(where: { $0.id == remoteId }) {
                 existing.name = remote.name
                 existing.emoji = remote.emoji
                 existing.sortOrder = remote.sort_order
+                existing.learnedKeywords = remote.learned_keywords ?? []
                 continue
             }
 
-            // Same name exists locally — update its ID to match remote
             if let nameMatch = localEchos.first(where: { $0.name == remote.name }) {
+                // Update echoId on all memories before mutating the echo's ID
+                let allMemories = try context.fetch(FetchDescriptor<Memory>())
+                for memory in allMemories where memory.echoId == nameMatch.id {
+                    memory.echoId = remoteId
+                }
                 nameMatch.id = remoteId
                 nameMatch.emoji = remote.emoji
                 nameMatch.sortOrder = remote.sort_order
+                nameMatch.learnedKeywords = remote.learned_keywords ?? []
                 continue
             }
 
-            // Truly new echo from remote — insert it
-            let echo = Echo(
-                name: remote.name,
-                emoji: remote.emoji,
-                isDefault: remote.is_default,
-                sortOrder: remote.sort_order
-            )
+            let echo = Echo(name: remote.name, emoji: remote.emoji,
+                            isDefault: remote.is_default, sortOrder: remote.sort_order)
             echo.id = remoteId
+            echo.learnedKeywords = remote.learned_keywords ?? []
             context.insert(echo)
         }
 
         try context.save()
 
-        // PUSH only echos that don't exist in remote yet
+        // Push any local echos not yet in remote
         let mergedEchos = try context.fetch(FetchDescriptor<Echo>())
         let remoteIds = Set(remoteEchos.map { $0.id })
         let newLocalEchos = mergedEchos.filter { !remoteIds.contains($0.id.uuidString) }
 
         if !newLocalEchos.isEmpty {
-            let echoRows = newLocalEchos.map { echo in
-                EchoRow(
-                    id: echo.id.uuidString,
-                    user_id: userId.uuidString,
-                    name: echo.name,
-                    emoji: echo.emoji,
-                    is_default: echo.isDefault,
-                    sort_order: echo.sortOrder,
-                    created_at: ISO8601DateFormatter().string(from: echo.createdAt)
-                )
-            }
-            try await supabase
-                .from("echos")
-                .upsert(echoRows, onConflict: "id")
-                .execute()
+            let echoRows = newLocalEchos.map { EchoRow(from: $0, userId: userId) }
+            try await supabase.from("echos").upsert(echoRows, onConflict: "id").execute()
         }
 
         print("✅ Echos synced")
     }
-    
+
     // MARK: - Sync Memories
-    
+
     private func syncMemories(userId: UUID, context: ModelContext) async throws {
         let localMemories = try context.fetch(FetchDescriptor<Memory>())
-        
+
         let memoryRows = localMemories.reduce(into: [MemoryRow]()) { result, memory in
             guard !result.contains(where: { $0.id == memory.id.uuidString }) else { return }
             result.append(MemoryRow(
@@ -228,33 +210,37 @@ class SupabaseSyncService {
                 completed_at: memory.completedAt.map { ISO8601DateFormatter().string(from: $0) },
                 was_edited: memory.wasEdited,
                 created_at: ISO8601DateFormatter().string(from: memory.createdAt),
-                updated_at: ISO8601DateFormatter().string(from: memory.updatedAt)
+                updated_at: ISO8601DateFormatter().string(from: memory.updatedAt),
+                location_name: memory.locationName,
+                location_address: memory.locationAddress,
+                latitude: memory.latitude,
+                longitude: memory.longitude
             ))
         }
-        
+
         if !memoryRows.isEmpty {
             try await supabase
                 .from("memories")
                 .upsert(memoryRows, onConflict: "id")
                 .execute()
         }
-        
+
         let localIds = Set(localMemories.map { $0.id.uuidString })
-        
+
         let remoteMemories: [MemoryRow] = try await supabase
             .from("memories")
             .select()
             .eq("user_id", value: userId.uuidString)
             .execute()
             .value
-        
+
         for remote in remoteMemories {
             guard !localIds.contains(remote.id) else { continue }
             guard let remoteId = UUID(uuidString: remote.id),
                   let echoId = UUID(uuidString: remote.echo_id) else { continue }
             let existing = localMemories.first { $0.id == remoteId }
             guard existing == nil else { continue }
-            
+
             let memory = Memory(text: remote.text, echoId: echoId)
             memory.id = remoteId
             memory.tags = remote.tags
@@ -264,7 +250,11 @@ class SupabaseSyncService {
             memory.isActionable = remote.is_actionable
             memory.isCompleted = remote.is_completed
             memory.wasEdited = remote.was_edited
-            
+            memory.locationName = remote.location_name
+            memory.locationAddress = remote.location_address
+            memory.latitude = remote.latitude
+            memory.longitude = remote.longitude
+
             if let dateStr = remote.detected_date {
                 memory.detectedDate = ISO8601DateFormatter().date(from: dateStr)
             }
@@ -284,18 +274,18 @@ class SupabaseSyncService {
                let captureType = Memory.CaptureType(rawValue: captureStr) {
                 memory.captureType = captureType
             }
-            
+
             context.insert(memory)
         }
-        
+
         print("✅ Memories synced")
     }
-    
+
     // MARK: - Sync Pings
-    
+
     private func syncPings(userId: UUID, context: ModelContext) async throws {
         let localPings = try context.fetch(FetchDescriptor<Ping>())
-        
+
         struct MemoryIdRow: Codable {
             let id: String
         }
@@ -308,7 +298,7 @@ class SupabaseSyncService {
             .value
 
         let safeMemoryIds = Set(remoteMemoryRows.map { $0.id })
-        
+
         let pingRows = localPings.reduce(into: [PingRow]()) { result, ping in
             guard !result.contains(where: { $0.id == ping.id.uuidString }) else { return }
             guard safeMemoryIds.contains(ping.memoryId.uuidString) else { return }
@@ -324,23 +314,23 @@ class SupabaseSyncService {
                 created_at: ISO8601DateFormatter().string(from: ping.createdAt)
             ))
         }
-        
+
         if !pingRows.isEmpty {
             try await supabase
                 .from("pings")
                 .upsert(pingRows, onConflict: "id")
                 .execute()
         }
-        
+
         let localIds = Set(localPings.map { $0.id.uuidString })
-        
+
         let remotePings: [PingRow] = try await supabase
             .from("pings")
             .select()
             .eq("user_id", value: userId.uuidString)
             .execute()
             .value
-        
+
         for remote in remotePings {
             guard !localIds.contains(remote.id) else { continue }
             guard let remoteId = UUID(uuidString: remote.id),
@@ -348,12 +338,12 @@ class SupabaseSyncService {
                   let fireDate = ISO8601DateFormatter().date(from: remote.fire_date) else { continue }
             let existing = localPings.first { $0.id == remoteId }
             guard existing == nil else { continue }
-            
+
             let recurrence = Ping.Recurrence(rawValue: remote.recurrence) ?? .none
             let ping = Ping(memoryId: memoryId, fireDate: fireDate, recurrence: recurrence)
             ping.id = remoteId
             ping.isActive = remote.is_active
-            
+
             if let fireTimeStr = remote.fire_time,
                let fireTime = ISO8601DateFormatter().date(from: fireTimeStr) {
                 ping.fireTime = fireTime
@@ -362,15 +352,15 @@ class SupabaseSyncService {
                let lastFired = ISO8601DateFormatter().date(from: lastFiredStr) {
                 ping.lastFired = lastFired
             }
-            
+
             context.insert(ping)
         }
-        
+
         print("✅ Pings synced")
     }
-    
+
     // MARK: - Push Single Memory
-    
+
     func pushMemory(_ memory: Memory, userId: UUID) async {
         let row = MemoryRow(
             id: memory.id.uuidString,
@@ -389,9 +379,13 @@ class SupabaseSyncService {
             completed_at: memory.completedAt.map { ISO8601DateFormatter().string(from: $0) },
             was_edited: memory.wasEdited,
             created_at: ISO8601DateFormatter().string(from: memory.createdAt),
-            updated_at: ISO8601DateFormatter().string(from: memory.updatedAt)
+            updated_at: ISO8601DateFormatter().string(from: memory.updatedAt),
+            location_name: memory.locationName,
+            location_address: memory.locationAddress,
+            latitude: memory.latitude,
+            longitude: memory.longitude
         )
-        
+
         do {
             try await supabase
                 .from("memories")
@@ -402,9 +396,9 @@ class SupabaseSyncService {
             print("❌ Failed to push memory: \(error)")
         }
     }
-    
+
     // MARK: - Push Single Ping
-    
+
     func pushPing(_ ping: Ping, userId: UUID) async {
         let row = PingRow(
             id: ping.id.uuidString,
@@ -417,7 +411,7 @@ class SupabaseSyncService {
             last_fired: ping.lastFired.map { ISO8601DateFormatter().string(from: $0) },
             created_at: ISO8601DateFormatter().string(from: ping.createdAt)
         )
-        
+
         do {
             try await supabase
                 .from("pings")
@@ -428,9 +422,24 @@ class SupabaseSyncService {
             print("❌ Failed to push ping: \(error)")
         }
     }
-    
+
+    // MARK: - Push Single Echo
+
+    func pushEcho(_ echo: Echo, userId: UUID) async {
+        let row = EchoRow(from: echo, userId: userId)
+        do {
+            try await supabase
+                .from("echos")
+                .upsert(row, onConflict: "id")
+                .execute()
+            print("✅ Echo pushed: \(echo.id)")
+        } catch {
+            print("❌ Failed to push echo: \(error)")
+        }
+    }
+
     // MARK: - Delete Memory
-    
+
     func deleteMemory(id: UUID) async {
         do {
             try await supabase
@@ -443,7 +452,7 @@ class SupabaseSyncService {
             print("❌ Failed to delete memory: \(error)")
         }
     }
-    
+
     // MARK: - Delete Echo
 
     func deleteEcho(id: UUID) async {
@@ -458,9 +467,9 @@ class SupabaseSyncService {
             print("❌ Failed to delete echo: \(error)")
         }
     }
-    
+
     // MARK: - Auto Sync
-    
+
     func startAutoSync(userId: UUID) {
         syncTask?.cancel()
         syncTask = nil
@@ -474,7 +483,7 @@ class SupabaseSyncService {
             }
         }
     }
-    
+
     func stopAutoSync() {
         syncTask?.cancel()
         syncTask = nil
@@ -491,6 +500,18 @@ struct EchoRow: Codable {
     let is_default: Bool
     let sort_order: Int
     let created_at: String
+    let learned_keywords: [String]?
+
+    init(from echo: Echo, userId: UUID) {
+        self.id = echo.id.uuidString
+        self.user_id = userId.uuidString
+        self.name = echo.name
+        self.emoji = echo.emoji
+        self.is_default = echo.isDefault
+        self.sort_order = echo.sortOrder
+        self.created_at = ISO8601DateFormatter().string(from: echo.createdAt)
+        self.learned_keywords = echo.learnedKeywords
+    }
 }
 
 struct MemoryRow: Codable {
@@ -511,6 +532,10 @@ struct MemoryRow: Codable {
     let was_edited: Bool
     let created_at: String?
     let updated_at: String?
+    let location_name: String?
+    let location_address: String?
+    let latitude: Double?
+    let longitude: Double?
 }
 
 struct PingRow: Codable {

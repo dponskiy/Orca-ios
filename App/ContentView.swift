@@ -170,6 +170,13 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openScreenshotCapture)) { _ in
             showScreenshot = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .groceryModeHint)) { _ in
+            toastMessage = "🛒 Recipe saved! Try Grocery Mode in your Cooking echo."
+            withAnimation(.spring(duration: 0.4)) { showToast = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                withAnimation(.easeOut(duration: 0.4)) { showToast = false }
+            }
+        }
     }
 }
 

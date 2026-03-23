@@ -24,10 +24,26 @@ struct DropOverlayView: View {
     @State private var editMemory: Memory? = nil
     @State private var savedTranscription = ""
     
+    private let sonarEngine = SonarEngine()
+    
     private func updateLastMemoryEcho(_ echoId: UUID) {
         let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         if let last = try? modelContext.fetch(descriptor).first {
             last.echoId = echoId
+        }
+    }
+
+    private func updateLastMemoryLocation(name: String, address: String?, lat: Double, lng: Double) {
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        if let last = try? modelContext.fetch(descriptor).first {
+            last.locationName = name
+            last.locationAddress = address
+            last.latitude = lat
+            last.longitude = lng
+            try? modelContext.save()  // ADD THIS
+            if let userId = authService.userId {
+                Task { await SupabaseSyncService.shared.pushMemory(last, userId: userId) }
+            }
         }
     }
     
@@ -58,8 +74,6 @@ struct DropOverlayView: View {
         }
     }
     
-    private let sonarEngine = SonarEngine()
-    
     var body: some View {
         ZStack {
             if showBanner {
@@ -89,6 +103,15 @@ struct DropOverlayView: View {
                         onEdit: {
                             let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
                             editMemory = try? modelContext.fetch(descriptor).first
+                        },
+                        onLocationSet: { name, address, lat, lng in
+                            updateLastMemoryLocation(name: name, address: address, lat: lat, lng: lng)
+                        },
+                        onGroceryHint: {
+                            NotificationCenter.default.post(
+                                name: .groceryModeHint,
+                                object: nil
+                            )
                         }
                     )
                 }
@@ -351,4 +374,3 @@ struct DropOverlayView: View {
         isPresented = false
     }
 }
-

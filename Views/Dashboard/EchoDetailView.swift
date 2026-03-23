@@ -14,6 +14,7 @@ struct EchoDetailView: View {
     @Query private var pings: [Ping]
     @State private var editingMemory: Memory?
     @State private var detailMemory: Memory?
+    @State private var showGroceryMode = false
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthService.self) private var authService
 
@@ -22,24 +23,44 @@ struct EchoDetailView: View {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
-    // MARK: - Expired Helper
+    private func shouldOpenDetail(_ memory: Memory) -> Bool {
+        true
+    }
+
     private func isExpired(_ memory: Memory) -> Bool {
         let expiryDate = memory.endDate ?? memory.detectedDate
         guard let date = expiryDate, date < Date() else { return false }
         let memoryPings = pings.filter { $0.memoryId == memory.id }
         if memoryPings.contains(where: { $0.recurrence != .none }) { return false }
-        let hasFuturePing = memoryPings.contains { $0.fireDate > Date() }
-        return !hasFuturePing
+        return !memoryPings.contains { $0.fireDate > Date() }
     }
 
     var body: some View {
         List {
+            // Count + Grocery Mode button
             Section {
                 HStack {
                     Text("\(filteredMemories.count) \(filteredMemories.count == 1 ? "memory" : "memories")")
                         .font(.custom("DMSans-Medium", size: 14))
                         .foregroundColor(.gray)
                     Spacer()
+                    if echo.name == "Cooking" && filteredMemories.contains(where: { $0.hasChecklist }) {
+                        Button {
+                            showGroceryMode = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "cart.fill")
+                                    .font(.system(size: 13))
+                                Text("Grocery Mode")
+                                    .font(.custom("DMSans-Medium", size: 13))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.oceanTeal)
+                            .clipShape(Capsule())
+                        }
+                    }
                 }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -96,15 +117,18 @@ struct EchoDetailView: View {
                                         .font(.custom("DMMono-Regular", size: 12))
                                         .foregroundColor(.gray)
                                 }
-
                                 if memory.detectedDate != nil {
                                     Text("📅").font(.system(size: 11))
                                 }
-
                                 if memory.wasEdited {
                                     Text("edited")
                                         .font(.custom("DMMono-Regular", size: 11))
                                         .foregroundColor(.seafoam)
+                                }
+                                if memory.locationName != nil {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.coral)
                                 }
                             }
 
@@ -141,7 +165,7 @@ struct EchoDetailView: View {
                     .listRowBackground(expired ? Color(red: 0.91, green: 0.94, blue: 0.97) : Color.white)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        if memory.hasChecklist || memory.text.count > 100 {
+                        if shouldOpenDetail(memory) {
                             detailMemory = memory
                         } else {
                             editingMemory = memory
@@ -150,8 +174,13 @@ struct EchoDetailView: View {
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             let id = memory.id
+                            let memoryPings = pings.filter { $0.memoryId == memory.id }
+                            for ping in memoryPings {
+                                NotificationService.shared.cancelPing(pingId: ping.id)
+                                modelContext.delete(ping)
+                            }
                             modelContext.delete(memory)
-                            SpotlightService.shared.removeMemory(id: memory.id)
+                            SpotlightService.shared.removeMemory(id: id)
                             Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
                         } label: {
                             Label("Delete", systemImage: "trash")
@@ -186,12 +215,15 @@ struct EchoDetailView: View {
         .sheet(item: $detailMemory) { memory in
             MemoryDetailView(memory: memory)
         }
+        .sheet(isPresented: $showGroceryMode) {
+            GroceryModeView(memories: filteredMemories)
+        }
     }
 }
 
 #Preview {
     NavigationStack {
-        EchoDetailView(echo: Echo(name: "Dining", emoji: "🍜"))
+        EchoDetailView(echo: Echo(name: "Cooking", emoji: "👨‍🍳"))
     }
     .modelContainer(for: [Memory.self, Echo.self, Ping.self], inMemory: true)
 }

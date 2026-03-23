@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import MapKit
 
 struct MemoryEditView: View {
     @Bindable var memory: Memory
@@ -28,6 +29,13 @@ struct MemoryEditView: View {
     @State private var newSubTaskText: String = ""
     @State private var audioEditService = AudioEditService()
     @State private var showRerunSonar = false
+    @State private var locationName: String? = nil
+    @State private var locationAddress: String? = nil
+    @State private var locationLat: Double? = nil
+    @State private var locationLng: Double? = nil
+    @State private var showLocationSearch = false
+    @State private var showMapOptions = false
+    @State private var addressCopied = false
 
     @State private var pingEntries: [PingEntry] = []
     @State private var isFetchingRecipe = false
@@ -80,6 +88,11 @@ struct MemoryEditView: View {
         echos.first { $0.id == selectedEchoId }?.emoji == "🍽️"
     }
 
+    var isDiningOrEvents: Bool {
+        let name = echos.first { $0.id == selectedEchoId }?.name ?? ""
+        return name == "Dining" || name == "Events"
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -109,6 +122,7 @@ struct MemoryEditView: View {
                     }
 
                     urlSection
+                    locationSection
 
                     Toggle(isOn: Binding(
                         get: { memory.isPinned },
@@ -165,8 +179,12 @@ struct MemoryEditView: View {
 
                     Button(role: .destructive) {
                         let id = memory.id
+                        for ping in memoryPings {
+                            NotificationService.shared.cancelPing(pingId: ping.id)
+                            modelContext.delete(ping)
+                        }
                         modelContext.delete(memory)
-                        SpotlightService.shared.removeMemory(id: memory.id)
+                        SpotlightService.shared.removeMemory(id: id)
                         Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
                         dismiss()
                     } label: {
@@ -207,6 +225,14 @@ struct MemoryEditView: View {
             .onAppear { loadState() }
             .onChange(of: editedText) { _, newValue in
                 showRerunSonar = newValue != originalText
+            }
+            .sheet(isPresented: $showLocationSearch) {
+                LocationSearchView(initialQuery: locationName ?? "") { name, address, lat, lng in
+                    locationName = name
+                    locationAddress = address
+                    locationLat = lat
+                    locationLng = lng
+                }
             }
         }
     }
@@ -414,6 +440,147 @@ struct MemoryEditView: View {
         }
     }
 
+    // MARK: - Location Section
+    private var locationSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Location").font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
+
+            if let name = locationName,
+               let lat = locationLat,
+               let lng = locationLng {
+                let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lng)
+                let region = MKCoordinateRegion(
+                    center: coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                )
+
+                // Mini map — tap opens Maps
+                ZStack {
+                    Map(position: .constant(.region(region))) {
+                        Marker(name, coordinate: coordinate)
+                            .tint(Color.coral)
+                    }
+                    .frame(height: 140)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .disabled(true)
+
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { showMapOptions = true }
+                }
+                .frame(height: 140)
+                .confirmationDialog("Open in Maps", isPresented: $showMapOptions, titleVisibility: .hidden) {
+                    Button("Apple Maps") {
+                        let item = MKMapItem(placemark: MKPlacemark(coordinate: coordinate, addressDictionary: nil))
+                        item.name = name
+                        item.openInMaps()
+                    }
+                    if UIApplication.shared.canOpenURL(URL(string: "comgooglemaps://")!) {
+                        Button("Google Maps") {
+                            if let url = URL(string: "comgooglemaps://?q=\(lat),\(lng)&zoom=15") {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
+
+                // Name + address + copy
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.coral)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(name)
+                            .font(.custom("DMSans-Medium", size: 15))
+                            .foregroundColor(.deepNavy)
+                        if let address = locationAddress {
+                            Text(address)
+                                .font(.custom("DMSans-Regular", size: 13))
+                                .foregroundColor(.gray)
+                        }
+                    }
+
+                    Spacer()
+
+                    // Copy button
+                    Button {
+                        let textToCopy = [name, locationAddress]
+                            .compactMap { $0 }
+                            .joined(separator: ", ")
+                        UIPasteboard.general.string = textToCopy
+                        withAnimation(.easeInOut(duration: 0.2)) { addressCopied = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation(.easeInOut(duration: 0.2)) { addressCopied = false }
+                        }
+                    } label: {
+                        Image(systemName: addressCopied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 15))
+                            .foregroundColor(addressCopied ? .seafoam : .gray)
+                    }
+
+                    // Clear button
+                    Button {
+                        locationName = nil
+                        locationAddress = nil
+                        locationLat = nil
+                        locationLng = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.gray.opacity(0.4))
+                    }
+                }
+                .padding(12)
+                .background(Color.pearl)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                // Open in Maps + Change Location row
+                HStack(spacing: 12) {
+                    Button { showMapOptions = true } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "map").font(.system(size: 13))
+                            Text("Open in Maps").font(.custom("DMSans-Medium", size: 13))
+                        }
+                        .foregroundColor(.oceanTeal)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Color.oceanTeal.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+
+                    Button { showLocationSearch = true } label: {
+                        Text("Change Location")
+                            .font(.custom("DMSans-Medium", size: 13))
+                            .foregroundColor(.gray)
+                    }
+                }
+
+            } else {
+                Button {
+                    showLocationSearch = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "mappin.circle")
+                            .font(.system(size: 16))
+                            .foregroundColor(.gray)
+                        Text("Add Location")
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.gray)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray.opacity(0.4))
+                    }
+                    .padding(12)
+                    .background(Color.pearl)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
+                }
+            }
+        }
+    }
     // MARK: - Date Section
     private var dateSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -463,7 +630,7 @@ struct MemoryEditView: View {
         }
     }
 
-    // MARK: - Ping Section (Multiple)
+    // MARK: - Ping Section
     private var pingSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -706,6 +873,10 @@ struct MemoryEditView: View {
             hasEndDate = true
         }
         editedURL = memory.url ?? ""
+        locationName = memory.locationName
+        locationAddress = memory.locationAddress
+        locationLat = memory.latitude
+        locationLng = memory.longitude
 
         pingEntries = memoryPings.map { ping in
             var entry = PingEntry()
@@ -728,6 +899,10 @@ struct MemoryEditView: View {
         memory.wasEdited = true
         memory.updatedAt = Date()
         memory.url = editedURL.isEmpty ? nil : editedURL
+        memory.locationName = locationName
+        memory.locationAddress = locationAddress
+        memory.latitude = locationLat
+        memory.longitude = locationLng
 
         if memory.hasChecklist && !memorySubTasks.isEmpty {
             let allDone = memorySubTasks.allSatisfy { $0.isCompleted }

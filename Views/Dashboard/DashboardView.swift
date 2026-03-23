@@ -294,7 +294,7 @@ struct DashboardView: View {
                     Task { await weatherService.fetchWeather(for: location) }
                 }
             }
-            .sheet(isPresented: $showCreateEcho) { CreateEchoView() }
+            .sheet(isPresented: $showCreateEcho) { EchoEditSheet(echo: nil) }
             .sheet(item: $editingMemory) { memory in MemoryEditView(memory: memory) }
         }
     }
@@ -364,14 +364,18 @@ struct DashboardView: View {
                 let displayDate: Date? = {
                     if let ping = activePing {
                         if ping.recurrence == .daily {
-                            // Show tomorrow if already completed today
                             let completedToday = memory.completedAt.map {
                                 Calendar.current.isDate($0, inSameDayAs: Date())
                             } ?? false
-                            let base = completedToday ?
+                            let baseDay = completedToday ?
                                 (Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()) :
                                 Date()
-                            return base
+                            // Use the ping's actual fire time, not the current time
+                            let fireComponents = Calendar.current.dateComponents([.hour, .minute], from: ping.fireTime)
+                            return Calendar.current.date(bySettingHour: fireComponents.hour ?? 9,
+                                                         minute: fireComponents.minute ?? 0,
+                                                         second: 0,
+                                                         of: baseDay) ?? baseDay
                         }
                         return ping.recurrence != .none ? ping.fireDate : ping.fireDate
                     }
