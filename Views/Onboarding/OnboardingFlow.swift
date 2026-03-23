@@ -1,4 +1,3 @@
-
 //  OnboardingFlow.swift
 //  Orca
 //
@@ -9,12 +8,13 @@ import SwiftUI
 import SwiftData
 import AVFoundation
 import UserNotifications
+import MapKit
 
 struct OnboardingFlow: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var step = 0
     @State private var firstMemoryText = ""
-    
+
     var body: some View {
         ZStack(alignment: .bottom) {
             switch step {
@@ -31,21 +31,25 @@ struct OnboardingFlow: View {
                 step = 3
             })
             case 3: RecipeURLScreen(onNext: {
-                AnalyticsService.shared.trackOnboardingStepViewed(step: 4, name: "First Drop")
+                AnalyticsService.shared.trackOnboardingStepViewed(step: 4, name: "Location")
                 step = 4
             })
-            case 4: FirstDropScreen(
+            case 4: LocationScreen(onNext: {
+                AnalyticsService.shared.trackOnboardingStepViewed(step: 5, name: "First Drop")
+                step = 5
+            })
+            case 5: FirstDropScreen(
                 onNext: {
-                    AnalyticsService.shared.trackOnboardingStepViewed(step: 5, name: "Notifications")
-                    step = 5
+                    AnalyticsService.shared.trackOnboardingStepViewed(step: 6, name: "Notifications")
+                    step = 6
                 },
                 onMemorySaved: { text in firstMemoryText = text }
             )
-            case 5: NotificationsScreen(onNext: {
-                AnalyticsService.shared.trackOnboardingStepViewed(step: 6, name: "All Set")
-                step = 6
+            case 6: NotificationsScreen(onNext: {
+                AnalyticsService.shared.trackOnboardingStepViewed(step: 7, name: "All Set")
+                step = 7
             }, memoryText: firstMemoryText)
-            case 6: AllSetScreen(onDone: {
+            case 7: AllSetScreen(onDone: {
                 AnalyticsService.shared.trackOnboardingCompleted(droppedFirstMemory: !firstMemoryText.isEmpty)
                 hasCompletedOnboarding = true
             })
@@ -54,7 +58,7 @@ struct OnboardingFlow: View {
             })
             }
 
-            if step > 0 && step < 6 {
+            if step > 0 && step < 7 {
                 HStack {
                     Button {
                         withAnimation(.easeInOut(duration: 0.4)) {
@@ -91,16 +95,16 @@ struct OnboardingFlow: View {
             AnalyticsService.shared.trackOnboardingStepViewed(step: 0, name: "Splash")
         }
     }
-    
+
     // MARK: - Splash
-    
+
     struct SplashScreen: View {
         let onNext: () -> Void
         @State private var logoScale: CGFloat = 0.6
         @State private var logoOpacity: CGFloat = 0
         @State private var textOpacity: CGFloat = 0
         @State private var buttonOpacity: CGFloat = 0
-        
+
         var body: some View {
             ZStack {
                 LinearGradient(
@@ -108,10 +112,10 @@ struct OnboardingFlow: View {
                     startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     Spacer()
-                    
+
                     VStack(spacing: 20) {
                         ZStack {
                             Circle()
@@ -130,7 +134,7 @@ struct OnboardingFlow: View {
                         }
                         .scaleEffect(logoScale)
                         .opacity(logoOpacity)
-                        
+
                         VStack(spacing: 6) {
                             Text("Orca")
                                 .font(.custom("DMSans-Medium", size: 36))
@@ -144,9 +148,9 @@ struct OnboardingFlow: View {
                         }
                         .opacity(textOpacity)
                     }
-                    
+
                     Spacer()
-                    
+
                     VStack(spacing: 14) {
                         Button {
                             onNext()
@@ -188,19 +192,19 @@ struct OnboardingFlow: View {
             }
         }
     }
-    
+
     // MARK: - What Is Orca
-    
+
     struct WhatIsOrcaScreen: View {
         let onNext: () -> Void
         @State private var itemsVisible = false
-        
+
         let features: [(String, String, String)] = [
             ("mic.fill", "Drop it in seconds", "Voice, text, URL or screenshot — Orca captures anything in under 5 seconds."),
             ("sparkles", "Sonar sorts it", "Orca reads what you said and files it in the right place automatically."),
             ("bell.fill", "Pings bring it back", "Set it and forget it. Orca reminds you exactly when it matters."),
         ]
-        
+
         var body: some View {
             ZStack {
                 LinearGradient(
@@ -208,10 +212,10 @@ struct OnboardingFlow: View {
                     startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     Spacer().frame(height: 72)
-                    
+
                     VStack(spacing: 6) {
                         Text("The gap between thinking it")
                             .font(.custom("DMSans-Regular", size: 24))
@@ -226,7 +230,7 @@ struct OnboardingFlow: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 28)
                     .padding(.bottom, 48)
-                    
+
                     VStack(spacing: 28) {
                         ForEach(features.indices, id: \.self) { i in
                             let f = features[i]
@@ -240,7 +244,7 @@ struct OnboardingFlow: View {
                                         .foregroundColor(.oceanTeal)
                                 }
                                 .frame(width: 48, height: 48)
-                                
+
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(f.1)
                                         .font(.custom("DMSans-Medium", size: 17))
@@ -258,9 +262,9 @@ struct OnboardingFlow: View {
                             .animation(.easeOut(duration: 0.4).delay(Double(i) * 0.15), value: itemsVisible)
                         }
                     }
-                    
+
                     Spacer()
-                    
+
                     Button {
                         onNext()
                     } label: {
@@ -287,15 +291,15 @@ struct OnboardingFlow: View {
             }
         }
     }
-    
+
     // MARK: - Thought Bubbles
-    
+
     struct ThoughtBubblesScreen: View {
         let onNext: () -> Void
-        
+
         @State private var visibleCount = 0
         @State private var titleVisible = false
-        
+
         let bubbles: [(String, String)] = [
             ("🎂", "Mom's birthday August 15"),
             ("📶", "WiFi: BlueMountain2024"),
@@ -308,7 +312,7 @@ struct OnboardingFlow: View {
             ("📸", "Screenshot a recipe → auto-imports ingredients"),
             ("📖", "Dungeon Crawler Carl was Great, 5 Stars"),
         ]
-        
+
         var body: some View {
             ZStack {
                 LinearGradient(
@@ -316,18 +320,18 @@ struct OnboardingFlow: View {
                     startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 10) {
                             Spacer().frame(height: 16)
-                            
+
                             ForEach(bubbles.indices, id: \.self) { i in
                                 let isLeft = i % 2 == 0
-                                
+
                                 HStack {
                                     if !isLeft { Spacer(minLength: 48) }
-                                    
+
                                     HStack(spacing: 8) {
                                         Text(bubbles[i].0)
                                             .font(.system(size: 16))
@@ -347,12 +351,12 @@ struct OnboardingFlow: View {
                                     .opacity(visibleCount > i ? 1 : 0)
                                     .offset(x: visibleCount > i ? 0 : (isLeft ? -30 : 30))
                                     .animation(.spring(duration: 0.4, bounce: 0.3).delay(Double(i) * 0.12), value: visibleCount)
-                                    
+
                                     if isLeft { Spacer(minLength: 48) }
                                 }
                                 .padding(.horizontal, 20)
                             }
-                            
+
                             Spacer().frame(height: 160)
                         }
                     }
@@ -364,7 +368,7 @@ struct OnboardingFlow: View {
                         )
                     )
                 }
-                
+
                 VStack {
                     Spacer()
                     LinearGradient(
@@ -376,10 +380,10 @@ struct OnboardingFlow: View {
                     .allowsHitTesting(false)
                 }
                 .ignoresSafeArea()
-                
+
                 VStack {
                     Spacer()
-                    
+
                     VStack(spacing: 6) {
                         Text("Notes, reminders, and search.")
                             .font(.custom("DMSans-Regular", size: 20))
@@ -392,7 +396,7 @@ struct OnboardingFlow: View {
                     .offset(y: titleVisible ? 0 : 12)
                     .animation(.easeOut(duration: 0.5).delay(0.6), value: titleVisible)
                     .padding(.bottom, 16)
-                    
+
                     Button {
                         onNext()
                     } label: {
@@ -424,7 +428,7 @@ struct OnboardingFlow: View {
             }
         }
     }
-    
+
     // MARK: - Recipe URL Demo
 
     struct RecipeURLScreen: View {
@@ -464,7 +468,6 @@ struct OnboardingFlow: View {
                     Spacer()
 
                     VStack(spacing: 16) {
-                        // URL input mock
                         HStack(spacing: 10) {
                             Image(systemName: "link")
                                 .font(.system(size: 14))
@@ -490,14 +493,12 @@ struct OnboardingFlow: View {
                         .offset(y: showURL ? 0 : 10)
                         .animation(.easeOut(duration: 0.4), value: showURL)
 
-                        // Arrow
                         Image(systemName: "arrow.down")
                             .font(.system(size: 20, weight: .medium))
                             .foregroundColor(.oceanTeal)
                             .opacity(showArrow ? 1 : 0)
                             .animation(.easeOut(duration: 0.3), value: showArrow)
 
-                        // Recipe card
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 10) {
                                 Text("🍽")
@@ -611,15 +612,172 @@ struct OnboardingFlow: View {
             }
         }
     }
+
+    // MARK: - Location Screen (NEW)
+
+    struct LocationScreen: View {
+        let onNext: () -> Void
+        @State private var contentVisible = false
+        @State private var showMemory = false
+        @State private var showMap = false
+        @State private var showPin = false
+
+        // Nobu NYC coordinates
+        let coordinate = CLLocationCoordinate2D(latitude: 38.905457, longitude: -77.054197)
+
+        var body: some View {
+            ZStack {
+                LinearGradient(
+                    colors: [Color(hex: "0B1D33"), Color(hex: "1A3A5C")],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    Spacer().frame(height: 60)
+
+                    VStack(spacing: 8) {
+                        Text("Orca remembers where too")
+                            .font(.custom("DMSans-Medium", size: 28))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                        Text("Mention a restaurant and Orca pins it\nautomatically. Open directions anytime.")
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.white.opacity(0.5))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 28)
+                    }
+                    .opacity(contentVisible ? 1 : 0)
+                    .animation(.easeOut(duration: 0.4), value: contentVisible)
+
+                    Spacer()
+
+                    VStack(spacing: 0) {
+                        // Memory card
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 8) {
+                                Text("🍜")
+                                    .font(.system(size: 14))
+                                Text("Dining")
+                                    .font(.custom("DMSans-Medium", size: 13))
+                                    .foregroundColor(.deepNavy)
+                                Spacer()
+                                Text("📅 Mar 28")
+                                    .font(.custom("DMMono-Regular", size: 12))
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.top, 14)
+
+                            Text("Nobu tomorrow for dinner — get the tuna belly")
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.deepNavy)
+                                .padding(.horizontal, 14)
+
+                            // Mini map
+                            if showMap {
+                                ZStack {
+                                    Map(position: .constant(.region(MKCoordinateRegion(
+                                        center: coordinate,
+                                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                                    )))) {
+                                        if showPin {
+                                            Marker("Nobu", coordinate: coordinate)
+                                                .tint(Color.coral)
+                                        }
+                                    }
+                                    .frame(height: 130)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .disabled(true)
+                                }
+                                .padding(.horizontal, 14)
+                                .transition(.opacity)
+                            }
+
+                            // Address row
+                            if showPin {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.coral)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text("Nobu")
+                                            .font(.custom("DMSans-Medium", size: 13))
+                                            .foregroundColor(.deepNavy)
+                                        Text("2525 Pennsylvania Ave NW, Washington, DC")
+                                            .font(.custom("DMSans-Regular", size: 12))
+                                            .foregroundColor(.gray)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "map")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.oceanTeal)
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.bottom, 4)
+                                .transition(.opacity)
+                            }
+
+                            Spacer().frame(height: 8)
+                        }
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+                        .opacity(showMemory ? 1 : 0)
+                        .offset(y: showMemory ? 0 : 20)
+                        .animation(.spring(duration: 0.5, bounce: 0.3), value: showMemory)
+                    }
+                    .padding(.horizontal, 28)
+
+                    Spacer()
+
+                    Button {
+                        onNext()
+                    } label: {
+                        Text("Got it, what's next?")
+                            .font(.custom("DMSans-Medium", size: 17))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                LinearGradient(
+                                    colors: [.oceanTeal, .seafoam],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .shadow(color: .oceanTeal.opacity(0.4), radius: 12, y: 4)
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 52)
+                    .opacity(showPin ? 1 : 0)
+                    .animation(.easeOut(duration: 0.4).delay(0.2), value: showPin)
+                }
+            }
+            .onAppear {
+                contentVisible = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    withAnimation { showMemory = true }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                    withAnimation(.easeOut(duration: 0.5)) { showMap = true }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                    withAnimation(.spring(duration: 0.4, bounce: 0.3)) { showPin = true }
+                }
+            }
+        }
+    }
+
     // MARK: - First Real Drop
-    
+
     struct FirstDropScreen: View {
         let onNext: () -> Void
         let onMemorySaved: (String) -> Void
-        
+
         @Environment(\.modelContext) private var modelContext
         @Query private var echos: [Echo]
-        
+
         @State private var audioService = AudioService()
         @State private var sonarEngine = SonarEngine()
         @State private var isRecording = false
@@ -628,12 +786,12 @@ struct OnboardingFlow: View {
         @State private var sonarResult: SonarResult?
         @State private var permissionDenied = false
         @State private var savedTranscription = ""
-        
+
         var echoForResult: Echo? {
             guard let result = sonarResult else { return nil }
             return echos.first { $0.id == result.echoId } ?? echos.first { $0.name == result.echoName }
         }
-        
+
         var body: some View {
             ZStack {
                 LinearGradient(
@@ -641,10 +799,10 @@ struct OnboardingFlow: View {
                     startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     Spacer().frame(height: 60)
-                    
+
                     VStack(spacing: 8) {
                         Text("Drop your first memory")
                             .font(.custom("DMSans-Medium", size: 28))
@@ -654,9 +812,9 @@ struct OnboardingFlow: View {
                             .foregroundColor(.white.opacity(0.5))
                             .animation(.easeOut, value: hasRecorded)
                     }
-                    
+
                     Spacer()
-                    
+
                     if showResult, let result = sonarResult {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 8) {
@@ -670,11 +828,11 @@ struct OnboardingFlow: View {
                                 Text(echoForResult?.emoji ?? "📝")
                                     .font(.system(size: 22))
                             }
-                            
+
                             Text(savedTranscription)
                                 .font(.custom("DMSans-Regular", size: 15))
                                 .foregroundColor(.deepNavy)
-                            
+
                             HStack(spacing: 8) {
                                 if result.shouldCreatePing {
                                     Label(
@@ -688,7 +846,7 @@ struct OnboardingFlow: View {
                                     .background(Color.oceanTeal.opacity(0.1))
                                     .clipShape(Capsule())
                                 }
-                                
+
                                 if let date = result.detectedDate {
                                     Text(date, format: .dateTime.month(.abbreviated).day())
                                         .font(.custom("DMMono-Regular", size: 12))
@@ -706,7 +864,7 @@ struct OnboardingFlow: View {
                         .shadow(color: .black.opacity(0.1), radius: 16, y: 4)
                         .padding(.horizontal, 28)
                         .transition(.scale(scale: 0.9).combined(with: .opacity))
-                        
+
                     } else {
                         VStack(spacing: 28) {
                             if !savedTranscription.isEmpty || !audioService.transcription.isEmpty {
@@ -717,7 +875,7 @@ struct OnboardingFlow: View {
                                     .padding(.horizontal, 40)
                                     .animation(.easeOut, value: audioService.transcription)
                             }
-                            
+
                             if isRecording {
                                 HStack(spacing: 3) {
                                     ForEach(0..<24, id: \.self) { i in
@@ -729,7 +887,7 @@ struct OnboardingFlow: View {
                                 }
                                 .frame(height: 40)
                             }
-                            
+
                             if !hasRecorded {
                                 Button {
                                     toggleRecording()
@@ -753,9 +911,9 @@ struct OnboardingFlow: View {
                             }
                         }
                     }
-                    
+
                     Spacer()
-                    
+
                     if showResult {
                         Button {
                             onNext()
@@ -802,14 +960,14 @@ struct OnboardingFlow: View {
                 }
             }
         }
-        
+
         private func barHeight(index: Int) -> CGFloat {
             let base: CGFloat = 4
             let level = CGFloat(audioService.audioLevel)
             let variation = sin(Double(index) * 0.8 + Date().timeIntervalSince1970 * 3) * 0.5 + 0.5
             return base + (level * 36 * CGFloat(variation))
         }
-        
+
         private func toggleRecording() {
             let status = AVAudioApplication.shared.recordPermission
             if status == .denied {
@@ -829,26 +987,26 @@ struct OnboardingFlow: View {
                 startRecording()
             }
         }
-        
+
         private func startRecording() {
             isRecording = true
             audioService.startRecording()
         }
-        
+
         private func stopAndSave() {
             audioService.stopRecording()
             isRecording = false
             savedTranscription = audioService.transcription
             hasRecorded = true
-            
+
             guard !savedTranscription.isEmpty else {
                 hasRecorded = false
                 return
             }
-            
+
             sonarResult = sonarEngine.process(text: savedTranscription, echos: echos)
             onMemorySaved(savedTranscription)
-            
+
             let echoId = sonarResult?.echoId ?? echos.first?.id ?? UUID()
             let memory = Memory(text: savedTranscription, echoId: echoId)
             memory.tags = sonarResult?.tags ?? []
@@ -859,11 +1017,11 @@ struct OnboardingFlow: View {
             memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
             memory.isActionable = sonarResult?.isActionable ?? false
             modelContext.insert(memory)
-            
+
             if let detectedURL = sonarEngine.detectURL(text: savedTranscription) {
                 memory.url = detectedURL
             }
-            
+
             if let result = sonarResult {
                 for suggestion in result.pingSuggestions {
                     let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
@@ -875,7 +1033,7 @@ struct OnboardingFlow: View {
                     NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
                 }
             }
-            
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 withAnimation(.spring(duration: 0.5, bounce: 0.3)) {
                     showResult = true
@@ -883,16 +1041,16 @@ struct OnboardingFlow: View {
             }
         }
     }
-    
+
     // MARK: - Notifications
-    
+
     struct NotificationsScreen: View {
         let onNext: () -> Void
         let memoryText: String
-        
+
         @State private var granted = false
         @State private var contentVisible = false
-        
+
         var body: some View {
             ZStack {
                 LinearGradient(
@@ -900,10 +1058,10 @@ struct OnboardingFlow: View {
                     startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     Spacer()
-                    
+
                     VStack(spacing: 28) {
                         ZStack {
                             Circle()
@@ -915,7 +1073,7 @@ struct OnboardingFlow: View {
                         .scaleEffect(contentVisible ? 1 : 0.6)
                         .opacity(contentVisible ? 1 : 0)
                         .animation(.spring(duration: 0.6, bounce: 0.4), value: contentVisible)
-                        
+
                         VStack(spacing: 10) {
                             Text("Never miss a thing")
                                 .font(.custom("DMSans-Medium", size: 28))
@@ -928,8 +1086,7 @@ struct OnboardingFlow: View {
                         }
                         .opacity(contentVisible ? 1 : 0)
                         .animation(.easeOut(duration: 0.4).delay(0.2), value: contentVisible)
-                        
-                        // Real notification using their actual memory
+
                         HStack(spacing: 12) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 10)
@@ -945,7 +1102,7 @@ struct OnboardingFlow: View {
                                     .fill(.white)
                                     .frame(width: 20, height: 24)
                             }
-                            
+
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Orca · now")
                                     .font(.custom("DMMono-Regular", size: 11))
@@ -968,9 +1125,9 @@ struct OnboardingFlow: View {
                         .opacity(contentVisible ? 1 : 0)
                         .animation(.easeOut(duration: 0.4).delay(0.35), value: contentVisible)
                     }
-                    
+
                     Spacer()
-                    
+
                     VStack(spacing: 12) {
                         if granted {
                             HStack(spacing: 8) {
@@ -981,7 +1138,7 @@ struct OnboardingFlow: View {
                                     .foregroundColor(.white)
                             }
                             .transition(.scale.combined(with: .opacity))
-                            
+
                             Button {
                                 onNext()
                             } label: {
@@ -1017,7 +1174,7 @@ struct OnboardingFlow: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 16))
                                     .shadow(color: .oceanTeal.opacity(0.4), radius: 12, y: 4)
                             }
-                            
+
                             Button {
                                 onNext()
                             } label: {
@@ -1036,7 +1193,7 @@ struct OnboardingFlow: View {
                 withAnimation { contentVisible = true }
             }
         }
-        
+
         private func requestNotifications() {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
                 DispatchQueue.main.async {
@@ -1046,13 +1203,13 @@ struct OnboardingFlow: View {
             }
         }
     }
-    
+
     // MARK: - All Set
-    
+
     struct AllSetScreen: View {
         let onDone: () -> Void
         @State private var contentVisible = false
-        
+
         let tips: [(String, String)] = [
             ("🎙️", "Tap the fin for instant voice capture"),
             ("↑",   "Swipe up on the fin for more options"),
@@ -1060,7 +1217,7 @@ struct OnboardingFlow: View {
             ("🔍", "Search with \"Dive into memories\""),
             ("⚙️", "Set Orca as your Action Button in Settings"),
         ]
-        
+
         var body: some View {
             ZStack {
                 LinearGradient(
@@ -1068,10 +1225,10 @@ struct OnboardingFlow: View {
                     startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     Spacer()
-                    
+
                     ZStack {
                         Circle()
                             .fill(
@@ -1091,7 +1248,7 @@ struct OnboardingFlow: View {
                     .opacity(contentVisible ? 1 : 0)
                     .animation(.spring(duration: 0.7, bounce: 0.5), value: contentVisible)
                     .padding(.bottom, 24)
-                    
+
                     VStack(spacing: 8) {
                         Text("You're all set")
                             .font(.custom("DMSans-Medium", size: 32))
@@ -1107,9 +1264,9 @@ struct OnboardingFlow: View {
                     }
                     .opacity(contentVisible ? 1 : 0)
                     .animation(.easeOut(duration: 0.4).delay(0.3), value: contentVisible)
-                    
+
                     Spacer()
-                    
+
                     VStack(spacing: 0) {
                         ForEach(tips.indices, id: \.self) { i in
                             HStack(spacing: 14) {
@@ -1124,7 +1281,7 @@ struct OnboardingFlow: View {
                             .padding(.vertical, 12)
                             .opacity(contentVisible ? 1 : 0)
                             .animation(.easeOut(duration: 0.4).delay(0.4 + Double(i) * 0.1), value: contentVisible)
-                            
+
                             if i < tips.count - 1 {
                                 Divider()
                                     .background(.white.opacity(0.08))
@@ -1132,9 +1289,9 @@ struct OnboardingFlow: View {
                         }
                     }
                     .padding(.horizontal, 28)
-                    
+
                     Spacer()
-                    
+
                     Button {
                         AnalyticsService.shared.trackOnboardingCompleted(droppedFirstMemory: true)
                         onDone()
