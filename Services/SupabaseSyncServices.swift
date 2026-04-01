@@ -44,6 +44,8 @@ class SupabaseSyncService {
             try await syncEchos(userId: userId, context: context)
             try await syncMemories(userId: userId, context: context)
             try await syncPings(userId: userId, context: context)
+            try await syncPersons(userId: userId, context: context)
+            try await syncGiftItems(userId: userId, context: context)
             lastSyncDate = Date()
         } catch {
             syncError = error.localizedDescription
@@ -75,7 +77,16 @@ class SupabaseSyncService {
                 seenMemoryIds.insert(memory.id)
             }
         }
-
+        let allPersons = try context.fetch(FetchDescriptor<Person>())
+        var seenPersonNames = [String: Person]()
+        for person in allPersons.sorted(by: { $0.updatedAt > $1.updatedAt }) {
+            let key = person.name.lowercased()
+            if seenPersonNames[key] != nil {
+                context.delete(person)
+            } else {
+                seenPersonNames[key] = person
+            }
+        }
         let pings = try context.fetch(FetchDescriptor<Ping>())
         var seenPingIds = Set<UUID>()
         for ping in pings {
@@ -85,9 +96,44 @@ class SupabaseSyncService {
                 seenPingIds.insert(ping.id)
             }
         }
-
+        // Deduplicate gift items by personId + name + occasion
+        let allGiftItems = try context.fetch(FetchDescriptor<GiftItem>())
+        var seenGiftKeys = Set<String>()
+        for item in allGiftItems.sorted(by: { $0.createdAt > $1.createdAt }) {
+            let key = "\(item.personId.uuidString)-\(item.name.lowercased())-\(item.occasion)"
+            if seenGiftKeys.contains(key) {
+                context.delete(item)
+            } else {
+                seenGiftKeys.insert(key)
+            }
+        }
         try context.save()
         print("✅ Local deduplication complete")
+    }
+
+    // MARK: - Patch Missing Default Echos
+
+    private func patchMissingDefaultEchos(context: ModelContext, userId: UUID) async throws {
+        let existingEchos = try context.fetch(FetchDescriptor<Echo>())
+        let existingNames = Set(existingEchos.map { $0.name.lowercased() })
+
+        let required: [(name: String, emoji: String, sortOrder: Int)] = [
+            ("Workout", "💪", 21),
+        ]
+
+        var newEchos: [Echo] = []
+        for item in required where !existingNames.contains(item.name.lowercased()) {
+            let echo = Echo(name: item.name, emoji: item.emoji, sortOrder: item.sortOrder)
+            context.insert(echo)
+            newEchos.append(echo)
+            print("✅ Patched missing echo: \(item.name)")
+        }
+
+        if !newEchos.isEmpty {
+            try context.save()
+            let rows = newEchos.map { EchoRow(from: $0, userId: userId) }
+            try await supabase.from("echos").upsert(rows, onConflict: "id").execute()
+        }
     }
 
     // MARK: - Upsert User
@@ -117,8 +163,7 @@ class SupabaseSyncService {
         let localEchos = try context.fetch(FetchDescriptor<Echo>())
         let didSeed = UserDefaults.standard.bool(forKey: "orcaDidSeedDefaults")
 
-        if remoteEchos.isEmpty && !didSeed {
-            // True new user — seed regardless of local state
+        if remoteEchos.isEmpty && (!didSeed || localEchos.isEmpty) {
             if localEchos.isEmpty {
                 Echo.seedDefaults(context: context)
             }
@@ -134,7 +179,6 @@ class SupabaseSyncService {
             return
         }
 
-        // Mark as seeded if remote has echos (returning user / reinstall)
         if !didSeed && !remoteEchos.isEmpty {
             UserDefaults.standard.set(true, forKey: "orcaDidSeedDefaults")
         }
@@ -152,7 +196,6 @@ class SupabaseSyncService {
             }
 
             if let nameMatch = localEchos.first(where: { $0.name == remote.name }) {
-                // Update echoId on all memories before mutating the echo's ID
                 let allMemories = try context.fetch(FetchDescriptor<Memory>())
                 for memory in allMemories where memory.echoId == nameMatch.id {
                     memory.echoId = remoteId
@@ -182,6 +225,9 @@ class SupabaseSyncService {
             let echoRows = newLocalEchos.map { EchoRow(from: $0, userId: userId) }
             try await supabase.from("echos").upsert(echoRows, onConflict: "id").execute()
         }
+
+        // Migration: patch any missing default echos for existing users
+        try await patchMissingDefaultEchos(context: context, userId: userId)
 
         print("✅ Echos synced")
     }
@@ -358,7 +404,112 @@ class SupabaseSyncService {
 
         print("✅ Pings synced")
     }
+    // MARK: - Sync Persons
 
+    private func syncPersons(userId: UUID, context: ModelContext) async throws {
+        let localPersons = try context.fetch(FetchDescriptor<Person>())
+
+        let personRows = localPersons.reduce(into: [PersonRow]()) { result, p in
+            guard !result.contains(where: { $0.id == p.id.uuidString }) else { return }
+            result.append(PersonRow(
+                id: p.id.uuidString,
+                user_id: userId.uuidString,
+                name: p.name,
+                relationship: p.relationship,
+                birthday: p.birthday.map { ISO8601DateFormatter().string(from: $0) },
+                notes: p.notes,
+                linked_memory_ids: p.linkedMemoryIds.map { $0.uuidString },
+                occasion_budgets: p.occasionBudgets.isEmpty ? nil : p.occasionBudgets,
+                custom_occasions: p.customOccasions.isEmpty ? nil : p.customOccasions,
+                created_at: ISO8601DateFormatter().string(from: p.createdAt),
+                updated_at: ISO8601DateFormatter().string(from: p.updatedAt)
+            ))
+        }
+
+        if !personRows.isEmpty {
+            try await supabase.from("persons").upsert(personRows, onConflict: "id").execute()
+        }
+
+        let remotePersons: [PersonRow] = try await supabase
+            .from("persons").select().eq("user_id", value: userId.uuidString).execute().value
+
+        // Deduplicate remote by id before inserting
+        let localIds = Set(localPersons.map { $0.id.uuidString })
+        let localNames = Set(localPersons.map { $0.name.lowercased() })
+
+        for remote in remotePersons {
+            guard !localIds.contains(remote.id),
+                  let remoteId = UUID(uuidString: remote.id) else { continue }
+            // Skip if we already have someone with this name locally — prevents ghost duplicates
+            guard !localNames.contains(remote.name.lowercased()) else { continue }
+            let p = Person(name: remote.name, relationship: remote.relationship)
+            p.id = remoteId
+            p.notes = remote.notes
+            p.occasionBudgets = remote.occasion_budgets ?? [:]
+            p.customOccasions = remote.custom_occasions ?? []
+            p.linkedMemoryIds = (remote.linked_memory_ids ?? []).compactMap { UUID(uuidString: $0) }
+            if let bdStr = remote.birthday { p.birthday = ISO8601DateFormatter().date(from: bdStr) }
+            if let createdStr = remote.created_at { p.createdAt = ISO8601DateFormatter().date(from: createdStr) ?? Date() }
+            context.insert(p)
+        }
+        print("✅ Persons synced")
+    }
+
+    // MARK: - Sync Gift Items
+
+    private func syncGiftItems(userId: UUID, context: ModelContext) async throws {
+        let localItems = try context.fetch(FetchDescriptor<GiftItem>())
+
+        let rows = localItems.reduce(into: [GiftItemRow]()) { result, item in
+            guard !result.contains(where: { $0.id == item.id.uuidString }) else { return }
+            result.append(GiftItemRow(
+                id: item.id.uuidString,
+                user_id: userId.uuidString,
+                person_id: item.personId.uuidString,
+                name: item.name,
+                price: item.price,
+                status: item.statusRaw,
+                occasion: item.occasion,
+                year: item.year,
+                linked_memory_id: item.linkedMemoryId?.uuidString,
+                url: item.url,
+                created_at: ISO8601DateFormatter().string(from: item.createdAt)
+            ))
+        }
+
+        if !rows.isEmpty {
+            try await supabase.from("gift_items").upsert(rows, onConflict: "id").execute()
+        }
+
+        let remoteItems: [GiftItemRow] = try await supabase
+            .from("gift_items").select().eq("user_id", value: userId.uuidString).execute().value
+
+        let localIds = Set(localItems.map { $0.id.uuidString })
+        for remote in remoteItems {
+            guard !localIds.contains(remote.id),
+                  let remoteId = UUID(uuidString: remote.id),
+                  let personId = UUID(uuidString: remote.person_id) else { continue }
+
+            // Skip if identical gift already exists locally
+            let alreadyExists = localItems.contains {
+                $0.personId == personId &&
+                $0.name.lowercased() == remote.name.lowercased() &&
+                $0.occasion == remote.occasion
+            }
+            guard !alreadyExists else { continue }
+
+            let item = GiftItem(personId: personId, name: remote.name, occasion: remote.occasion)
+            item.id = remoteId
+            item.price = remote.price
+            item.statusRaw = remote.status
+            item.year = remote.year
+            item.linkedMemoryId = remote.linked_memory_id.flatMap { UUID(uuidString: $0) }
+            item.url = remote.url
+            if let createdStr = remote.created_at { item.createdAt = ISO8601DateFormatter().date(from: createdStr) ?? Date() }
+            context.insert(item)
+        }
+        print("✅ Gift items synced")
+    }
     // MARK: - Push Single Memory
 
     func pushMemory(_ memory: Memory, userId: UUID) async {
@@ -452,7 +603,35 @@ class SupabaseSyncService {
             print("❌ Failed to delete memory: \(error)")
         }
     }
+    // MARK: - Delete Person
 
+    func deletePerson(id: UUID) async {
+        do {
+            try await supabase
+                .from("persons")
+                .delete()
+                .eq("id", value: id.uuidString)
+                .execute()
+            print("✅ Person deleted from Supabase: \(id)")
+        } catch {
+            print("❌ Failed to delete person: \(error)")
+        }
+    }
+
+    // MARK: - Delete Gift Item
+
+    func deleteGiftItem(id: UUID) async {
+        do {
+            try await supabase
+                .from("gift_items")
+                .delete()
+                .eq("id", value: id.uuidString)
+                .execute()
+            print("✅ Gift item deleted from Supabase: \(id)")
+        } catch {
+            print("❌ Failed to delete gift item: \(error)")
+        }
+    }
     // MARK: - Delete Echo
 
     func deleteEcho(id: UUID) async {
@@ -548,4 +727,31 @@ struct PingRow: Codable {
     let is_active: Bool
     let last_fired: String?
     let created_at: String
+}
+struct PersonRow: Codable {
+    let id: String
+    let user_id: String
+    let name: String
+    let relationship: String?
+    let birthday: String?
+    let notes: String?
+    let linked_memory_ids: [String]?
+    let occasion_budgets: [String: Double]?   // ← replaces birthday_budget
+    let custom_occasions: [String]?            // ← new
+    let created_at: String?
+    let updated_at: String?
+}
+
+struct GiftItemRow: Codable {
+    let id: String
+    let user_id: String
+    let person_id: String
+    let name: String
+    let price: Double?
+    let status: String
+    let occasion: String
+    let year: Int
+    let linked_memory_id: String?
+    let url: String?
+    let created_at: String?
 }

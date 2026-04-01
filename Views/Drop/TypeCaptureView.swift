@@ -281,9 +281,22 @@ struct TypeCaptureView: View {
     
     private func saveMemory() {
         guard !text.isEmpty else { return }
-        
+
         sonarResult = sonarEngine.process(text: text, echos: echos)
-        
+
+        // Fix #5: if Sonar routes to Workout and today's session exists, merge into it
+        let isWorkout = sonarResult?.echoName.lowercased().contains("workout") == true
+        if isWorkout,
+           let existing = WorkoutSessionManager.shared.mergeIntoTodaySession(
+               text: text, echos: echos, context: modelContext) {
+            savedMemory = existing
+            if let userId = authService.userId {
+                Task { await SupabaseSyncService.shared.pushMemory(existing, userId: userId) }
+            }
+            withAnimation(.spring(duration: 0.4)) { showBanner = true }
+            return
+        }
+
         let echoId = sonarResult?.echoId ?? echos.first?.id ?? UUID()
         let memory = Memory(text: text, echoId: echoId, captureType: Memory.CaptureType.typed)
         memory.tags = sonarResult?.tags ?? []
@@ -298,52 +311,44 @@ struct TypeCaptureView: View {
         SpotlightService.shared.indexMemory(memory, echoName: sonarResult?.echoName ?? "Notes", echoEmoji: echos.first { $0.id == memory.echoId }?.emoji ?? "📝")
         savedMemory = memory
         NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
-        
+
         if let userId = authService.userId, let result = sonarResult {
             Task {
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
                 for suggestion in result.pingSuggestions {
                     let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
                     let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
-                    if let fireTime = suggestion.fireTime {
-                        ping.fireTime = fireTime
-                    }
+                    if let fireTime = suggestion.fireTime { ping.fireTime = fireTime }
                     modelContext.insert(ping)
                     await SupabaseSyncService.shared.pushPing(ping, userId: userId)
                     NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
                 }
+                if result.detectedSportsTeam != nil {
+                    await SportsMemoryService.shared.createGamePings(
+                        for: text, memory: memory,
+                        modelContext: modelContext, userId: userId.uuidString)
+                }
             }
         }
-        
+
         AnalyticsService.shared.trackMemoryDropped(
-            captureType: "typed",
-            echoName: sonarResult?.echoName ?? "Unknown",
+            captureType: "typed", echoName: sonarResult?.echoName ?? "Unknown",
             hasPing: sonarResult?.shouldCreatePing ?? false,
-            hasDate: sonarResult?.detectedDate != nil,
-            hasURL: memory.url != nil,
-            hasChecklist: memory.hasChecklist,
-            wordCount: text.split(separator: " ").count
-        )
-        
+            hasDate: sonarResult?.detectedDate != nil, hasURL: memory.url != nil,
+            hasChecklist: memory.hasChecklist, wordCount: text.split(separator: " ").count)
+
         if urlText.isEmpty {
-            if let detectedURL = sonarEngine.detectURL(text: text) {
-                memory.url = detectedURL
-            }
+            if let detectedURL = sonarEngine.detectURL(text: text) { memory.url = detectedURL }
         }
-        
-        if recipeFetched {
-            // ingredients added via handleRecipeFetch in banner
-        } else if let checklistItems = sonarEngine.detectChecklist(text: text) {
+        if !recipeFetched, let checklistItems = sonarEngine.detectChecklist(text: text) {
             memory.hasChecklist = true
             for (index, item) in checklistItems.enumerated() {
                 let subTask = SubTask(memoryId: memory.id, text: item, sortOrder: index)
                 modelContext.insert(subTask)
             }
         }
-        
-        withAnimation(.spring(duration: 0.4)) {
-            showBanner = true
-        }
+
+        withAnimation(.spring(duration: 0.4)) { showBanner = true }
     }
     
     private func updateLastMemoryTask(isTask: Bool) {

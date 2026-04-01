@@ -471,7 +471,7 @@ struct MemoryEditView: View {
                 .frame(height: 140)
                 .confirmationDialog("Open in Maps", isPresented: $showMapOptions, titleVisibility: .hidden) {
                     Button("Apple Maps") {
-                        let item = MKMapItem(placemark: MKPlacemark(coordinate: coordinate, addressDictionary: nil))
+                        let item = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
                         item.name = name
                         item.openInMaps()
                     }

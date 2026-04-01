@@ -20,6 +20,7 @@ struct CalendarTabView: View {
     @State private var selectedDate: Date = Date()
     @State private var displayedMonth: Date = Date()
     @State private var editingMemory: Memory?
+    @State private var detailMemory: Memory?
     @State private var snoozeMemory: Memory?
     @State private var showSnoozeSheet = false
     @StateObject private var weatherService = WeatherService.shared
@@ -27,6 +28,42 @@ struct CalendarTabView: View {
 
     private let calendar = Calendar.current
     private let daysOfWeek = ["S", "M", "T", "W", "T", "F", "S"]
+
+    // MARK: - Recurring Completion Helpers
+
+    private func isoDateKey(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        return formatter.string(from: date)
+    }
+
+    private func isCompletedOn(_ memory: Memory, date: Date) -> Bool {
+        memory.recurringCompletedDates.contains(isoDateKey(date))
+    }
+
+    private func setCompleted(_ memory: Memory, date: Date) {
+        let key = isoDateKey(date)
+        if !memory.recurringCompletedDates.contains(key) {
+            memory.recurringCompletedDates.append(key)
+        }
+        memory.completedAt = date
+        memory.updatedAt = Date()
+    }
+
+    private func setUncompleted(_ memory: Memory, date: Date) {
+        let key = isoDateKey(date)
+        memory.recurringCompletedDates.removeAll { $0 == key }
+        if memory.recurringCompletedDates.isEmpty {
+            memory.completedAt = nil
+        } else {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withFullDate]
+            memory.completedAt = memory.recurringCompletedDates
+                .compactMap { formatter.date(from: $0) }
+                .max()
+        }
+        memory.updatedAt = Date()
+    }
 
     // MARK: - Expired Helper
 
@@ -37,6 +74,10 @@ struct CalendarTabView: View {
         if memoryPings.contains(where: { $0.recurrence != .none }) { return false }
         let hasFuturePing = memoryPings.contains { $0.fireDate > Date() }
         return !hasFuturePing
+    }
+
+    private func shouldOpenDetail(_ memory: Memory) -> Bool {
+        true
     }
 
     // MARK: - Filtered Data
@@ -61,15 +102,10 @@ struct CalendarTabView: View {
         pings.filter { ping in
             guard ping.isActive,
                   let memory = memories.first(where: { $0.id == ping.memoryId }) else { return false }
-
-            // Don't show if memory already appears in selectedDateMemories
             if selectedDateMemories.contains(where: { $0.id == memory.id }) { return false }
-
             if calendar.isDate(ping.fireDate, inSameDayAs: selectedDate) { return true }
-
             guard ping.recurrence != .none else { return false }
             guard selectedDate >= calendar.startOfDay(for: ping.fireDate) else { return false }
-
             switch ping.recurrence {
             case .daily: return true
             case .weekly:
@@ -111,6 +147,7 @@ struct CalendarTabView: View {
                 }
             }
             .sheet(item: $editingMemory) { memory in MemoryEditView(memory: memory) }
+            .sheet(item: $detailMemory) { memory in MemoryDetailView(memory: memory) }
             .sheet(isPresented: $showSnoozeSheet) {
                 if let memory = snoozeMemory {
                     SnoozeSheet(memory: memory) {
@@ -230,10 +267,8 @@ struct CalendarTabView: View {
             guard ping.isActive else { return false }
             guard let _ = memories.first(where: { $0.id == ping.memoryId }) else { return false }
             guard ping.recurrence != .none || calendar.isDate(ping.fireDate, inSameDayAs: date) else { return false }
-
             if calendar.isDate(ping.fireDate, inSameDayAs: date) { return true }
             guard date >= calendar.startOfDay(for: ping.fireDate) else { return false }
-
             switch ping.recurrence {
             case .daily: return true
             case .weekly:
@@ -396,19 +431,19 @@ struct CalendarTabView: View {
     private func calendarMemoryRow(memory: Memory) -> some View {
         let expired = isExpired(memory)
         let expiredBg = Color(red: 0.91, green: 0.94, blue: 0.97)
+        let memoryPings = pings.filter { $0.memoryId == memory.id }
+        let isRecurring = memoryPings.contains { $0.recurrence != .none }
 
         return HStack(spacing: 12) {
             if memory.isActionable {
                 Button {
                     withAnimation(.spring(duration: 0.3)) {
-                        let memoryPings = pings.filter { $0.memoryId == memory.id }
-                        let isRecurring = memoryPings.contains { $0.recurrence != .none }
                         if isRecurring {
-                            let completedToday = memory.completedAt.map {
-                                calendar.isDate($0, inSameDayAs: selectedDate)
-                            } ?? false
-                            memory.completedAt = completedToday ? nil : Date()
-                            memory.updatedAt = Date()
+                            if isCompletedOn(memory, date: selectedDate) {
+                                setUncompleted(memory, date: selectedDate)
+                            } else {
+                                setCompleted(memory, date: selectedDate)
+                            }
                         } else {
                             memory.isCompleted.toggle()
                             memory.completedAt = memory.isCompleted ? Date() : nil
@@ -424,10 +459,7 @@ struct CalendarTabView: View {
                         }
                     }
                 } label: {
-                    let completedToday = memory.completedAt.map {
-                        calendar.isDate($0, inSameDayAs: selectedDate)
-                    } ?? false
-                    let showChecked = memory.isCompleted || completedToday
+                    let showChecked = isRecurring ? isCompletedOn(memory, date: selectedDate) : memory.isCompleted
                     if showChecked {
                         ZStack {
                             Circle().fill(Color.oceanTeal).frame(width: 24, height: 24)
@@ -446,10 +478,11 @@ struct CalendarTabView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
+                let showStrikethrough = isRecurring ? isCompletedOn(memory, date: selectedDate) : memory.isCompleted
                 Text(memory.text)
                     .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(expired ? .gray : (memory.isCompleted ? .gray : .deepNavy))
-                    .strikethrough(memory.isCompleted)
+                    .foregroundColor(expired ? .gray : (showStrikethrough ? .gray : .deepNavy))
+                    .strikethrough(showStrikethrough)
                     .lineLimit(2)
 
                 HStack(spacing: 8) {
@@ -476,17 +509,24 @@ struct CalendarTabView: View {
                         calendar.isDate($0.fireDate, inSameDayAs: selectedDate)
                     }) {
                         HStack(spacing: 3) {
-                            Image(systemName: "bell.fill")
-                                .font(.system(size: 10))
-                                .foregroundColor(.oceanTeal)
-                            Text("Ping")
-                                .font(.custom("DMMono-Regular", size: 11))
-                                .foregroundColor(.oceanTeal)
+                            Image(systemName: "bell.fill").font(.system(size: 10)).foregroundColor(.oceanTeal)
+                            Text("Ping").font(.custom("DMMono-Regular", size: 11)).foregroundColor(.oceanTeal)
                         }
+                    }
+                    if memory.locationName != nil {
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.coral)
                     }
                 }
             }
-            .onTapGesture { editingMemory = memory }
+            .onTapGesture {
+                if shouldOpenDetail(memory) {
+                    detailMemory = memory
+                } else {
+                    editingMemory = memory
+                }
+            }
 
             Spacer()
 
@@ -543,7 +583,13 @@ struct CalendarTabView: View {
                     }
                 }
             }
-            .onTapGesture { editingMemory = memory }
+            .onTapGesture {
+                if shouldOpenDetail(memory) {
+                    detailMemory = memory
+                } else {
+                    editingMemory = memory
+                }
+            }
 
             Spacer()
 
@@ -597,4 +643,5 @@ struct CalendarTabView: View {
 #Preview {
     CalendarTabView()
         .modelContainer(for: [Memory.self, Echo.self, Ping.self], inMemory: true)
+        .environment(AuthService())
 }

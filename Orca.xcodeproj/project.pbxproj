@@ -7,6 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		8729F5282F7727C600B58E0B /* FinanceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5272F7727C000B58E0B /* FinanceService.swift */; };
+		8729F52A2F7727E000B58E0B /* FinanceEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5292F7727DB00B58E0B /* FinanceEchoView.swift */; };
+		8729F52C2F7881F600B58E0B /* WorkoutParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F52B2F7881EA00B58E0B /* WorkoutParser.swift */; };
+		8729F52E2F78826B00B58E0B /* WorkoutDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F52D2F78826900B58E0B /* WorkoutDetailBlock.swift */; };
+		8729F5302F78828500B58E0B /* WorkoutEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F52F2F78828400B58E0B /* WorkoutEchoView.swift */; };
+		8729F5322F78829F00B58E0B /* QuickLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5312F78829A00B58E0B /* QuickLogView.swift */; };
+		8729F5342F7882BD00B58E0B /* SportsDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5332F7882BA00B58E0B /* SportsDetailBlock.swift */; };
+		8729F5382F7882EB00B58E0B /* FinanceDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5372F7882E700B58E0B /* FinanceDetailBlock.swift */; };
+		8729F53A2F7883F500B58E0B /* TravelDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5392F7883F200B58E0B /* TravelDetailBlock.swift */; };
+		8729F53C2F789CAA00B58E0B /* WorkoutSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F53B2F789CA800B58E0B /* WorkoutSessionManager.swift */; };
 		872F722A2F4ED482000A4AE3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 872F72262F4ED482000A4AE3 /* Assets.xcassets */; };
 		872F722D2F4ED482000A4AE3 /* OrcaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72292F4ED482000A4AE3 /* OrcaApp.swift */; };
 		872F72482F4FCF15000A4AE3 /* InstrumentSans-Italic-VariableFont_wdth,wght.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 872F72472F4FCF15000A4AE3 /* InstrumentSans-Italic-VariableFont_wdth,wght.ttf */; };
@@ -49,6 +59,10 @@
 		878C037B2F6F22920016D38A /* LocationSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C037A2F6F228B0016D38A /* LocationSearchView.swift */; };
 		878C037D2F6F940C0016D38A /* GroceryModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C037C2F6F940A0016D38A /* GroceryModeView.swift */; };
 		878C037F2F6F9F160016D38A /* GroceryList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C037E2F6F9F100016D38A /* GroceryList.swift */; };
+		878C03812F737F7D0016D38A /* TravelConfirmationParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03802F737F7A0016D38A /* TravelConfirmationParser.swift */; };
+		878C03852F740EA90016D38A /* SportsMemoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03842F740EA40016D38A /* SportsMemoryService.swift */; };
+		878C03872F740EBB0016D38A /* SportsEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03862F740EB90016D38A /* SportsEchoView.swift */; };
+		878C03892F7411990016D38A /* ESPNService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03882F74118F0016D38A /* ESPNService.swift */; };
 		87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */; };
 		87CD0AE12F52917B00CAAB4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B932F4EB2FB0058324F /* Config.swift */; };
 		87CD0AE42F52992800CAAB4D /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9C2F4EB3F30058324F /* AuthService.swift */; };
@@ -98,6 +112,16 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		8729F5272F7727C000B58E0B /* FinanceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceService.swift; sourceTree = "<group>"; };
+		8729F5292F7727DB00B58E0B /* FinanceEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceEchoView.swift; sourceTree = "<group>"; };
+		8729F52B2F7881EA00B58E0B /* WorkoutParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutParser.swift; sourceTree = "<group>"; };
+		8729F52D2F78826900B58E0B /* WorkoutDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutDetailBlock.swift; sourceTree = "<group>"; };
+		8729F52F2F78828400B58E0B /* WorkoutEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutEchoView.swift; sourceTree = "<group>"; };
+		8729F5312F78829A00B58E0B /* QuickLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLogView.swift; sourceTree = "<group>"; };
+		8729F5332F7882BA00B58E0B /* SportsDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsDetailBlock.swift; sourceTree = "<group>"; };
+		8729F5372F7882E700B58E0B /* FinanceDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceDetailBlock.swift; sourceTree = "<group>"; };
+		8729F5392F7883F200B58E0B /* TravelDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TravelDetailBlock.swift; sourceTree = "<group>"; };
+		8729F53B2F789CA800B58E0B /* WorkoutSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSessionManager.swift; sourceTree = "<group>"; };
 		872F72262F4ED482000A4AE3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		872F72292F4ED482000A4AE3 /* OrcaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrcaApp.swift; sourceTree = "<group>"; };
 		872F72342F4F2356000A4AE3 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
@@ -156,6 +180,10 @@
 		878C037A2F6F228B0016D38A /* LocationSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationSearchView.swift; sourceTree = "<group>"; };
 		878C037C2F6F940A0016D38A /* GroceryModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroceryModeView.swift; sourceTree = "<group>"; };
 		878C037E2F6F9F100016D38A /* GroceryList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroceryList.swift; sourceTree = "<group>"; };
+		878C03802F737F7A0016D38A /* TravelConfirmationParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TravelConfirmationParser.swift; sourceTree = "<group>"; };
+		878C03842F740EA40016D38A /* SportsMemoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsMemoryService.swift; sourceTree = "<group>"; };
+		878C03862F740EB90016D38A /* SportsEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsEchoView.swift; sourceTree = "<group>"; };
+		878C03882F74118F0016D38A /* ESPNService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNService.swift; sourceTree = "<group>"; };
 		87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseManager.swift; sourceTree = "<group>"; };
 		87CD0AE62F52995300CAAB4D /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
@@ -196,6 +224,11 @@
 			path = OrcaUITests;
 			sourceTree = "<group>";
 		};
+		87BBD7782F7A121900CB8A33 /* People */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = People;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -228,6 +261,7 @@
 		873C1B522F4EA59D0058324F = {
 			isa = PBXGroup;
 			children = (
+				87BBD7782F7A121900CB8A33 /* People */,
 				873C1B902F4EB2D70058324F /* Resources */,
 				873C1B8F2F4EB2C80058324F /* Components */,
 				873C1B8D2F4EB2A60058324F /* Services */,
@@ -292,6 +326,12 @@
 		873C1B8D2F4EB2A60058324F /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				8729F53B2F789CA800B58E0B /* WorkoutSessionManager.swift */,
+				8729F52B2F7881EA00B58E0B /* WorkoutParser.swift */,
+				8729F5272F7727C000B58E0B /* FinanceService.swift */,
+				878C03882F74118F0016D38A /* ESPNService.swift */,
+				878C03842F740EA40016D38A /* SportsMemoryService.swift */,
+				878C03802F737F7A0016D38A /* TravelConfirmationParser.swift */,
 				878C03782F68A8C00016D38A /* SpotLightService.swift */,
 				878C03762F6898B40016D38A /* LocationService.swift */,
 				878C03742F68988D0016D38A /* WeatherService.swift */,
@@ -411,6 +451,14 @@
 		873C1BAA2F4EB4840058324F /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				8729F5392F7883F200B58E0B /* TravelDetailBlock.swift */,
+				8729F5372F7882E700B58E0B /* FinanceDetailBlock.swift */,
+				8729F5332F7882BA00B58E0B /* SportsDetailBlock.swift */,
+				8729F5312F78829A00B58E0B /* QuickLogView.swift */,
+				8729F52F2F78828400B58E0B /* WorkoutEchoView.swift */,
+				8729F52D2F78826900B58E0B /* WorkoutDetailBlock.swift */,
+				8729F5292F7727DB00B58E0B /* FinanceEchoView.swift */,
+				878C03862F740EB90016D38A /* SportsEchoView.swift */,
 				878C037C2F6F940A0016D38A /* GroceryModeView.swift */,
 				878C037A2F6F228B0016D38A /* LocationSearchView.swift */,
 				872F72702F4FF9A9000A4AE3 /* MemoryEditView.swift */,
@@ -455,6 +503,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				873C1B5D2F4EA59D0058324F /* Orca */,
+				87BBD7782F7A121900CB8A33 /* People */,
 			);
 			name = Orca;
 			packageProductDependencies = (
@@ -601,24 +650,31 @@
 			files = (
 				872F72672F4FE728000A4AE3 /* EchoDetailView.swift in Sources */,
 				872F72752F512601000A4AE3 /* SettingsView.swift in Sources */,
+				8729F5342F7882BD00B58E0B /* SportsDetailBlock.swift in Sources */,
 				87CD0AF02F57357500CAAB4D /* OrcaShortcuts.swift in Sources */,
 				872F726C2F4FF148000A4AE3 /* ConfirmBannerView.swift in Sources */,
 				872F725E2F4FDC7D000A4AE3 /* Echo.swift in Sources */,
 				87CD0AEC2F55407D00CAAB4D /* NotifcationService.swift in Sources */,
 				87CD0AF72F57930700CAAB4D /* OnboardingFlow.swift in Sources */,
 				872F72722F51254C000A4AE3 /* UpcomingCard.swift in Sources */,
+				878C03852F740EA90016D38A /* SportsMemoryService.swift in Sources */,
 				872F72622F4FE4D1000A4AE3 /* DropButton.swift in Sources */,
 				87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */,
 				872F72612F4FDE07000A4AE3 /* Colors.swift in Sources */,
 				872F72712F4FF9B7000A4AE3 /* MemoryEditView.swift in Sources */,
 				872F72652F4FE5D8000A4AE3 /* EchoBubbleView.swift in Sources */,
+				8729F53C2F789CAA00B58E0B /* WorkoutSessionManager.swift in Sources */,
 				87CD0AF42F576FCC00CAAB4D /* RecipeExtractor.swift in Sources */,
 				872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */,
 				872F726F2F4FF511000A4AE3 /* TypeCaptureView.swift in Sources */,
+				8729F5302F78828500B58E0B /* WorkoutEchoView.swift in Sources */,
 				878C036F2F676FD70016D38A /* MemoryDetailView.swift in Sources */,
+				8729F5282F7727C600B58E0B /* FinanceService.swift in Sources */,
 				878C03732F67A67E0016D38A /* RecipeCaptureView.swift in Sources */,
 				872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */,
+				878C03872F740EBB0016D38A /* SportsEchoView.swift in Sources */,
 				87CD0AFB2F57D9B100CAAB4D /* AnalyticsService.swift in Sources */,
+				8729F5382F7882EB00B58E0B /* FinanceDetailBlock.swift in Sources */,
 				878C03792F68A8D00016D38A /* SpotLightService.swift in Sources */,
 				87CD0AF62F578BC300CAAB4D /* ManageEchosView.swift in Sources */,
 				872F726D2F4FF4BC000A4AE3 /* CaptureDrawerView.swift in Sources */,
@@ -629,19 +685,26 @@
 				872F72642F4FE598000A4AE3 /* DashboardView.swift in Sources */,
 				872F725D2F4FDC77000A4AE3 /* Ping.swift in Sources */,
 				878C03772F6898C10016D38A /* LocationService.swift in Sources */,
+				8729F5322F78829F00B58E0B /* QuickLogView.swift in Sources */,
 				87CD0AF22F57443700CAAB4D /* SubTask.swift in Sources */,
 				872F725F2F4FDC8B000A4AE3 /* Memory.swift in Sources */,
 				87CD0AE72F52996100CAAB4D /* AuthView.swift in Sources */,
 				87CD0AE12F52917B00CAAB4D /* Config.swift in Sources */,
 				87CD0AE42F52992800CAAB4D /* AuthService.swift in Sources */,
+				8729F53A2F7883F500B58E0B /* TravelDetailBlock.swift in Sources */,
 				872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */,
 				872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */,
 				878C037F2F6F9F160016D38A /* GroceryList.swift in Sources */,
 				872F72632F4FE581000A4AE3 /* FinIcon.swift in Sources */,
+				8729F52E2F78826B00B58E0B /* WorkoutDetailBlock.swift in Sources */,
+				878C03812F737F7D0016D38A /* TravelConfirmationParser.swift in Sources */,
 				878C03752F6898970016D38A /* WeatherService.swift in Sources */,
 				878C037B2F6F22920016D38A /* LocationSearchView.swift in Sources */,
 				872F722D2F4ED482000A4AE3 /* OrcaApp.swift in Sources */,
+				8729F52C2F7881F600B58E0B /* WorkoutParser.swift in Sources */,
+				878C03892F7411990016D38A /* ESPNService.swift in Sources */,
 				872F72662F4FE723000A4AE3 /* SearchView.swift in Sources */,
+				8729F52A2F7727E000B58E0B /* FinanceEchoView.swift in Sources */,
 				87CD0AE52F52992E00CAAB4D /* SupabaseManager.swift in Sources */,
 				878C037D2F6F940C0016D38A /* GroceryModeView.swift in Sources */,
 			);
@@ -800,7 +863,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -864,7 +927,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;

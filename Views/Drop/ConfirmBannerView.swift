@@ -35,6 +35,10 @@ struct ConfirmBannerView: View {
     @State private var latitude: Double? = nil
     @State private var longitude: Double? = nil
     @State private var showLocationSearch = false
+    @State private var showAddPerson = false
+    @State private var personToCreate = ""
+
+    @Query private var persons: [Person]
 
     private var isDiningOrEvents: Bool {
         let echoName: String
@@ -56,7 +60,6 @@ struct ConfirmBannerView: View {
         ])
         let words = text.components(separatedBy: .whitespaces)
         var properNouns: [String] = []
-
         for word in words {
             let clean = word.trimmingCharacters(in: .punctuationCharacters)
             guard clean.count > 1 else { continue }
@@ -68,7 +71,6 @@ struct ConfirmBannerView: View {
             properNouns.append(clean)
             if properNouns.count == 3 { break }
         }
-
         return properNouns.isEmpty ? text : properNouns.joined(separator: " ")
     }
 
@@ -88,7 +90,7 @@ struct ConfirmBannerView: View {
                 let echoEmoji = echos.first { $0.id == selectedEchoId }?.emoji
                     ?? echos.first { $0.name == sonarResult?.echoName }?.emoji ?? "📝"
 
-                // MARK: - Title row (separate from buttons)
+                // MARK: - Title row
                 HStack(spacing: 4) {
                     Text("Dropped to \(echoName) \(echoEmoji)")
                         .font(.custom("DMSans-Medium", size: 15))
@@ -106,7 +108,7 @@ struct ConfirmBannerView: View {
                     Spacer()
                 }
 
-                // MARK: - Buttons row (separate line)
+                // MARK: - Buttons row
                 HStack(spacing: 8) {
                     Button {
                         isPaused = true
@@ -121,8 +123,7 @@ struct ConfirmBannerView: View {
                                 .font(.custom("DMSans-Medium", size: 13))
                                 .foregroundColor(isTask ? .white : .gray)
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
+                        .padding(.horizontal, 10).padding(.vertical, 7)
                         .background(isTask ? Color.oceanTeal : Color.mist)
                         .clipShape(Capsule())
                     }
@@ -136,12 +137,8 @@ struct ConfirmBannerView: View {
                         Text("Undo")
                             .font(.custom("DMSans-Medium", size: 14))
                             .foregroundColor(.deepNavy)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                            )
+                            .padding(.horizontal, 14).padding(.vertical, 7)
+                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.gray.opacity(0.3), lineWidth: 1))
                     }
 
                     Button {
@@ -155,8 +152,7 @@ struct ConfirmBannerView: View {
                         Text("Done")
                             .font(.custom("DMSans-Medium", size: 14))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
+                            .padding(.horizontal, 14).padding(.vertical, 7)
                             .background(Color.oceanTeal)
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
@@ -197,32 +193,24 @@ struct ConfirmBannerView: View {
                                         Text(echo.emoji).font(.system(size: 13))
                                         Text(echo.name)
                                             .font(.custom("DMSans-Medium", size: 13))
-                                            .foregroundColor(.deepNavy)
-                                            .lineLimit(1)
+                                            .foregroundColor(.deepNavy).lineLimit(1)
                                     } else {
                                         let echo = echos.first { $0.name == result.echoName }
                                         Text(echo?.emoji ?? "📝").font(.system(size: 13))
                                         Text(result.echoName)
                                             .font(.custom("DMSans-Medium", size: 13))
-                                            .foregroundColor(.deepNavy)
-                                            .lineLimit(1)
+                                            .foregroundColor(.deepNavy).lineLimit(1)
                                     }
                                     Image(systemName: "chevron.down")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundColor(.gray)
+                                        .font(.system(size: 9, weight: .bold)).foregroundColor(.gray)
                                     if result.echoConfidence < 0.7 {
                                         Text("?")
-                                            .font(.custom("DMSans-Bold", size: 11))
-                                            .foregroundColor(.white)
-                                            .frame(width: 16, height: 16)
-                                            .background(Color.coral)
-                                            .clipShape(Circle())
+                                            .font(.custom("DMSans-Bold", size: 11)).foregroundColor(.white)
+                                            .frame(width: 16, height: 16).background(Color.coral).clipShape(Circle())
                                     }
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.mist)
-                                .clipShape(Capsule())
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(Color.mist).clipShape(Capsule())
                             }
 
                             // Date chip
@@ -232,27 +220,20 @@ struct ConfirmBannerView: View {
                                     if let endDate = result.endDate {
                                         Text("\(date.formatted(.dateTime.month(.abbreviated).day())) – \(endDate.formatted(.dateTime.month(.abbreviated).day()))")
                                             .font(.custom("DMSans-Medium", size: 13))
-                                            .foregroundColor(.deepNavy)
-                                            .lineLimit(1)
+                                            .foregroundColor(.deepNavy).lineLimit(1)
                                     } else {
                                         Text(date, format: .dateTime.month(.abbreviated).day())
                                             .font(.custom("DMSans-Medium", size: 13))
-                                            .foregroundColor(.deepNavy)
-                                            .lineLimit(1)
+                                            .foregroundColor(.deepNavy).lineLimit(1)
                                     }
                                     if (result.dateConfidence ?? 0) < 0.7 {
                                         Text("?")
-                                            .font(.custom("DMSans-Bold", size: 11))
-                                            .foregroundColor(.white)
-                                            .frame(width: 16, height: 16)
-                                            .background(Color.coral)
-                                            .clipShape(Circle())
+                                            .font(.custom("DMSans-Bold", size: 11)).foregroundColor(.white)
+                                            .frame(width: 16, height: 16).background(Color.coral).clipShape(Circle())
                                     }
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.mist)
-                                .clipShape(Capsule())
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(Color.mist).clipShape(Capsule())
                             }
 
                             // Ping chip
@@ -261,13 +242,10 @@ struct ConfirmBannerView: View {
                                     Text("🔔").font(.system(size: 13))
                                     Text(result.pingRecurrence == .none ? "Ping" : result.pingRecurrence.rawValue.capitalized)
                                         .font(.custom("DMSans-Medium", size: 13))
-                                        .foregroundColor(.deepNavy)
-                                        .lineLimit(1)
+                                        .foregroundColor(.deepNavy).lineLimit(1)
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.mist)
-                                .clipShape(Capsule())
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(Color.mist).clipShape(Capsule())
                             }
 
                             // Location chip
@@ -286,8 +264,7 @@ struct ConfirmBannerView: View {
                                             .lineLimit(1)
                                         if locationName != nil {
                                             Image(systemName: "xmark")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
+                                                .font(.caption2).foregroundColor(.secondary)
                                                 .onTapGesture {
                                                     locationName = nil
                                                     locationAddress = nil
@@ -296,14 +273,114 @@ struct ConfirmBannerView: View {
                                                 }
                                         }
                                     }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.mist)
-                                    .clipShape(Capsule())
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                    .background(Color.mist).clipShape(Capsule())
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
+                    }
+                }
+
+                // MARK: - Person suggestion row
+                let isTravelEcho = sonarResult?.echoName.lowercased().contains("travel") == true
+
+                let commonNonNames = Set([
+                    // Months
+                    "january", "february", "march", "april", "may", "june", "july",
+                    "august", "september", "october", "november", "december",
+                    // Days
+                    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "day", "eve", "eve's",
+                    // Occasions
+                    "birthday", "christmas", "holiday", "anniversary", "halloween", "thanksgiving",
+                    // Time
+                    "today", "tomorrow", "tonight", "morning", "afternoon", "evening",
+                    // Action verbs
+                    "get", "got", "getting", "buy", "bought", "buying", "remind", "remember",
+                    "call", "need", "want", "make", "take", "send", "find", "pick", "grab",
+                    "order", "ordered", "check", "set", "ask", "tell", "show",
+                    // Tech brands
+                    "xbox", "playstation", "nintendo", "apple", "google", "amazon", "samsung",
+                    "microsoft", "sony", "meta", "tesla", "netflix", "spotify", "airpods",
+                    "iphone", "ipad", "macbook", "android",
+                    // Clothing brands
+                    "nike", "adidas", "lululemon", "zara", "gucci", "prada", "louis",
+                    // Common gift items
+                    "controller", "headphones", "keyboard", "monitor", "laptop", "tablet",
+                    // Holidays
+                    "christmas", "thanksgiving", "halloween", "hanukkah", "easter",
+                    "valentine", "valentines", "mothers", "fathers", "mother", "father", "independence",
+                    "memorial", "labor", "presidents", "martin", "luther", "king",
+                    "columbus", "veterans", "passover", "ramadan", "kwanzaa", "diwali",
+                    // Other common words that get capitalized mid-sentence
+                    "new", "the", "a", "an", "for", "with", "from", "just", "also",
+                ])
+
+                let nlpPeople = sonarResult?.detectedPeople ?? []
+                // Fixed: only flag capitalized words that appear after person-indicating words
+                let personIndicators = Set(["for", "with", "tell", "ask", "remind", "call", "text",
+                                             "email", "invite", "get", "buy", "give", "send", "show"])
+                let words = transcription.components(separatedBy: .whitespaces)
+                let textScannedPeople: [String] = words.enumerated().compactMap { i, word in
+                    let clean = word.trimmingCharacters(in: .punctuationCharacters)
+                    guard clean.count > 2,
+                          clean.first?.isUppercase == true,
+                          !commonNonNames.contains(clean.lowercased()) else { return nil }
+
+                    // Must be preceded by a person-indicating word
+                    guard i > 0 else { return nil }
+                    let prevWord = words[i - 1].trimmingCharacters(in: .punctuationCharacters).lowercased()
+                    guard personIndicators.contains(prevWord) else { return nil }
+
+                    return clean
+                }
+                let allDetectedPeople = Array(Set(
+                    nlpPeople.map { name in
+                        let stripped = name.hasSuffix("'s") ? String(name.dropLast(2)) : name.hasSuffix("s'") ? String(name.dropLast(1)) : name
+                        return stripped.capitalized
+                    } +
+                    textScannedPeople.map { name in
+                        name.hasSuffix("'s") ? String(name.dropLast(2)) : name.hasSuffix("s'") ? String(name.dropLast(1)) : name
+                    }
+                ))
+
+                if !allDetectedPeople.isEmpty, !isTravelEcho {
+                    let unmatched = allDetectedPeople.filter { detectedName in
+                        !persons.contains { person in
+                            let firstName = person.name.split(separator: " ").first.map(String.init) ?? person.name
+                            return firstName.lowercased() == detectedName.lowercased()
+                        }
+                    }
+                    if let firstUnmatched = unmatched.first {
+                        Button {
+                            isPaused = true
+                            personToCreate = firstUnmatched
+                            showAddPerson = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "person.crop.circle.badge.plus")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.oceanTeal)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("Create \(firstUnmatched)'s profile")
+                                        .font(.custom("DMSans-Medium", size: 13))
+                                        .foregroundColor(.deepNavy)
+                                    Text("Tap to save birthday, gifts & more")
+                                        .font(.custom("DMSans-Regular", size: 11))
+                                        .foregroundColor(.gray)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.gray.opacity(0.4))
+                            }
+                            .padding(12)
+                            .background(Color.oceanTeal.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.oceanTeal.opacity(0.15), lineWidth: 0.5))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
 
@@ -324,8 +401,7 @@ struct ConfirmBannerView: View {
                                             .foregroundColor(selectedEchoId == echo.id ? .white : .deepNavy)
                                             .lineLimit(1)
                                     }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
                                     .background(selectedEchoId == echo.id ? Color.oceanTeal : Color.mist)
                                     .clipShape(Capsule())
                                 }
@@ -381,6 +457,52 @@ struct ConfirmBannerView: View {
             selectedEchoId = echos.first { $0.name == sonarResult?.echoName }?.id
             startCountdown()
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+            // Auto-update birthday on existing profile
+            if sonarResult?.echoName == "Birthday",
+               let detectedDate = sonarResult?.detectedDate {
+                let allNames = (sonarResult?.detectedPeople ?? []).map { $0.capitalized }
+                for name in allNames {
+                    if let match = persons.first(where: { person in
+                        let firstName = person.name.split(separator: " ").first.map(String.init) ?? person.name
+                        return firstName.lowercased() == name.lowercased()
+                    }), match.birthday == nil {
+                        match.birthday = detectedDate
+                        match.updatedAt = Date()
+                    }
+                }
+            }
+
+            // Auto-update occasion dates on existing profile
+            if let detectedDate = sonarResult?.detectedDate {
+                let allNames = (sonarResult?.detectedPeople ?? []).map { $0.capitalized }
+                let occasionMap: [String: String] = [
+                    "anniversary": "Anniversary",
+                    "christmas": "Christmas",
+                    "graduation": "Graduation",
+                    "valentine": "Valentine's Day",
+                    "halloween": "Halloween"
+                ]
+                for (keyword, occasionName) in occasionMap {
+                    if transcription.lowercased().contains(keyword) {
+                        for name in allNames {
+                            if let match = persons.first(where: { person in
+                                let firstName = person.name.split(separator: " ").first.map(String.init) ?? person.name
+                                return firstName.lowercased() == name.lowercased()
+                            }), match.occasionDates[occasionName] == nil {
+                                match.occasionDates[occasionName] = detectedDate
+                                match.updatedAt = Date()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showAddPerson) {
+            AddPersonView(
+                suggestedName: personToCreate,
+                suggestedBirthday: sonarResult?.detectedDate
+            )
         }
         .sheet(isPresented: $showLocationSearch) {
             LocationSearchView(
@@ -409,7 +531,7 @@ struct ConfirmBannerView: View {
     }
 
     private func startCountdown() {
-        withAnimation(.linear(duration: 5)) { countdown = 0 }
+        withAnimation(.linear(duration: 7)) { countdown = 0 }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
             if !isPaused && !wasCancelled {
                 let echoId = selectedEchoId ?? echos.first { $0.name == sonarResult?.echoName }?.id
@@ -447,10 +569,10 @@ struct ConfirmBannerView: View {
             }
         }
     }
+
     private func showGroceryHintIfNeeded() {
         guard !UserDefaults.standard.bool(forKey: "orcaShownGroceryHint") else { return }
         UserDefaults.standard.set(true, forKey: "orcaShownGroceryHint")
-        // Small delay so it doesn't compete with the recipe success state
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             onGroceryHint?()
         }

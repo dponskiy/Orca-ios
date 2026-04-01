@@ -25,6 +25,7 @@ class Memory {
     var isActionable: Bool = false
     var isCompleted: Bool = false
     var completedAt: Date?
+    var recurringCompletedDates: [String] = []
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var syncStatus: SyncStatus = SyncStatus.pending
@@ -35,6 +36,7 @@ class Memory {
     var locationAddress: String?
     var latitude: Double?
     var longitude: Double?
+    
 
     enum CaptureType: String, Codable {
         case voice, screenshot, typed

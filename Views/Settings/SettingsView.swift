@@ -14,14 +14,17 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("hasSkippedAuth") private var hasSkippedAuth = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
-    
+
     @Query private var memories: [Memory]
     @Query private var pings: [Ping]
     @State private var showManageEchos = false
     @State private var showClearConfirm = false
     @State private var showClearConfirmFinal = false
     @State private var showCleanUpSheet = false
-    
+    @State private var showDeleteAccountConfirm = false
+    @State private var showDeleteAccountFinal = false
+    @State private var isDeletingAccount = false
+
     var body: some View {
         NavigationStack {
             List {
@@ -47,7 +50,7 @@ struct SettingsView: View {
                             }
                         }
                         .padding(.vertical, 4)
-                        
+
                         Button {
                             Task {
                                 await authService.signOut()
@@ -57,6 +60,24 @@ struct SettingsView: View {
                             Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
                                 .foregroundColor(.coral)
                         }
+
+                        Button {
+                            showDeleteAccountConfirm = true
+                        } label: {
+                            if isDeletingAccount {
+                                HStack(spacing: 8) {
+                                    ProgressView().scaleEffect(0.8).tint(.red)
+                                    Text("Deleting account...")
+                                        .font(.custom("DMSans-Regular", size: 16))
+                                        .foregroundColor(.red)
+                                }
+                            } else {
+                                Label("Delete Account", systemImage: "person.crop.circle.badge.minus")
+                                    .foregroundColor(.red)
+                            }
+                        }
+                        .disabled(isDeletingAccount)
+
                     } else {
                         HStack {
                             ZStack {
@@ -81,7 +102,7 @@ struct SettingsView: View {
                         }
                     }
                 }
-                
+
                 // MARK: - Preferences
                 Section("Preferences") {
                     Button {
@@ -92,7 +113,7 @@ struct SettingsView: View {
                         Label("Notifications", systemImage: "bell")
                             .foregroundColor(.deepNavy)
                     }
-                    
+
                     Button {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
                             UIApplication.shared.open(url)
@@ -101,7 +122,7 @@ struct SettingsView: View {
                         Label("Set as Action Button", systemImage: "button.angledtop.vertical.right")
                             .foregroundColor(.deepNavy)
                     }
-                    
+
                     Button {
                         showManageEchos = true
                     } label: {
@@ -109,7 +130,7 @@ struct SettingsView: View {
                             .foregroundColor(.deepNavy)
                     }
                 }
-                
+
                 // MARK: - Support
                 Section("Support") {
                     Button {
@@ -119,7 +140,7 @@ struct SettingsView: View {
                         Label("Replay Onboarding", systemImage: "arrow.counterclockwise")
                             .foregroundColor(.deepNavy)
                     }
-                    
+
                     Button {
                         AnalyticsService.shared.trackAppRated()
                         if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
@@ -129,7 +150,7 @@ struct SettingsView: View {
                         Label("Rate Orca", systemImage: "star")
                             .foregroundColor(.deepNavy)
                     }
-                    
+
                     Button {
                         AnalyticsService.shared.trackFeedbackSent()
                         if let url = URL(string: "mailto:support@orcadrop.app?subject=Orca%20Feedback") {
@@ -140,7 +161,7 @@ struct SettingsView: View {
                             .foregroundColor(.deepNavy)
                     }
                 }
-                
+
                 // MARK: - About
                 Section("About") {
                     Link(destination: URL(string: Config.privacyURL)!) {
@@ -150,7 +171,7 @@ struct SettingsView: View {
                         Label("Terms of Service", systemImage: "doc.text")
                     }
                 }
-                
+
                 // MARK: - Data
                 Section("Data") {
                     Button {
@@ -159,7 +180,7 @@ struct SettingsView: View {
                         Label("Clean Up Old Tasks", systemImage: "sparkles.rectangle.stack")
                             .foregroundColor(.deepNavy)
                     }
-                    
+
                     Button {
                         showClearConfirm = true
                     } label: {
@@ -167,7 +188,7 @@ struct SettingsView: View {
                             .foregroundColor(.red)
                     }
                 }
-                
+
                 // MARK: - Version
                 Section {
                     HStack {
@@ -209,27 +230,39 @@ struct SettingsView: View {
                     }
                 }
             }
-            // First confirmation — centered alert, Cancel + Clear All
+            // Clear all memories — first confirmation
             .alert("Clear all memories?", isPresented: $showClearConfirm) {
-                Button("Clear All", role: .destructive) {
-                    showClearConfirmFinal = true
-                }
+                Button("Clear All", role: .destructive) { showClearConfirmFinal = true }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will permanently delete all \(memories.count) memories. This cannot be undone.")
             }
-            // Second confirmation — are you sure?
+            // Clear all memories — second confirmation
             .alert("Are you sure?", isPresented: $showClearConfirmFinal) {
-                Button("Clear All", role: .destructive) {
-                    clearAllMemories()
-                }
+                Button("Clear All", role: .destructive) { clearAllMemories() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("All \(memories.count) memories will be gone forever.")
             }
+            // Delete account — first confirmation
+            .alert("Delete your account?", isPresented: $showDeleteAccountConfirm) {
+                Button("Delete Account", role: .destructive) { showDeleteAccountFinal = true }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete your account and all \(memories.count) memories. This cannot be undone.")
+            }
+            // Delete account — second confirmation
+            .alert("Are you absolutely sure?", isPresented: $showDeleteAccountFinal) {
+                Button("Yes, Delete Everything", role: .destructive) {
+                    Task { await deleteAccount() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your account, all memories, and all data will be permanently removed from our servers within 30 days.")
+            }
         }
     }
-    
+
     private var initials: String {
         guard let name = authService.displayName else { return "O" }
         let parts = name.split(separator: " ")
@@ -237,7 +270,7 @@ struct SettingsView: View {
         let last = parts.count > 1 ? parts.last?.prefix(1) ?? "" : ""
         return "\(first)\(last)".uppercased()
     }
-    
+
     private func clearAllMemories() {
         AnalyticsService.shared.trackAllMemoriesCleared(count: memories.count)
         for memory in memories {
@@ -254,17 +287,47 @@ struct SettingsView: View {
             }
         }
     }
-    
+
+    private func deleteAccount() async {
+        isDeletingAccount = true
+
+        // 1. Cancel all notifications
+        for ping in pings {
+            NotificationService.shared.cancelPing(pingId: ping.id)
+        }
+
+        // 2. Delete all memories from Supabase
+        for memory in memories {
+            await SupabaseSyncService.shared.deleteMemory(id: memory.id)
+            SpotlightService.shared.removeMemory(id: memory.id)
+        }
+
+        // 3. Delete local SwiftData
+        for ping in pings { modelContext.delete(ping) }
+        for memory in memories { modelContext.delete(memory) }
+
+        // 4. Delete Supabase account
+        await authService.deleteAccount()
+
+        // 5. Reset app state
+        await MainActor.run {
+            isDeletingAccount = false
+            hasSkippedAuth = false
+            hasCompletedOnboarding = false
+            UserDefaults.standard.removeObject(forKey: "orcaDidSeedDefaults")
+        }
+    }
+
     // MARK: - Clean Up Sheet
-    
+
     struct CleanUpSheet: View {
         let memories: [Memory]
         let pings: [Ping]
         let onConfirm: ([Memory]) -> Void
-        
+
         @Environment(\.dismiss) private var dismiss
         @State private var deselected: Set<UUID> = []
-        
+
         private var candidates: [Memory] {
             let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
             return memories.filter { memory in
@@ -284,11 +347,11 @@ struct SettingsView: View {
             }
             .sorted { ($0.completedAt ?? $0.detectedDate ?? $0.createdAt) < ($1.completedAt ?? $1.detectedDate ?? $1.createdAt) }
         }
-        
+
         private var toDelete: [Memory] {
             candidates.filter { !deselected.contains($0.id) }
         }
-        
+
         var body: some View {
             NavigationStack {
                 Group {
@@ -316,7 +379,7 @@ struct SettingsView: View {
                                     .listRowBackground(Color.clear)
                                     .listRowSeparator(.hidden)
                             }
-                            
+
                             ForEach(candidates) { memory in
                                 let isSelected = !deselected.contains(memory.id)
                                 HStack(spacing: 12) {
@@ -332,14 +395,14 @@ struct SettingsView: View {
                                             .foregroundColor(isSelected ? .coral : .gray.opacity(0.4))
                                     }
                                     .buttonStyle(.plain)
-                                    
+
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(memory.text)
                                             .font(.custom("DMSans-Regular", size: 15))
                                             .foregroundColor(isSelected ? .deepNavy : .gray)
                                             .strikethrough(isSelected)
                                             .lineLimit(2)
-                                        
+
                                         if let date = memory.completedAt ?? memory.detectedDate {
                                             Text(date, format: .dateTime.month(.abbreviated).day().year())
                                                 .font(.custom("DMMono-Regular", size: 12))
@@ -360,7 +423,7 @@ struct SettingsView: View {
                         Button("Cancel") { dismiss() }
                             .foregroundColor(.gray)
                     }
-                    
+
                     if !candidates.isEmpty {
                         ToolbarItem(placement: .confirmationAction) {
                             Button {

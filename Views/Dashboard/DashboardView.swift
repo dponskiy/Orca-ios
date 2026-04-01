@@ -20,6 +20,9 @@ struct DashboardView: View {
     @State private var showUpcoming = true
     @State private var showPinned = true
     @State private var editingMemory: Memory?
+    @State private var detailMemory: Memory?
+    @State private var showQuickLog = false
+    @State private var navigateToWorkoutEcho = false
     @StateObject private var weatherService = WeatherService.shared
     @StateObject private var locationService = LocationService.shared
 
@@ -30,9 +33,7 @@ struct DashboardView: View {
             memories.contains { $0.echoId == echo.id }
         }.sorted { $0.sortOrder < $1.sortOrder }
 
-        if withMemories.count >= 6 {
-            return withMemories
-        }
+        if withMemories.count >= 6 { return withMemories }
 
         let withMemoryIds = Set(withMemories.map { $0.id })
         let topEmpty = echos
@@ -43,24 +44,23 @@ struct DashboardView: View {
         return withMemories + Array(topEmpty)
     }
 
-    var pinnedMemories: [Memory] {
-        memories.filter { $0.isPinned }
-    }
+    var pinnedMemories: [Memory] { memories.filter { $0.isPinned } }
 
     var upcomingTasks: [Memory] {
         let now = Date()
         let window = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
-        
+        let sportsEchoId = echos.first { $0.name.lowercased() == "sports" }?.id
+        let hideSports = !UserDefaults.standard.showSportsInUpcoming
+
         let withDate = memories.filter {
-            $0.isActionable &&
-            !$0.isCompleted &&
-            $0.detectedDate != nil &&
-            $0.detectedDate! > now &&
-            $0.detectedDate! <= window
+            $0.isActionable && !$0.isCompleted && $0.detectedDate != nil &&
+            $0.detectedDate! > now && $0.detectedDate! <= window &&
+            !(hideSports && $0.echoId == sportsEchoId)
         }
-        
+
         let withPing = memories.filter { memory in
             guard !memory.isCompleted else { return false }
+            guard !(hideSports && memory.echoId == sportsEchoId) else { return false }
             guard !withDate.contains(where: { $0.id == memory.id }) else { return false }
             return pings.contains { ping in
                 guard ping.memoryId == memory.id && ping.isActive else { return false }
@@ -69,15 +69,12 @@ struct DashboardView: View {
                         Calendar.current.isDate($0, inSameDayAs: Date())
                     } ?? false
                     if completedToday { return false }
-                    // For yearly pings check if next occurrence is within window
                     if ping.recurrence == .yearly {
                         let cal = Calendar.current
                         var components = cal.dateComponents([.month, .day], from: ping.fireDate)
                         components.year = cal.component(.year, from: now)
                         var nextFire = cal.date(from: components) ?? ping.fireDate
-                        if nextFire < now {
-                            nextFire = cal.date(byAdding: .year, value: 1, to: nextFire) ?? nextFire
-                        }
+                        if nextFire < now { nextFire = cal.date(byAdding: .year, value: 1, to: nextFire) ?? nextFire }
                         return nextFire <= window
                     }
                     return true
@@ -85,53 +82,83 @@ struct DashboardView: View {
                 return ping.fireDate > now && ping.fireDate <= window
             }
         }
+
         func soonestDate(for memory: Memory) -> Date {
             let pingDate = pings
                 .filter { $0.memoryId == memory.id && $0.isActive && $0.fireDate > now }
-                .map { $0.fireDate }
-                .min()
-            let dates = [memory.detectedDate, pingDate].compactMap { $0 }
-            return dates.min() ?? memory.createdAt
+                .map { $0.fireDate }.min()
+            return [memory.detectedDate, pingDate].compactMap { $0 }.min() ?? memory.createdAt
         }
-        
+
         return Array((withDate + withPing)
             .sorted { soonestDate(for: $0) < soonestDate(for: $1) }
             .prefix(3))
     }
 
+    // MARK: - Shortcuts Logic
+
+    /// Returns true if any workout memory exists (drives Workout Mode card visibility)
+    private var hasWorkoutMemories: Bool {
+        guard let id = echos.first(where: { $0.name.lowercased().contains("workout") })?.id else { return false }
+        return memories.contains { $0.echoId == id }
+    }
+
+    /// Returns true if any cooking memory with a checklist exists (drives Grocery Mode card)
+    private var hasCookingWithChecklist: Bool {
+        guard let id = echos.first(where: { $0.name.lowercased() == "cooking" })?.id else { return false }
+        return memories.contains { $0.echoId == id && $0.hasChecklist }
+    }
+
+    // Always show — Workout Mode is useful even on first session
+    private var showShortcutsStrip: Bool { true }
+
+    private var workoutEcho: Echo? { echos.first { $0.name.lowercased().contains("workout") } }
+    private var cookingEcho: Echo? { echos.first { $0.name.lowercased() == "cooking" } }
+
+    // MARK: - Helpers
+
     private var cleanUpCount: Int {
         let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
         return memories.filter { memory in
-            guard memory.isActionable else { return false }
-            guard !memory.isPinned else { return false }
-            guard !memory.hasChecklist else { return false }
+            guard memory.isActionable, !memory.isPinned, !memory.hasChecklist else { return false }
             guard memory.url == nil || memory.url?.isEmpty == true else { return false }
-            let hasRecurringPing = pings.contains { $0.memoryId == memory.id && $0.recurrence != .none }
-            guard !hasRecurringPing else { return false }
-            if memory.isCompleted, let completedAt = memory.completedAt {
-                return completedAt < cutoff
-            }
-            if let detectedDate = memory.detectedDate {
-                return detectedDate < cutoff
-            }
+            let hasRecurring = pings.contains { $0.memoryId == memory.id && $0.recurrence != .none }
+            guard !hasRecurring else { return false }
+            if memory.isCompleted, let completedAt = memory.completedAt { return completedAt < cutoff }
+            if let detectedDate = memory.detectedDate { return detectedDate < cutoff }
             return false
         }.count
     }
 
-    // MARK: - Expired helper
-    // MARK: - Expired helper
     private func isExpired(_ memory: Memory) -> Bool {
         let expiryDate = memory.endDate ?? memory.detectedDate
         guard let date = expiryDate, date < Date() else { return false }
         let memoryPings = pings.filter { $0.memoryId == memory.id }
         if memoryPings.contains(where: { $0.recurrence != .none }) { return false }
-        let hasFuturePing = memoryPings.contains { $0.fireDate > Date() }
-        return !hasFuturePing
+        return !memoryPings.contains { $0.fireDate > Date() }
     }
+
+    private func pendingCountFor(echo: Echo) -> Int {
+        let echoMemories = memories.filter { $0.echoId == echo.id }
+        let now = Date()
+        var count = 0
+        for memory in echoMemories {
+            guard memory.isActionable && !memory.isCompleted else { continue }
+            let memoryPings = pings.filter { $0.memoryId == memory.id && $0.isActive }
+            for ping in memoryPings {
+                if Calendar.current.isDate(ping.fireDate, inSameDayAs: now) { count += 1; break }
+            }
+        }
+        return count
+    }
+
+    // MARK: - Body
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+
                     // Header
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
@@ -140,15 +167,12 @@ struct DashboardView: View {
                                     .font(.custom("InstrumentSerif-Regular", size: 28))
                                     .foregroundColor(.deepNavy)
                                 Spacer()
-                                // Weather
                                 if !weatherService.temperature.isEmpty {
                                     HStack(spacing: 4) {
                                         Image(systemName: weatherService.symbolName)
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.oceanTeal)
+                                            .font(.system(size: 14)).foregroundColor(.oceanTeal)
                                         Text(weatherService.temperature)
-                                            .font(.custom("DMMono-Regular", size: 14))
-                                            .foregroundColor(.deepNavy)
+                                            .font(.custom("DMMono-Regular", size: 14)).foregroundColor(.deepNavy)
                                     }
                                 }
                                 NavigationLink(destination: SettingsView()) {
@@ -162,8 +186,7 @@ struct DashboardView: View {
                                 memories.contains { $0.echoId == echo.id }
                             }.count
                             Text("\(memories.count) \(memories.count == 1 ? "memory" : "memories") across \(activeCount) \(activeCount == 1 ? "Echo" : "Echos")")
-                                .font(.custom("DMSans-Regular", size: 14))
-                                .foregroundColor(.gray)
+                                .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.gray)
                         }
                     }
 
@@ -172,12 +195,10 @@ struct DashboardView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass").font(.system(size: 15)).foregroundColor(.gray)
                             Text("Dive into memories...")
-                                .font(.custom("DMSans-Regular", size: 15))
-                                .foregroundColor(.gray)
+                                .font(.custom("DMSans-Regular", size: 15)).foregroundColor(.gray)
                             Spacer()
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, 14).padding(.vertical, 12)
                         .background(Color.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
@@ -188,33 +209,26 @@ struct DashboardView: View {
                         NavigationLink(destination: SettingsView()) {
                             HStack(spacing: 10) {
                                 Image(systemName: "sparkles.rectangle.stack")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.oceanTeal)
+                                    .font(.system(size: 14)).foregroundColor(.oceanTeal)
                                 Text("\(cleanUpCount) old \(cleanUpCount == 1 ? "task" : "tasks") can be cleaned up")
-                                    .font(.custom("DMSans-Regular", size: 14))
-                                    .foregroundColor(.deepNavy)
+                                    .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.deepNavy)
                                 Spacer()
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.gray.opacity(0.5))
+                                    .font(.system(size: 11, weight: .medium)).foregroundColor(.gray.opacity(0.5))
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, 14).padding(.vertical, 10)
                             .background(Color.oceanTeal.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                     }
 
-                    // Pinned memories
+                    // Pinned
                     if showPinned && !pinnedMemories.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 HStack(spacing: 6) {
                                     Image(systemName: "pin.fill").font(.system(size: 11)).foregroundColor(.coral)
-                                    Text("PINNED")
-                                        .font(.custom("DMSans-Medium", size: 13))
-                                        .foregroundColor(.coral)
-                                        .tracking(1)
+                                    Text("PINNED").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.coral).tracking(1)
                                 }
                                 Spacer()
                                 Button {
@@ -223,22 +237,17 @@ struct DashboardView: View {
                                     Image(systemName: "xmark").font(.system(size: 11, weight: .medium)).foregroundColor(.gray.opacity(0.5))
                                 }
                             }
-                            ForEach(pinnedMemories) { memory in
-                                pinnedRow(memory: memory)
-                            }
+                            ForEach(pinnedMemories) { memory in pinnedRow(memory: memory) }
                         }
                     }
 
-                    // Upcoming tasks
+                    // Upcoming
                     if showUpcoming && !upcomingTasks.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 HStack(spacing: 6) {
                                     Image(systemName: "clock.fill").font(.system(size: 11)).foregroundColor(.oceanTeal)
-                                    Text("UPCOMING")
-                                        .font(.custom("DMSans-Medium", size: 13))
-                                        .foregroundColor(.oceanTeal)
-                                        .tracking(1)
+                                    Text("UPCOMING").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal).tracking(1)
                                 }
                                 Spacer()
                                 Button {
@@ -247,18 +256,19 @@ struct DashboardView: View {
                                     Image(systemName: "xmark").font(.system(size: 11, weight: .medium)).foregroundColor(.gray.opacity(0.5))
                                 }
                             }
-                            ForEach(upcomingTasks) { memory in
-                                upcomingRow(memory: memory)
-                            }
+                            ForEach(upcomingTasks) { memory in upcomingRow(memory: memory) }
                         }
+                    }
+
+                    // ── QUICK ACTIONS STRIP ──
+                    if showShortcutsStrip {
+                        quickActionsStrip
                     }
 
                     // Your Echos header
                     HStack {
                         Text("YOUR ECHOS")
-                            .font(.custom("DMSans-Medium", size: 13))
-                            .foregroundColor(.oceanTeal)
-                            .tracking(1)
+                            .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal).tracking(1)
                         Spacer()
                         Button { showCreateEcho = true } label: {
                             ZStack {
@@ -269,11 +279,7 @@ struct DashboardView: View {
                     }
                     .padding(.top, 4)
 
-                    if displayedEchos.isEmpty {
-                        emptyState
-                    } else {
-                        echoBubbleGrid
-                    }
+                    if displayedEchos.isEmpty { emptyState } else { echoBubbleGrid }
 
                     Spacer().frame(height: 100)
                 }
@@ -281,6 +287,19 @@ struct DashboardView: View {
                 .padding(.top, 16)
             }
             .background(Color.pearl)
+
+            // Hidden NavigationLink — fires after Quick Log Done
+            .background(
+                NavigationLink(
+                    destination: Group {
+                        if let echo = echos.first(where: { $0.name.lowercased().contains("workout") }) {
+                            EchoDetailView(echo: echo)
+                        }
+                    },
+                    isActive: $navigateToWorkoutEcho
+                ) { EmptyView() }
+            )
+
             .onAppear {
                 showUpcoming = true
                 showPinned = true
@@ -290,46 +309,143 @@ struct DashboardView: View {
                 locationService.requestLocation()
             }
             .onChange(of: locationService.location) { _, location in
-                if let location = location {
-                    Task { await weatherService.fetchWeather(for: location) }
-                }
+                if let location = location { Task { await weatherService.fetchWeather(for: location) } }
             }
             .sheet(isPresented: $showCreateEcho) { EchoEditSheet(echo: nil) }
-            .sheet(item: $editingMemory) { memory in MemoryEditView(memory: memory) }
+            .sheet(item: $editingMemory) { MemoryEditView(memory: $0) }
+            .sheet(item: $detailMemory) { MemoryDetailView(memory: $0) }
+            .sheet(isPresented: $showQuickLog) {
+                QuickLogView(onFinish: {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        navigateToWorkoutEcho = true
+                    }
+                })
+            }
         }
     }
 
+    // MARK: - Quick Actions Strip
+
+    private var quickActionsStrip: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("QUICK ACTIONS")
+                .font(.custom("DMSans-Medium", size: 11))
+                .foregroundColor(.gray)
+                .tracking(0.5)
+
+            HStack(spacing: 10) {
+                // Grocery Mode card — only if cooking memories exist
+                if hasCookingWithChecklist, let echo = cookingEcho {
+                    NavigationLink(destination: EchoDetailView(echo: echo)) {
+                        shortcutCard(
+                            icon: "cart.fill",
+                            iconColor: Color.oceanTeal,
+                            title: "Grocery\nmode",
+                            subtitle: "From recipes",
+                            accentBorder: false
+                        )
+                    }
+                } else {
+                    // Placeholder slot so Workout card always lines up in position 2
+                    shortcutCard(
+                        icon: "cart.fill",
+                        iconColor: Color.gray.opacity(0.4),
+                        title: "Grocery\nmode",
+                        subtitle: "No recipes yet",
+                        accentBorder: false
+                    )
+                    .opacity(0.45)
+                    .allowsHitTesting(false)
+                }
+
+                // Workout Mode card — only if workout memories exist
+                Button { showQuickLog = true } label: {
+                    shortcutCard(
+                        icon: "figure.strengthtraining.traditional",
+                        iconColor: Color.oceanTeal,
+                        title: "Workout\nmode",
+                        subtitle: hasWorkoutMemories ? "Log a set" : "Start first session",
+                        accentBorder: true
+                    )
+                }
+
+                // Coming soon placeholder
+                shortcutCard(
+                    icon: "clock.fill",
+                    iconColor: Color.gray.opacity(0.35),
+                    title: "Coming\nsoon",
+                    subtitle: "More modes",
+                    accentBorder: false
+                )
+                .opacity(0.4)
+                .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private func shortcutCard(
+        icon: String,
+        iconColor: Color,
+        title: String,
+        subtitle: String,
+        accentBorder: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 18))
+                .foregroundColor(iconColor)
+                .frame(width: 32, height: 32)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.custom("DMSans-Medium", size: 13))
+                    .foregroundColor(.deepNavy)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(.custom("DMSans-Regular", size: 11))
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(
+                    accentBorder ? Color.oceanTeal.opacity(0.35) : Color.black.opacity(0.08),
+                    lineWidth: accentBorder ? 1.0 : 0.5
+                )
+        )
+        .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
+    }
+
     // MARK: - Pinned Row
+
     private func pinnedRow(memory: Memory) -> some View {
         let expired = isExpired(memory)
         return HStack(spacing: 12) {
             Image(systemName: "pin.fill")
                 .font(.system(size: 13))
-                .foregroundColor(expired ? .gray.opacity(0.4) : .coral)
-                .frame(width: 24)
-
+                .foregroundColor(expired ? .gray.opacity(0.4) : .coral).frame(width: 24)
             VStack(alignment: .leading, spacing: 4) {
                 Text(memory.text)
                     .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(expired ? .gray : .deepNavy)
-                    .lineLimit(2)
-
+                    .foregroundColor(expired ? .gray : .deepNavy).lineLimit(2)
                 if let echo = echos.first(where: { $0.id == memory.echoId }) {
                     HStack(spacing: 3) {
                         Text(echo.emoji).font(.system(size: 11))
-                        Text(echo.name)
-                            .font(.custom("DMSans-Medium", size: 12))
+                        Text(echo.name).font(.custom("DMSans-Medium", size: 12))
                             .foregroundColor(expired ? .gray : .deepNavy)
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.mist)
-                    .clipShape(Capsule())
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.mist).clipShape(Capsule())
                 }
             }
-
             Spacer()
-
             Button { editingMemory = memory } label: {
                 ZStack {
                     Circle().fill(Color.mist).frame(width: 32, height: 32)
@@ -342,25 +458,31 @@ struct DashboardView: View {
         .background(expired ? Color(red: 0.91, green: 0.94, blue: 0.97) : Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
-        .onTapGesture { editingMemory = memory }
+        .onTapGesture { detailMemory = memory }
     }
 
     // MARK: - Upcoming Row
+
     private func upcomingRow(memory: Memory) -> some View {
         let expired = isExpired(memory)
         return HStack(spacing: 12) {
             if let echo = echos.first(where: { $0.id == memory.echoId }) {
-                Text(echo.emoji).font(.system(size: 16)).frame(width: 24)
-                    .opacity(expired ? 0.4 : 1.0)
+                Text(echo.emoji).font(.system(size: 16)).frame(width: 24).opacity(expired ? 0.4 : 1.0)
             }
-
             VStack(alignment: .leading, spacing: 4) {
                 Text(memory.text)
                     .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(expired ? .gray : .deepNavy)
-                    .lineLimit(2)
+                    .foregroundColor(expired ? .gray : .deepNavy).lineLimit(2)
 
-                let activePing = pings.first(where: { $0.memoryId == memory.id && $0.isActive })
+                // For recurring pings fireDate is the original date (past) — don't filter by date
+                let activePing = pings
+                    .filter { $0.memoryId == memory.id && $0.isActive }
+                    .sorted { p1, p2 in
+                        // Prefer recurring pings, then soonest fireDate
+                        if p1.recurrence != .none && p2.recurrence == .none { return true }
+                        if p1.recurrence == .none && p2.recurrence != .none { return false }
+                        return p1.fireDate < p2.fireDate
+                    }.first
                 let displayDate: Date? = {
                     if let ping = activePing {
                         if ping.recurrence == .daily {
@@ -368,16 +490,13 @@ struct DashboardView: View {
                                 Calendar.current.isDate($0, inSameDayAs: Date())
                             } ?? false
                             let baseDay = completedToday ?
-                                (Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()) :
-                                Date()
-                            // Use the ping's actual fire time, not the current time
+                                (Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()) : Date()
                             let fireComponents = Calendar.current.dateComponents([.hour, .minute], from: ping.fireTime)
                             return Calendar.current.date(bySettingHour: fireComponents.hour ?? 9,
                                                          minute: fireComponents.minute ?? 0,
-                                                         second: 0,
-                                                         of: baseDay) ?? baseDay
+                                                         second: 0, of: baseDay) ?? baseDay
                         }
-                        return ping.recurrence != .none ? ping.fireDate : ping.fireDate
+                        return ping.fireDate
                     }
                     return memory.detectedDate
                 }()
@@ -385,29 +504,25 @@ struct DashboardView: View {
                 if let date = displayDate {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
-                            Image(systemName: "clock")
-                                .font(.system(size: 10))
+                            Image(systemName: "clock").font(.system(size: 10))
                                 .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
                             Text(date, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
                                 .font(.custom("DMMono-Regular", size: 12))
                                 .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
                         }
-                        let daysUntil = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()), to: Calendar.current.startOfDay(for: date)).day ?? 0
+                        let daysUntil = Calendar.current.dateComponents([.day],
+                            from: Calendar.current.startOfDay(for: Date()),
+                            to: Calendar.current.startOfDay(for: date)).day ?? 0
                         if daysUntil == 0 {
-                            Text("Today")
-                                .font(.custom("DMSans-Medium", size: 11))
-                                .foregroundColor(.coral)
+                            Text("Today").font(.custom("DMSans-Medium", size: 11)).foregroundColor(.coral)
                         } else if daysUntil > 0 {
                             Text("in \(daysUntil) \(daysUntil == 1 ? "day" : "days")")
-                                .font(.custom("DMSans-Medium", size: 11))
-                                .foregroundColor(.oceanTeal.opacity(0.7))
+                                .font(.custom("DMSans-Medium", size: 11)).foregroundColor(.oceanTeal.opacity(0.7))
                         }
                     }
                 }
             }
-
             Spacer()
-
             Button { editingMemory = memory } label: {
                 ZStack {
                     Circle().fill(Color.mist).frame(width: 32, height: 32)
@@ -420,13 +535,13 @@ struct DashboardView: View {
         .background(expired ? Color(red: 0.91, green: 0.94, blue: 0.97) : Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
-        .onTapGesture { editingMemory = memory }
+        .onTapGesture { detailMemory = memory }
     }
 
     // MARK: - Greeting
+
     private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
+        switch Calendar.current.component(.hour, from: Date()) {
         case 0..<12: return "Good morning"
         case 12..<17: return "Good afternoon"
         default: return "Good evening"
@@ -434,58 +549,30 @@ struct DashboardView: View {
     }
 
     // MARK: - Empty State
+
     private var emptyState: some View {
         VStack(spacing: 16) {
             Spacer().frame(height: 40)
-            FinIcon()
-                .fill(Color.seafoam.opacity(0.3))
-                .frame(width: 60, height: 72)
+            FinIcon().fill(Color.seafoam.opacity(0.3)).frame(width: 60, height: 72)
             Text("Drop your first memory")
-                .font(.custom("DMSans-Medium", size: 18))
-                .foregroundColor(.deepNavy)
+                .font(.custom("DMSans-Medium", size: 18)).foregroundColor(.deepNavy)
             Text("Tap the fin button below to get started")
-                .font(.custom("DMSans-Regular", size: 14))
-                .foregroundColor(.gray)
+                .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.gray)
         }
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Pending Count
-    private func pendingCountFor(echo: Echo) -> Int {
-        let echoMemories = memories.filter { $0.echoId == echo.id }
-        let now = Date()
-        var count = 0
-        for memory in echoMemories {
-            guard memory.isActionable && !memory.isCompleted else { continue }
-            // Only count if there's a ping firing today
-            let memoryPings = pings.filter { $0.memoryId == memory.id && $0.isActive }
-            for ping in memoryPings {
-                if Calendar.current.isDate(ping.fireDate, inSameDayAs: now) {
-                    count += 1
-                    break
-                }
-            }
-        }
-        return count
-    }
-
     // MARK: - Echo Bubble Grid
-    private var echoBubbleGrid: some View {
-        let columns = [
-            GridItem(.flexible()),
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ]
 
+    private var echoBubbleGrid: some View {
+        let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
         return LazyVGrid(columns: columns, spacing: 24) {
             ForEach(Array(displayedEchos.enumerated()), id: \.element.id) { index, echo in
                 let count = memories.filter { $0.echoId == echo.id }.count
                 let isEmpty = count == 0
-
                 NavigationLink(destination: EchoDetailView(echo: echo)) {
                     EchoBubbleView(
-                        echo: echo,
-                        count: count,
+                        echo: echo, count: count,
                         pendingCount: isEmpty ? 0 : pendingCountFor(echo: echo),
                         totalMemories: memories.count
                     )
@@ -497,12 +584,6 @@ struct DashboardView: View {
                 )
             }
         }
-    }
-
-    // MARK: - Seed Defaults
-    private func seedDefaultEchos() {
-        guard echos.isEmpty else { return }
-        Echo.seedDefaults(context: modelContext)
     }
 }
 

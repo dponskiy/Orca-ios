@@ -34,7 +34,7 @@ class Echo {
             ("Work", "💼"), ("Pets", "🐾"), ("Finance", "💰"),
             ("Holidays", "🎄"), ("To-Do", "📋"), ("Games", "🎮"),
             ("Movies", "🎬"), ("Books", "📖"), ("Clothes", "👕"),
-            ("Notes", "📝"),
+            ("Workout", "💪"), ("Notes", "📝"),
         ]
         for (index, (name, emoji)) in defaults.enumerated() {
             let echo = Echo(name: name, emoji: emoji, sortOrder: index)

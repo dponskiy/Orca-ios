@@ -18,7 +18,7 @@ struct ContentView: View {
     @State private var showToast = false
     @State private var showRecipe = false
     @State private var toastMessage = ""
-    
+
     var body: some View {
         ZStack {
             TabView(selection: Binding(
@@ -36,23 +36,30 @@ struct ContentView: View {
                         Text("Today")
                     }
                     .tag(0)
-                
+
                 DashboardView(showSearch: $showSearch)
                     .tabItem {
-                        Image(systemName: "circle.grid.2x2.fill")
-                        Text("Dashboard")
+                        Image(systemName: "house.fill")
+                        Text("Home")
                     }
                     .tag(1)
-                
+
+                PeopleView()
+                    .tabItem {
+                        Image(systemName: "person.2.fill")
+                        Text("People")
+                    }
+                    .tag(2)
+
                 CalendarTabView()
                     .tabItem {
                         Image(systemName: "calendar")
                         Text("Calendar")
                     }
-                    .tag(2)
+                    .tag(3)
             }
             .tint(.oceanTeal)
-            
+
             // Drop button (FAB)
             VStack {
                 Spacer()
@@ -62,7 +69,7 @@ struct ContentView: View {
                     } onLongPress: {
                         showDrawer = true
                     }
-                    
+
                     HStack(spacing: 3) {
                         Image(systemName: "chevron.up")
                             .font(.system(size: 11, weight: .semibold))
@@ -78,13 +85,13 @@ struct ContentView: View {
                 }
                 .padding(.bottom, 70)
             }
-            
+
             // Capture drawer
             if showDrawer {
                 Color.black.opacity(0.35)
                     .ignoresSafeArea()
                     .onTapGesture { showDrawer = false }
-                
+
                 VStack {
                     Spacer()
                     CaptureDrawerView(
@@ -102,23 +109,19 @@ struct ContentView: View {
                 }
                 .transition(.move(edge: .bottom))
             }
-            
+
             // Toast
             if showToast {
                 VStack {
                     Spacer()
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 15))
-                            .foregroundColor(.oceanTeal)
+                            .font(.system(size: 15)).foregroundColor(.oceanTeal)
                         Text(toastMessage)
-                            .font(.custom("DMSans-Medium", size: 15))
-                            .foregroundColor(.deepNavy)
+                            .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(.white)
-                    .clipShape(Capsule())
+                    .padding(.horizontal, 20).padding(.vertical, 12)
+                    .background(.white).clipShape(Capsule())
                     .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
                     .padding(.bottom, 100)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -129,47 +132,27 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showDrop) {
             DropOverlayView(isPresented: $showDrop) { message in
                 toastMessage = message
-                withAnimation(.spring(duration: 0.4)) {
-                    showToast = true
-                }
+                withAnimation(.spring(duration: 0.4)) { showToast = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
-                    withAnimation(.easeOut(duration: 0.4)) {
-                        showToast = false
-                    }
+                    withAnimation(.easeOut(duration: 0.4)) { showToast = false }
                 }
             }
         }
         .fullScreenCover(isPresented: $showRecipe) {
             RecipeCaptureView(isPresented: $showRecipe) { message in
                 toastMessage = message
-                withAnimation(.spring(duration: 0.4)) {
-                    showToast = true
-                }
+                withAnimation(.spring(duration: 0.4)) { showToast = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
-                    withAnimation(.easeOut(duration: 0.4)) {
-                        showToast = false
-                    }
+                    withAnimation(.easeOut(duration: 0.4)) { showToast = false }
                 }
             }
         }
-        .fullScreenCover(isPresented: $showTyped) {
-            TypeCaptureView(isPresented: $showTyped)
-        }
-        .fullScreenCover(isPresented: $showScreenshot) {
-            PhotoCaptureView(isPresented: $showScreenshot)
-        }
-        .fullScreenCover(isPresented: $showSearch) {
-            SearchView(isPresented: $showSearch)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openDropOverlay)) { _ in
-            showDrop = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openTypeCapture)) { _ in
-            showTyped = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openScreenshotCapture)) { _ in
-            showScreenshot = true
-        }
+        .fullScreenCover(isPresented: $showTyped) { TypeCaptureView(isPresented: $showTyped) }
+        .fullScreenCover(isPresented: $showScreenshot) { PhotoCaptureView(isPresented: $showScreenshot) }
+        .fullScreenCover(isPresented: $showSearch) { SearchView(isPresented: $showSearch) }
+        .onReceive(NotificationCenter.default.publisher(for: .openDropOverlay)) { _ in showDrop = true }
+        .onReceive(NotificationCenter.default.publisher(for: .openTypeCapture)) { _ in showTyped = true }
+        .onReceive(NotificationCenter.default.publisher(for: .openScreenshotCapture)) { _ in showScreenshot = true }
         .onReceive(NotificationCenter.default.publisher(for: .groceryModeHint)) { _ in
             toastMessage = "🛒 Recipe saved! Try Grocery Mode in your Cooking echo."
             withAnimation(.spring(duration: 0.4)) { showToast = true }
@@ -182,6 +165,6 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [Memory.self, Echo.self, Ping.self], inMemory: true)
+        .modelContainer(for: [Memory.self, Echo.self, Ping.self, Person.self, GiftItem.self], inMemory: true)
         .environment(AuthService())
 }
