@@ -2,70 +2,59 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleGetInfoString</key>
-	<string></string>
-	<key>CFBundleIconFile</key>
-	<string></string>
-	<key>CFBundleIconFiles</key>
-	<array>
-		<string></string>
-	</array>
-	<key>CFBundleIcons</key>
-	<dict>
-		<key>CFBundlePrimaryIcon</key>
-		<dict>
-			<key>CFBundleIconFiles</key>
-			<array>
-				<string></string>
-			</array>
-			<key>CFBundleIconName</key>
-			<string></string>
-			<key>UIPrerenderedIcon</key>
-			<false/>
-		</dict>
-		<key>UINewsstandIcon</key>
-		<dict>
-			<key>CFBundleIconFiles</key>
-			<array>
-				<string></string>
-			</array>
-			<key>UINewsstandBindingEdge</key>
-			<string>UINewsstandBindingEdgeLeft</string>
-			<key>UINewsstandBindingType</key>
-			<string>UINewsstandBindingTypeMagazine</string>
-		</dict>
-	</dict>
-	<key>CFBundleSignature</key>
-	<string></string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>None</string>
-			<key>CFBundleURLName</key>
-			<string>com.dponskiy.Orca</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>orca</string>
-			</array>
-		</dict>
-	</array>
-    <key>LSApplicationQueriesSchemes</key>
-    <array>
-        <string>comgooglemaps</string>
-    </array>
-	<key>UIAppFonts</key>
-	<array>
-		<string>DMMono-Italic.ttf</string>
-		<string>DMMono-Light.ttf</string>
-		<string>DMMono-LightItalic.ttf</string>
-		<string>DMMono-Medium.ttf</string>
-		<string>DMMono-MediumItalic.ttf</string>
-		<string>DMMono-Regular.ttf</string>
-		<string>DMSans-Italic-VariableFont_opsz,wght.ttf</string>
-		<string>DMSans-VariableFont_opsz,wght.ttf</string>
-		<string>InstrumentSans-Italic-VariableFont_wdth,wght.ttf</string>
-		<string>InstrumentSans-VariableFont_wdth,wght.ttf</string>
-	</array>
+<key>CFBundleGetInfoString</key>
+<string></string>
+<key>CFBundleIconFile</key>
+<string></string>
+<key>CFBundleIconFiles</key>
+<array>
+<string></string>
+</array>
+<key>CFBundleIcons</key>
+<dict>
+<key>CFBundlePrimaryIcon</key>
+<dict>
+<key>CFBundleIconFiles</key>
+<array>
+<string></string>
+</array>
+<key>CFBundleIconName</key>
+<string></string>
+<key>UIPrerenderedIcon</key>
+<false/>
+</dict>
+</dict>
+<key>CFBundleSignature</key>
+<string></string>
+<key>CFBundleURLTypes</key>
+<array>
+<dict>
+<key>CFBundleTypeRole</key>
+<string>None</string>
+<key>CFBundleURLName</key>
+<string>com.dponskiy.Orca</string>
+<key>CFBundleURLSchemes</key>
+<array>
+<string>orca</string>
+</array>
+</dict>
+</array>
+<key>LSApplicationQueriesSchemes</key>
+<array>
+<string>comgooglemaps</string>
+</array>
+<key>UIAppFonts</key>
+<array>
+<string>DMMono-Italic.ttf</string>
+<string>DMMono-Light.ttf</string>
+<string>DMMono-LightItalic.ttf</string>
+<string>DMMono-Medium.ttf</string>
+<string>DMMono-MediumItalic.ttf</string>
+<string>DMMono-Regular.ttf</string>
+<string>DMSans-Italic-VariableFont_opsz,wght.ttf</string>
+<string>DMSans-VariableFont_opsz,wght.ttf</string>
+<string>InstrumentSans-Italic-VariableFont_wdth,wght.ttf</string>
+<string>InstrumentSans-VariableFont_wdth,wght.ttf</string>
+</array>
 </dict>
 </plist>
