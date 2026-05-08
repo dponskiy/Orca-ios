@@ -14,6 +14,7 @@ struct SearchView: View {
     @Query private var echos: [Echo]
     
     @State private var editingMemory: Memory?
+    @State private var detailMemory: Memory?
     @State private var searchText = ""
     @State private var showBrowseAll = false
     @FocusState private var isFocused: Bool
@@ -93,10 +94,8 @@ struct SearchView: View {
                 .padding(.vertical, 12)
                 
                 if !searchText.isEmpty {
-                    // Search results
                     searchResultsList
                 } else {
-                    // Default view: Browse all + Recent
                     defaultView
                 }
                 
@@ -104,8 +103,11 @@ struct SearchView: View {
             }
             .background(Color.white)
             .sheet(item: $editingMemory) { memory in
-                            MemoryEditView(memory: memory)
-                        }
+                MemoryEditView(memory: memory)
+            }
+            .sheet(item: $detailMemory) { memory in
+                MemoryDetailView(memory: memory)
+            }
             .onAppear {
                 isFocused = true
                 AnalyticsService.shared.trackSearchOpened()
@@ -126,6 +128,7 @@ struct SearchView: View {
     }
     
     // MARK: - Default View
+
     private var defaultView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -194,6 +197,8 @@ struct SearchView: View {
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 12)
+                                .contentShape(Rectangle())
+                                .onTapGesture { detailMemory = memory }
                                 
                                 if memory.id != recentMemories.last?.id {
                                     Divider()
@@ -208,6 +213,7 @@ struct SearchView: View {
     }
     
     // MARK: - Search Results
+
     private var searchResultsList: some View {
         Group {
             if results.isEmpty {
@@ -275,9 +281,7 @@ struct SearchView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-                            .onTapGesture {
-                                editingMemory = memory
-                            }
+        .onTapGesture { detailMemory = memory }
     }
 }
 

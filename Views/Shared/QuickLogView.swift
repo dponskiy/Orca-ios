@@ -106,6 +106,9 @@ struct QuickLogView: View {
     @State private var loggedSets: [LoggedSet] = []
     @State private var sessionTitle: String = WorkoutSessionManager.sessionTitle()
 
+    // Prior exercises (already logged today before opening Quick Log)
+    @State private var priorExercises: [ParsedExercise] = []
+
     // Rest timer
     @State private var restSecondsRemaining = 0
     @State private var restTimer: Timer? = nil
@@ -179,6 +182,7 @@ struct QuickLogView: View {
                 VStack(alignment: .leading, spacing: 16) {
 
                     if showTipCard { tipCard }
+                    if !priorExercises.isEmpty { todaySoFarCard }
                     if !loggedSets.isEmpty { liveSessionCard }
                     logASetCard
                     if restSecondsRemaining > 0 { restTimerCard }
@@ -209,6 +213,12 @@ struct QuickLogView: View {
                         onFinish?()
                     }
                     .foregroundColor(.oceanTeal)
+                }
+            }
+            .onAppear {
+                if let existing = todayWorkoutMemory {
+                    let parsed = WorkoutParser.shared.parse(text: existing.text)
+                    priorExercises = parsed.exercises
                 }
             }
         }
@@ -307,6 +317,78 @@ struct QuickLogView: View {
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.oceanTeal.opacity(0.2), lineWidth: 1))
+    }
+
+    // MARK: - Today So Far Card
+
+    private var todaySoFarCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("TODAY SO FAR")
+                .font(.custom("DMSans-Medium", size: 11))
+                .foregroundColor(.gray)
+                .tracking(0.5)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
+
+            ForEach(0..<priorExercises.count, id: \.self) { index in
+                let exercise = priorExercises[index]
+                if index > 0 { Divider().padding(.horizontal, 16) }
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.oceanTeal.opacity(0.1))
+                            .frame(width: 28, height: 28)
+                        Image(systemName: exercise.isCardio ? cardioIcon(exercise.name) : "figure.strengthtraining.traditional")
+                            .font(.system(size: 12))
+                            .foregroundColor(.oceanTeal)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(exercise.name)
+                            .font(.custom("DMSans-Medium", size: 14))
+                            .foregroundColor(.deepNavy)
+                        if exercise.isCardio {
+                            let parts = [
+                                exercise.durationMinutes.map { "\(Int($0)) min" },
+                                exercise.distanceValue.flatMap { d in exercise.distanceUnit.map { "\(Int(d)) \($0)" } },
+                                exercise.pace
+                            ].compactMap { $0 }
+                            if !parts.isEmpty {
+                                Text(parts.joined(separator: " · "))
+                                    .font(.custom("DMMono-Regular", size: 12))
+                                    .foregroundColor(.gray)
+                            }
+                        } else {
+                            let unit = exercise.sets.first?.unit ?? "lb"
+                            if let w = exercise.sets.first?.weight, let r = exercise.sets.first?.reps {
+                                Text("\(exercise.sets.count)×\(r) · \(Int(w)) \(unit)")
+                                    .font(.custom("DMMono-Regular", size: 12))
+                                    .foregroundColor(.gray)
+                            } else {
+                                Text(exercise.setSummary)
+                                    .font(.custom("DMMono-Regular", size: 12))
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    Spacer()
+                    if exercise.isPR {
+                        Text("PR")
+                            .font(.custom("DMSans-Medium", size: 11))
+                            .foregroundColor(Color(red: 0.85, green: 0.55, blue: 0.0))
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Color(red: 0.85, green: 0.55, blue: 0.0).opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
+            Spacer().frame(height: 8)
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08), lineWidth: 0.5))
     }
 
     // MARK: - Live Session Card
@@ -510,7 +592,19 @@ struct QuickLogView: View {
                 .overlay(Capsule().stroke(Color.black.opacity(0.08), lineWidth: 0.5))
         }
     }
+    // MARK: - Helpers
 
+    private func cardioIcon(_ name: String) -> String {
+        switch name {
+        case "Run", "Treadmill": return "figure.run"
+        case "Swim": return "figure.pool.swim"
+        case "Cycling": return "figure.outdoor.cycle"
+        case "Rowing": return "figure.rowing"
+        case "Walk": return "figure.walk"
+        case "Hike": return "figure.hiking"
+        default: return "stopwatch"
+        }
+    }
     // MARK: - Log Entry
 
     private func logEntry() {
@@ -537,6 +631,12 @@ struct QuickLogView: View {
         )
         loggedSets.append(loggedSet)
         appendToMemory(text: text)
+
+        // Update priorExercises to reflect the newly added set
+        if let existing = todayWorkoutMemory {
+            let parsed = WorkoutParser.shared.parse(text: existing.text)
+            priorExercises = parsed.exercises
+        }
 
         if let ex = exercise, !ex.isCardio, let set = ex.sets.first {
             updateLastSet(exercise: ex.name, weight: set.weight ?? 0, reps: set.reps ?? 0)
@@ -584,6 +684,10 @@ struct QuickLogView: View {
         if remaining.isEmpty {
             modelContext.delete(memory)
             loggedSets = []
+            priorExercises = []
+        } else {
+            let parsed = WorkoutParser.shared.parse(text: memory.text)
+            priorExercises = parsed.exercises
         }
     }
 

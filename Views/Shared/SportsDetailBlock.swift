@@ -22,8 +22,12 @@ struct SportsDetailBlock: View {
 
     var body: some View {
         Group {
-            if isLoading {
+            if team == nil {
+                EmptyView()
+            } else if isLoading {
                 loadingCard
+            } else if upcomingGames.isEmpty && recentGames.isEmpty && standings.isEmpty && teamRecord.isEmpty {
+                EmptyView()
             } else {
                 VStack(spacing: 10) {
                     teamHeaderCard

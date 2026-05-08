@@ -31,6 +31,19 @@ struct MemoryDetailView: View {
     var isFinanceEcho: Bool { echo?.name.lowercased().contains("finance") == true }
     var isWorkoutEcho: Bool { echo?.name.lowercased().contains("workout") == true }
 
+    private var isCooking: Bool {
+        echo?.name.lowercased().contains("cook") == true
+    }
+
+    private var displayText: String {
+        guard isCooking else { return memory.text }
+        // Strip instructions block — everything from \nInstructions: onward
+        if let range = memory.text.range(of: "\nInstructions:") {
+            return String(memory.text[memory.text.startIndex..<range.lowerBound])
+        }
+        return memory.text
+    }
+    
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -38,7 +51,7 @@ struct MemoryDetailView: View {
 
                     echoDateHeader
 
-                    Text(memory.text)
+                    Text(displayText)
                         .font(.custom("DMSans-Regular", size: 16))
                         .foregroundColor(.deepNavy)
                         .lineSpacing(4)
@@ -48,7 +61,7 @@ struct MemoryDetailView: View {
                         linkButton(link)
                     }
 
-                    if let name = memory.locationName, let lat = memory.latitude, let lng = memory.longitude {
+                    if !isTravelEcho, let name = memory.locationName, let lat = memory.latitude, let lng = memory.longitude {
                         locationBlock(name: name, lat: lat, lng: lng)
                     }
 
@@ -135,54 +148,117 @@ struct MemoryDetailView: View {
     // MARK: - Checklist
 
     private var checklistSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(echo?.name.lowercased().contains("cook") == true ? "INGREDIENTS" : "CHECKLIST")
-                    .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal).tracking(1)
-                Spacer()
-                let completed = memorySubTasks.filter { $0.isCompleted }.count
-                Text("\(completed)/\(memorySubTasks.count)")
-                    .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
-            }
-            VStack(spacing: 0) {
-                ForEach(memorySubTasks) { subTask in
-                    Button {
-                        withAnimation(.spring(duration: 0.2)) {
-                            subTask.isCompleted.toggle()
-                            memory.updatedAt = Date()
-                        }
-                    } label: {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                Circle()
-                                    .stroke(Color.oceanTeal.opacity(0.4), lineWidth: 1.5)
-                                    .frame(width: 22, height: 22)
-                                if subTask.isCompleted {
-                                    Circle().fill(Color.oceanTeal).frame(width: 22, height: 22)
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 11, weight: .bold)).foregroundColor(.white)
-                                }
-                            }
-                            Text(subTask.text)
-                                .font(.custom("DMSans-Regular", size: 15))
-                                .foregroundColor(subTask.isCompleted ? .gray : .deepNavy)
-                                .strikethrough(subTask.isCompleted)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .padding(.horizontal, 16).padding(.vertical, 12)
-                    }
-                    .buttonStyle(.plain)
-                    if subTask.id != memorySubTasks.last?.id {
-                        Divider().padding(.leading, 50)
-                    }
+        let isCooking = echo?.name.lowercased().contains("cook") == true
+
+        // Parse instructions out of memory text
+        let instructionSteps: [String] = {
+            guard isCooking else { return [] }
+            let lines = memory.text.components(separatedBy: "\n")
+            var capturing = false
+            var steps: [String] = []
+            for line in lines {
+                if line.trimmingCharacters(in: .whitespaces) == "Instructions:" {
+                    capturing = true
+                    continue
+                }
+                if capturing {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    if trimmed.isEmpty { continue }
+                    // Strip leading number like "1. "
+                    let stripped = trimmed.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
+                    if !stripped.isEmpty { steps.append(stripped) }
                 }
             }
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
+            return steps
+        }()
+
+        return VStack(alignment: .leading, spacing: 16) {
+
+            // MARK: Ingredients / Checklist
+            if !memorySubTasks.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(isCooking ? "INGREDIENTS" : "CHECKLIST")
+                            .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal).tracking(1)
+                        Spacer()
+                        let completed = memorySubTasks.filter { $0.isCompleted }.count
+                        Text("\(completed)/\(memorySubTasks.count)")
+                            .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                    }
+                    VStack(spacing: 0) {
+                        ForEach(memorySubTasks) { subTask in
+                            Button {
+                                withAnimation(.spring(duration: 0.2)) {
+                                    subTask.isCompleted.toggle()
+                                    memory.updatedAt = Date()
+                                }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    ZStack {
+                                        Circle()
+                                            .stroke(Color.oceanTeal.opacity(0.4), lineWidth: 1.5)
+                                            .frame(width: 22, height: 22)
+                                        if subTask.isCompleted {
+                                            Circle().fill(Color.oceanTeal).frame(width: 22, height: 22)
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                                        }
+                                    }
+                                    Text(subTask.text)
+                                        .font(.custom("DMSans-Regular", size: 15))
+                                        .foregroundColor(subTask.isCompleted ? .gray : .deepNavy)
+                                        .strikethrough(subTask.isCompleted)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(.horizontal, 16).padding(.vertical, 12)
+                            }
+                            .buttonStyle(.plain)
+                            if subTask.id != memorySubTasks.last?.id {
+                                Divider().padding(.leading, 50)
+                            }
+                        }
+                    }
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
+                }
+            }
+
+            // MARK: Instructions (cooking only)
+            if !instructionSteps.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("INSTRUCTIONS")
+                        .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal).tracking(1)
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(instructionSteps.enumerated()), id: \.offset) { index, step in
+                            HStack(alignment: .top, spacing: 12) {
+                                Text("\(index + 1)")
+                                    .font(.custom("DMMono-Regular", size: 13))
+                                    .foregroundColor(.white)
+                                    .frame(width: 24, height: 24)
+                                    .background(Color.oceanTeal)
+                                    .clipShape(Circle())
+                                Text(step)
+                                    .font(.custom("DMSans-Regular", size: 14))
+                                    .foregroundColor(.deepNavy)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            if index < instructionSteps.count - 1 {
+                                Divider().padding(.leading, 52)
+                            }
+                        }
+                    }
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
+                }
+            }
         }
     }
-
     // MARK: - Reminders
 
     private func remindersSection(_ memoryPings: [Ping]) -> some View {

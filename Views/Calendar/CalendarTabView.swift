@@ -23,6 +23,7 @@ struct CalendarTabView: View {
     @State private var detailMemory: Memory?
     @State private var snoozeMemory: Memory?
     @State private var showSnoozeSheet = false
+    @State private var showWeatherDetail = false
     @StateObject private var weatherService = WeatherService.shared
     @StateObject private var locationService = LocationService.shared
 
@@ -76,8 +77,65 @@ struct CalendarTabView: View {
         return !hasFuturePing
     }
 
-    private func shouldOpenDetail(_ memory: Memory) -> Bool {
-        true
+    private func shouldOpenDetail(_ memory: Memory) -> Bool { true }
+
+    // MARK: - Date Range Label
+
+    private func dateRangeLabel(start: Date, end: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMM d"
+        return "\(fmt.string(from: start)) – \(fmt.string(from: end))"
+    }
+
+    // MARK: - Heatmap Helpers
+
+    private func dominantEchoName(for date: Date) -> String? {
+        let dayMemories = memories.filter { memory in
+            guard let detected = memory.detectedDate else { return false }
+            if let end = memory.endDate {
+                return date >= calendar.startOfDay(for: detected) &&
+                       date <= calendar.startOfDay(for: end)
+            }
+            return calendar.isDate(detected, inSameDayAs: date)
+        }
+        guard !dayMemories.isEmpty else { return nil }
+        var counts: [String: Int] = [:]
+        for memory in dayMemories {
+            if let echo = echos.first(where: { $0.id == memory.echoId }) {
+                counts[echo.name, default: 0] += 1
+            }
+        }
+        return counts.max(by: { $0.value < $1.value })?.key
+    }
+
+    private func dropCount(for date: Date) -> Int {
+        memories.filter { memory in
+            guard let detected = memory.detectedDate else { return false }
+            if let end = memory.endDate {
+                return date >= calendar.startOfDay(for: detected) &&
+                       date <= calendar.startOfDay(for: end)
+            }
+            return calendar.isDate(detected, inSameDayAs: date)
+        }.count
+    }
+
+    private var activeEchoNamesThisMonth: [String] {
+        let components = calendar.dateComponents([.year, .month], from: displayedMonth)
+        guard let monthStart = calendar.date(from: components),
+              let monthEnd = calendar.date(byAdding: DateComponents(month: 1, second: -1), to: monthStart)
+        else { return [] }
+        var seen = Set<String>()
+        var result: [String] = []
+        for memory in memories {
+            guard let detected = memory.detectedDate else { continue }
+            guard detected >= monthStart && detected <= monthEnd else { continue }
+            guard let echo = echos.first(where: { $0.id == memory.echoId }) else { continue }
+            if !seen.contains(echo.name) {
+                seen.insert(echo.name)
+                result.append(echo.name)
+            }
+        }
+        return result
     }
 
     // MARK: - Filtered Data
@@ -129,7 +187,8 @@ struct CalendarTabView: View {
                 monthHeader
                 dayOfWeekHeader
                 calendarGrid
-                Divider().padding(.top, 4)
+                legendStrip
+                Divider()
                 selectedDateContent
             }
             .background(Color.pearl)
@@ -147,6 +206,7 @@ struct CalendarTabView: View {
                 }
             }
             .sheet(item: $editingMemory) { memory in MemoryEditView(memory: memory) }
+            .sheet(isPresented: $showWeatherDetail) { WeatherDetailView() }
             .sheet(item: $detailMemory) { memory in MemoryDetailView(memory: memory) }
             .sheet(isPresented: $showSnoozeSheet) {
                 if let memory = snoozeMemory {
@@ -247,6 +307,31 @@ struct CalendarTabView: View {
         .background(Color.white)
     }
 
+    // MARK: - Legend Strip
+
+    @ViewBuilder
+    private var legendStrip: some View {
+        if !activeEchoNamesThisMonth.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(activeEchoNamesThisMonth, id: \.self) { name in
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(EchoColors.color(for: name))
+                                .frame(width: 7, height: 7)
+                            Text(name)
+                                .font(.custom("DMSans-Medium", size: 11))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+            .background(Color.white)
+        }
+    }
+
     // MARK: - Day Cell
 
     private func dayCell(for date: Date) -> some View {
@@ -254,14 +339,10 @@ struct CalendarTabView: View {
         let isToday = calendar.isDateInToday(date)
         let isCurrentMonth = calendar.isDate(date, equalTo: displayedMonth, toGranularity: .month)
 
-        let hasMemories = memories.contains { memory in
-            guard let detected = memory.detectedDate else { return false }
-            if let endDate = memory.endDate {
-                return date >= calendar.startOfDay(for: detected) &&
-                       date <= calendar.startOfDay(for: endDate)
-            }
-            return calendar.isDate(detected, inSameDayAs: date)
-        }
+        let echoName = dominantEchoName(for: date)
+        let count = dropCount(for: date)
+        let heatColor = echoName.map { EchoColors.color(for: $0) }
+        let heatOpacity = echoName != nil ? EchoColors.heatmapOpacity(for: count) : 0.0
 
         let hasPings = pings.contains { ping in
             guard ping.isActive else { return false }
@@ -288,6 +369,8 @@ struct CalendarTabView: View {
             memory.detectedDate != nil &&
             calendar.isDate(memory.detectedDate!, inSameDayAs: date)
         }
+
+        let hasMemories = echoName != nil
 
         return Button {
             withAnimation(.easeOut(duration: 0.15)) { selectedDate = date }
@@ -318,6 +401,10 @@ struct CalendarTabView: View {
             .frame(height: 44)
             .background(
                 ZStack {
+                    if !isSelected, let color = heatColor, heatOpacity > 0 {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(color.opacity(heatOpacity))
+                    }
                     if isSelected {
                         Circle().fill(Color.oceanTeal).frame(width: 38, height: 38)
                     } else if isToday {
@@ -344,19 +431,18 @@ struct CalendarTabView: View {
                 }
                 Spacer()
                 if calendar.isDateInToday(selectedDate) && !weatherService.temperature.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: weatherService.symbolName)
-                            .font(.system(size: 12))
-                            .foregroundColor(.oceanTeal)
-                        Text(weatherService.temperature)
-                            .font(.custom("DMMono-Regular", size: 12))
-                            .foregroundColor(.gray)
+                    Button { showWeatherDetail = true } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: weatherService.symbolName)
+                                .font(.system(size: 12)).foregroundColor(.oceanTeal)
+                            Text(weatherService.temperature)
+                                .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Color.white).clipShape(Capsule())
+                        .shadow(color: .black.opacity(0.04), radius: 4, y: 1)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.white)
-                    .clipShape(Capsule())
-                    .shadow(color: .black.opacity(0.04), radius: 4, y: 1)
+                    .buttonStyle(.plain)
                 }
                 let total = selectedDateMemories.count + selectedDatePings.count
                 if total > 0 {
@@ -429,194 +515,267 @@ struct CalendarTabView: View {
     // MARK: - Calendar Memory Row
 
     private func calendarMemoryRow(memory: Memory) -> some View {
+        // Pre-extract all model properties eagerly to avoid SwiftData detachment crash
         let expired = isExpired(memory)
         let expiredBg = Color(red: 0.91, green: 0.94, blue: 0.97)
         let memoryPings = pings.filter { $0.memoryId == memory.id }
         let isRecurring = memoryPings.contains { $0.recurrence != .none }
+        let accentColor: Color = echos.first(where: { $0.id == memory.echoId })
+            .map { EchoColors.color(for: $0.name) } ?? Color.gray.opacity(0.4)
+        let echoForMemory = echos.first(where: { $0.id == memory.echoId })
+        let hasPingToday = pings.contains {
+            $0.memoryId == memory.id &&
+            $0.isActive &&
+            calendar.isDate($0.fireDate, inSameDayAs: selectedDate)
+        }
+        let hasLocation = memory.locationName != nil
+        let memoryText = memory.text
+        let detectedDate = memory.detectedDate
+        let endDate = memory.endDate
+        let estimatedMinutes = memory.estimatedMinutes
+        let isActionable = memory.isActionable
+        let isCompleted = memory.isCompleted
+        let recurringCompletedDates = memory.recurringCompletedDates
+        let dateKey = isoDateKey(selectedDate)
+        let showChecked = isRecurring ? recurringCompletedDates.contains(dateKey) : isCompleted
+        let showStrikethrough = showChecked
 
-        return HStack(spacing: 12) {
-            if memory.isActionable {
-                Button {
-                    withAnimation(.spring(duration: 0.3)) {
-                        if isRecurring {
-                            if isCompletedOn(memory, date: selectedDate) {
-                                setUncompleted(memory, date: selectedDate)
+        return HStack(spacing: 0) {
+            Rectangle()
+                .fill(accentColor)
+                .frame(width: 3)
+
+            HStack(spacing: 12) {
+                if isActionable {
+                    Button {
+                        withAnimation(.spring(duration: 0.3)) {
+                            if isRecurring {
+                                if isCompletedOn(memory, date: selectedDate) {
+                                    setUncompleted(memory, date: selectedDate)
+                                } else {
+                                    setCompleted(memory, date: selectedDate)
+                                }
                             } else {
-                                setCompleted(memory, date: selectedDate)
+                                memory.isCompleted.toggle()
+                                memory.completedAt = memory.isCompleted ? Date() : nil
+                                memory.updatedAt = Date()
+                                for ping in memoryPings {
+                                    ping.isActive = !memory.isCompleted
+                                    if memory.isCompleted {
+                                        NotificationService.shared.cancelPing(pingId: ping.id)
+                                    } else {
+                                        NotificationService.shared.schedulePing(ping: ping, memoryText: memoryText)
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        if showChecked {
+                            ZStack {
+                                Circle().fill(Color.oceanTeal).frame(width: 24, height: 24)
+                                Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
                             }
                         } else {
-                            memory.isCompleted.toggle()
-                            memory.completedAt = memory.isCompleted ? Date() : nil
-                            memory.updatedAt = Date()
-                            for ping in memoryPings {
-                                ping.isActive = !memory.isCompleted
-                                if memory.isCompleted {
-                                    NotificationService.shared.cancelPing(pingId: ping.id)
-                                } else {
-                                    NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                            Circle().stroke(Color.oceanTeal, lineWidth: 2).frame(width: 24, height: 24)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } else if let echo = echoForMemory {
+                    Text(echo.emoji)
+                        .font(.system(size: 16))
+                        .frame(width: 24)
+                        .opacity(expired ? 0.4 : 1.0)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(memoryText)
+                        .font(.custom("DMSans-Regular", size: 15))
+                        .foregroundColor(expired ? .gray : (showStrikethrough ? .gray : .deepNavy))
+                        .strikethrough(showStrikethrough)
+                        .lineLimit(2)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        // Row 1 — echo + date
+                        HStack(spacing: 6) {
+                            if let echo = echoForMemory {
+                                HStack(spacing: 3) {
+                                    Text(echo.emoji).font(.system(size: 11))
+                                    Text(echo.name)
+                                        .font(.custom("DMSans-Medium", size: 12))
+                                        .foregroundColor(expired ? .gray : .deepNavy)
+                                        .lineLimit(1)
+                                }
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.mist)
+                                .clipShape(Capsule())
+                            }
+
+                            if let start = detectedDate, let end = endDate {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "arrow.left.and.right")
+                                        .font(.system(size: 9))
+                                    Text(dateRangeLabel(start: start, end: end))
+                                        .font(.custom("DMMono-Regular", size: 11))
+                                }
+                                .foregroundColor(expired ? .gray.opacity(0.5) : .gray)
+                            } else if let date = detectedDate {
+                                Text(date, format: .dateTime.hour().minute())
+                                    .font(.custom("DMMono-Regular", size: 12))
+                                    .foregroundColor(expired ? .gray.opacity(0.5) : .gray)
+                            }
+                        }
+
+                        // Row 2 — duration + ping + location (only if any exist)
+                        if estimatedMinutes != nil || hasPingToday || hasLocation {
+                            HStack(spacing: 6) {
+                                if let mins = estimatedMinutes {
+                                    Text(DurationParser.shared.format(mins))
+                                        .font(.custom("DMMono-Regular", size: 11))
+                                        .foregroundColor(.gray)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 2)
+                                        .background(Color.mist)
+                                        .clipShape(Capsule())
+                                }
+
+                                if hasPingToday {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "bell.fill").font(.system(size: 10)).foregroundColor(.oceanTeal)
+                                        Text("Ping").font(.custom("DMMono-Regular", size: 11)).foregroundColor(.oceanTeal)
+                                    }
+                                }
+
+                                if hasLocation {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.coral)
                                 }
                             }
                         }
                     }
-                } label: {
-                    let showChecked = isRecurring ? isCompletedOn(memory, date: selectedDate) : memory.isCompleted
-                    if showChecked {
-                        ZStack {
-                            Circle().fill(Color.oceanTeal).frame(width: 24, height: 24)
-                            Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundColor(.white)
-                        }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .clipped()
+                }
+                .frame(minWidth: 0)
+                .onTapGesture {
+                    if shouldOpenDetail(memory) {
+                        detailMemory = memory
                     } else {
-                        Circle().stroke(Color.oceanTeal, lineWidth: 2).frame(width: 24, height: 24)
+                        editingMemory = memory
                     }
                 }
-                .buttonStyle(.plain)
-            } else if let echo = echos.first(where: { $0.id == memory.echoId }) {
-                Text(echo.emoji)
-                    .font(.system(size: 16))
-                    .frame(width: 24)
-                    .opacity(expired ? 0.4 : 1.0)
-            }
 
-            VStack(alignment: .leading, spacing: 4) {
-                let showStrikethrough = isRecurring ? isCompletedOn(memory, date: selectedDate) : memory.isCompleted
-                Text(memory.text)
-                    .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(expired ? .gray : (showStrikethrough ? .gray : .deepNavy))
-                    .strikethrough(showStrikethrough)
-                    .lineLimit(2)
+                Spacer()
 
-                HStack(spacing: 8) {
-                    if let echo = echos.first(where: { $0.id == memory.echoId }) {
-                        HStack(spacing: 3) {
-                            Text(echo.emoji).font(.system(size: 11))
-                            Text(echo.name)
-                                .font(.custom("DMSans-Medium", size: 12))
-                                .foregroundColor(expired ? .gray : .deepNavy)
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.mist)
-                        .clipShape(Capsule())
-                    }
-                    if let date = memory.detectedDate {
-                        Text(date, format: .dateTime.hour().minute())
-                            .font(.custom("DMMono-Regular", size: 12))
-                            .foregroundColor(expired ? .gray.opacity(0.5) : .gray)
-                    }
-                    if pings.contains(where: {
-                        $0.memoryId == memory.id &&
-                        $0.isActive &&
-                        calendar.isDate($0.fireDate, inSameDayAs: selectedDate)
-                    }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "bell.fill").font(.system(size: 10)).foregroundColor(.oceanTeal)
-                            Text("Ping").font(.custom("DMMono-Regular", size: 11)).foregroundColor(.oceanTeal)
+                HStack(spacing: 4) {
+                    Button {
+                        snoozeMemory = memory
+                        showSnoozeSheet = true
+                    } label: {
+                        ZStack {
+                            Circle().fill(Color.mist).frame(width: 32, height: 32)
+                            Image(systemName: "moon.zzz").font(.system(size: 12, weight: .medium)).foregroundColor(.oceanTeal)
                         }
                     }
-                    if memory.locationName != nil {
-                        Image(systemName: "mappin.circle.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(.coral)
+                    .buttonStyle(.plain)
+
+                    Button { editingMemory = memory } label: {
+                        ZStack {
+                            Circle().fill(Color.mist).frame(width: 32, height: 32)
+                            Image(systemName: "pencil").font(.system(size: 12, weight: .medium)).foregroundColor(.oceanTeal)
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .onTapGesture {
-                if shouldOpenDetail(memory) {
-                    detailMemory = memory
-                } else {
-                    editingMemory = memory
-                }
-            }
-
-            Spacer()
-
-            HStack(spacing: 4) {
-                Button {
-                    snoozeMemory = memory
-                    showSnoozeSheet = true
-                } label: {
-                    ZStack {
-                        Circle().fill(Color.mist).frame(width: 32, height: 32)
-                        Image(systemName: "moon.zzz").font(.system(size: 12, weight: .medium)).foregroundColor(.oceanTeal)
-                    }
-                }
-                .buttonStyle(.plain)
-
-                Button { editingMemory = memory } label: {
-                    ZStack {
-                        Circle().fill(Color.mist).frame(width: 32, height: 32)
-                        Image(systemName: "pencil").font(.system(size: 12, weight: .medium)).foregroundColor(.oceanTeal)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
+            .padding(12)
         }
-        .padding(12)
         .background(expired ? expiredBg : Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(UnevenRoundedRectangle(
+            topLeadingRadius: 2,
+            bottomLeadingRadius: 2,
+            bottomTrailingRadius: 12,
+            topTrailingRadius: 12
+        ))
         .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
     }
 
     // MARK: - Calendar Ping Row
 
     private func calendarPingRow(ping: Ping, memory: Memory) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "bell.fill")
-                .font(.system(size: 14))
-                .foregroundColor(.oceanTeal)
-                .frame(width: 24)
+        let memoryText = memory.text
+        let fireTime = ping.fireTime
+        let recurrence = ping.recurrence
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(memory.text)
-                    .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(.deepNavy)
-                    .lineLimit(2)
+        return HStack(spacing: 0) {
+            Rectangle()
+                .fill(Color.oceanTeal)
+                .frame(width: 3)
 
-                HStack(spacing: 8) {
-                    Text(ping.fireTime, format: .dateTime.hour().minute())
-                        .font(.custom("DMMono-Regular", size: 12))
-                        .foregroundColor(.gray)
-                    if ping.recurrence != .none {
-                        Text(ping.recurrence.rawValue.capitalized)
-                            .font(.custom("DMMono-Regular", size: 11))
-                            .foregroundColor(.oceanTeal)
+            HStack(spacing: 12) {
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(.oceanTeal)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(memoryText)
+                        .font(.custom("DMSans-Regular", size: 15))
+                        .foregroundColor(.deepNavy)
+                        .lineLimit(2)
+
+                    HStack(spacing: 8) {
+                        Text(fireTime, format: .dateTime.hour().minute())
+                            .font(.custom("DMMono-Regular", size: 12))
+                            .foregroundColor(.gray)
+                        if recurrence != .none {
+                            Text(recurrence.rawValue.capitalized)
+                                .font(.custom("DMMono-Regular", size: 11))
+                                .foregroundColor(.oceanTeal)
+                        }
                     }
                 }
-            }
-            .onTapGesture {
-                if shouldOpenDetail(memory) {
-                    detailMemory = memory
-                } else {
-                    editingMemory = memory
-                }
-            }
-
-            Spacer()
-
-            HStack(spacing: 4) {
-                Button {
-                    snoozeMemory = memory
-                    showSnoozeSheet = true
-                } label: {
-                    ZStack {
-                        Circle().fill(Color.mist).frame(width: 32, height: 32)
-                        Image(systemName: "moon.zzz").font(.system(size: 12, weight: .medium)).foregroundColor(.oceanTeal)
+                .onTapGesture {
+                    if shouldOpenDetail(memory) {
+                        detailMemory = memory
+                    } else {
+                        editingMemory = memory
                     }
                 }
-                .buttonStyle(.plain)
 
-                Button { editingMemory = memory } label: {
-                    ZStack {
-                        Circle().fill(Color.mist).frame(width: 32, height: 32)
-                        Image(systemName: "pencil").font(.system(size: 12, weight: .medium)).foregroundColor(.oceanTeal)
+                Spacer()
+
+                HStack(spacing: 4) {
+                    Button {
+                        snoozeMemory = memory
+                        showSnoozeSheet = true
+                    } label: {
+                        ZStack {
+                            Circle().fill(Color.mist).frame(width: 32, height: 32)
+                            Image(systemName: "moon.zzz").font(.system(size: 12, weight: .medium)).foregroundColor(.oceanTeal)
+                        }
                     }
+                    .buttonStyle(.plain)
+
+                    Button { editingMemory = memory } label: {
+                        ZStack {
+                            Circle().fill(Color.mist).frame(width: 32, height: 32)
+                            Image(systemName: "pencil").font(.system(size: 12, weight: .medium)).foregroundColor(.oceanTeal)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .padding(12)
         }
-        .padding(12)
         .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(UnevenRoundedRectangle(
+            topLeadingRadius: 2,
+            bottomLeadingRadius: 2,
+            bottomTrailingRadius: 12,
+            topTrailingRadius: 12
+        ))
         .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
     }
 

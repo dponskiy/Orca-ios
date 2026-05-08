@@ -15,10 +15,11 @@ struct TravelParseResult {
     var arrivalAirport: String?
     var departureDate: Date?
     var departureTime: String?
+    var returnDate: Date?        // ← this line must be present
     var confirmationCode: String?
     var gateNumber: String?
     var hotelName: String?
-    var hotelAddress: String?          // ← new
+    var hotelAddress: String?
     var checkInDate: Date?
     var checkOutDate: Date?
     var formattedMemory: String
@@ -220,16 +221,33 @@ class TravelConfirmationParser {
     }
 
     private func detectFlightNumber(text: String) -> String? {
+        // Pattern 1: Standard IATA format — "AA1234"
         let pattern = #"\b[A-Z]{2}\d{1,4}\b"#
         if let range = text.range(of: pattern, options: .regularExpression) {
             return String(text[range])
         }
-        let flightPattern = #"[Ff]light\s+#?(\d{1,4})"#
-        if let range = text.range(of: flightPattern, options: .regularExpression) {
-            let match = String(text[range])
-            if let number = match.components(separatedBy: .whitespaces).last, !number.isEmpty {
-                return number
-            }
+
+        // Pattern 2: "Flight # 3005" or "Flight #3005" or "Flight 3005"
+        let flightPattern = #"[Ff]light\s+#?\s*(\d{1,4})"#
+        if let regex = try? NSRegularExpression(pattern: flightPattern),
+           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text)),
+           let range = Range(match.range(at: 1), in: text) {
+            return String(text[range])
+        }
+
+        // Pattern 3: Bare fallback — "Flight #" followed by digits with any spacing
+        let bareFlightPattern = #"[Ff]light\s*#\s*(\d{1,4})"#
+        if let regex = try? NSRegularExpression(pattern: bareFlightPattern),
+           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text)),
+           let range = Range(match.range(at: 1), in: text) {
+            return String(text[range])
+        }
+        // Pattern 4: number on next line after "Flight #" label
+        let tableFlightPattern = #"[Ff]light\s*#?\s*[\n\r]+\s*(\d{3,4})"#
+        if let regex = try? NSRegularExpression(pattern: tableFlightPattern),
+           let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text)),
+           let range = Range(match.range(at: 1), in: text) {
+            return String(text[range])
         }
         return nil
     }
@@ -237,15 +255,60 @@ class TravelConfirmationParser {
     private func detectAirports(text: String) -> [String] {
         let pattern = #"\b([A-Z]{3})\b"#
         let commonAirports = Set([
+            // Major US hubs
             "ATL","LAX","ORD","DFW","DEN","JFK","SFO","SEA","LAS","MCO",
             "EWR","CLT","PHX","IAH","MIA","BOS","MSP","FLL","DTW","PHL",
             "LGA","BWI","SLC","SAN","MDW","DCA","IAD","TPA","PDX","HNL",
             "AUS","STL","BNA","OAK","MCI","SMF","RDU","SJC","DAL","MSY",
             "PIT","CLE","CVG","MEM","IND","CMH","SAT","JAX","RSW","OGG",
+            // Regional US — East
+            "SRQ","PBI","PIE","EYW","GNV","TLH","DAB","MLB","PGD","SFB",
+            "PWM","BTV","ALB","SYR","ROC","BUF","PVD","MHT","ACK","MVY",
+            "HPN","ISP","SWF","ABE","AVP","MDT","IPT","ERI","CAK","TOL",
+            "GSP","CHS","SAV","ILM","OAJ","AVL","ROA","LYH","CHO","ORF",
+            "RIC","SHD","HHH","HTS","CRW","EKN","MRB","PKB",
+            // Regional US — South
+            "PNS","VPS","MOB","HSV","BHM","MGM","DHN","GPT","JAN","MEI",
+            "TYS","TRI","CHA","BNA","SHV","LFT","BTR","AEX","MLU","GTR",
+            "TUP","HSV","HSP","ROW","FAY","ILG","ACY","TTN","ABE",
+            // Regional US — Midwest
+            "TUL","OKC","ICT","SPI","BMI","MLI","DBQ","CID","DSM","SUX",
+            "FSD","BIS","FAR","GFK","MOT","ISN","DIK","ABR","PIR","HON",
+            "MKE","GRB","ATW","LSE","RST","DLH","HIB","INL","IMT","ESC",
+            // Regional US — West
+            "ABQ","ELP","LBB","AMA","MAF","CRP","HRL","MFE","SPS","ABI",
+            "SJT","BOI","GEG","BZN","MSO","FCA","JAC","SUN","TWF","PIH",
+            "IDA","GTF","HLN","BIL","RAP","FSD","GJT","DRO","PUB","COS",
+            "FAT","SBA","SBP","MRY","RDD","CIC","ACV","STS","MMH","SMX",
+            "RNO","LMT","MFR","EUG","RDM","PDT","ALW","YKM","BFI","PAE",
+            // Canada
+            "YYZ","YVR","YUL","YYC","YEG","YOW","YHZ","YWG","YXE","YQR",
+            // Mexico
+            "MEX","CUN","GDL","MTY","TLC","SJD","PVR","ZIH","MID","OAX",
+            // Caribbean
+            "MBJ","KIN","NAS","GGT","ELH","FPO","POS","BGI","ANU","SXM",
+            "STT","STX","SJU","BQN","PSE","VQS","CPX","SKB","NEV","SVD",
+            // Europe
             "LHR","CDG","AMS","FRA","MUC","ZRH","MAD","BCN","FCO","LGW",
             "DUB","CPH","ARN","OSL","HEL","VIE","BRU","LIS","ATH","IST",
-            "DXB","DOH","AUH","SIN","HKG","NRT","ICN","PEK","PVG","BKK",
-            "SYD","MEL","YYZ","YVR","YUL","GRU","EZE","BOG","LIM","SCL"
+            "MAN","EDI","GLA","BHX","LPL","NCL","BRS","LTN","STN","LCY",
+            "ORY","LYS","NCE","MRS","TLS","BOD","NTE","BES","SXB","GVA",
+            "BSL","BRN","ACE","TFS","LPA","PMI","IBZ","MAH","VLC","SVQ",
+            "AGP","ALC","SDR","SCQ","OVD","VGO","BIO","ZAZ","GRX","MXP",
+            "LIN","VCE","BLQ","FLR","PSA","NAP","CTA","PMO","CAG","BRI",
+            "WAW","KRK","WRO","GDN","KTW","LCJ","POZ","SZZ","BZG","RZE",
+            "PRG","BUD","OTP","SOF","TXL","SXF","HAM","DUS","CGN","STR",
+            "NUE","HAJ","BRE","LEJ","FKB","ERF","DRS","PAD","FMO","HHN",
+            // Asia Pacific
+            "DXB","DOH","AUH","KWI","BAH","RUH","JED","MED","DMM","ADE",
+            "SIN","HKG","NRT","ICN","PEK","PVG","BKK","KUL","MNL","CGK",
+            "SYD","MEL","BNE","PER","ADL","OOL","HBA","CNS","TSV","MKY",
+            "NAN","SUV","APW","PPT","IPC","GUM","SPN","ROR","MAJ","TRW",
+            // Latin America
+            "GRU","GIG","CGH","BSB","SSA","FOR","REC","BEL","MCZ","CWB",
+            "EZE","AEP","COR","MDZ","BRC","IGR","UYU","MVO","GUA","SAL",
+            "BOG","MDE","CLO","BAQ","CTG","ADZ","SMR","LIM","CUZ","AQP",
+            "SCL","PMC","IQQ","ARI","ANF","CCP","ZCO","MHC","PMQ","USH",
         ])
         var airports: [String] = []
         let regex = try? NSRegularExpression(pattern: pattern)
@@ -343,7 +406,7 @@ class TravelConfirmationParser {
         }
         if !explicitDates.isEmpty { return explicitDates.sorted() }
 
-        // Priority 3: "16 Apr 2026" or "16 April 2026" — day first (common in hotel confirmations)
+        // Priority 3: "16 Apr 2026" or "16 April 2026" — day first
         let dayFirstPattern = #"\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+20\d{2}\b"#
         if let regex = try? NSRegularExpression(pattern: dayFirstPattern, options: .caseInsensitive) {
             for match in regex.matches(in: text, range: nsRange) {
@@ -360,7 +423,24 @@ class TravelConfirmationParser {
         }
         if !explicitDates.isEmpty { return explicitDates.sorted() }
 
-        // Priority 4: "4/16/2026" or "04/16/2026" numeric formats
+        // Priority 4: "Thu, Apr 23, 2026" — abbreviated weekday + month
+        let abbrevWeekdayPattern = #"\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+20\d{2}\b"#
+        if let regex = try? NSRegularExpression(pattern: abbrevWeekdayPattern, options: .caseInsensitive) {
+            for match in regex.matches(in: text, range: nsRange) {
+                if let range = Range(match.range, in: text) {
+                    let raw = String(text[range]).trimmingCharacters(in: .whitespaces)
+                    for format in ["EEE, MMM d, yyyy", "EEE MMM d yyyy", "EEE, MMM d yyyy"] {
+                        formatter.dateFormat = format
+                        if let date = formatter.date(from: raw) {
+                            explicitDates.append(date); break
+                        }
+                    }
+                }
+            }
+        }
+        if !explicitDates.isEmpty { return explicitDates.sorted() }
+
+        // Priority 5: "4/16/2026" or "04/16/2026" numeric formats
         let numericPattern = #"\b(\d{1,2})[/\-](\d{1,2})[/\-](20\d{2})\b"#
         if let regex = try? NSRegularExpression(pattern: numericPattern) {
             for match in regex.matches(in: text, range: nsRange) {
@@ -377,11 +457,11 @@ class TravelConfirmationParser {
         }
         if !explicitDates.isEmpty { return explicitDates.sorted() }
 
-        // Fallback: NSDataDetector — only use future dates to avoid today's date bleeding in
+        // Fallback: NSDataDetector — only use future dates
         let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue)
         let allDates = detector?.matches(in: text, range: nsRange).compactMap { $0.date }.sorted() ?? []
         let futureDates = allDates.filter { $0 > Calendar.current.startOfDay(for: Date()) }
-        return futureDates.isEmpty ? [] : futureDates  // ← return empty rather than today if no future dates
+        return futureDates.isEmpty ? [] : futureDates
     }
 
     private func detectHotelName(text: String) -> String? {
@@ -410,13 +490,22 @@ class TravelConfirmationParser {
     }
 
     private func detectHotelAddress(text: String) -> String? {
-        // Look for lines containing street address patterns
         let lines = text.components(separatedBy: .newlines)
         let addressPattern = #"\d+\s+\w+.*(?:St|Street|Ave|Avenue|Blvd|Boulevard|Dr|Drive|Rd|Road|Way|Ln|Lane|Pkwy|Parkway|Monroe|Michigan|Wacker|State|Market|Main|Broadway)"#
-        for line in lines {
+        let cityStatePattern = #"[A-Za-z\s]+,\s*[A-Z]{2}"#
+
+        for (index, line) in lines.enumerated() {
             let cleaned = line.trimmingCharacters(in: .whitespaces)
             if cleaned.range(of: addressPattern, options: [.regularExpression, .caseInsensitive]) != nil {
-                return cleaned
+                if index + 1 < lines.count {
+                    let nextLine = lines[index + 1].trimmingCharacters(in: .whitespaces)
+                    if nextLine.range(of: cityStatePattern, options: .regularExpression) != nil {
+                        let streetCleaned = cleaned.trimmingCharacters(in: CharacterSet(charactersIn: ", "))
+                        let cityLine = nextLine.replacingOccurrences(of: " United States", with: "", options: .caseInsensitive)
+                        return "\(streetCleaned), \(cityLine.trimmingCharacters(in: .whitespaces))"
+                    }
+                }
+                return cleaned.trimmingCharacters(in: CharacterSet(charactersIn: ", "))
             }
         }
         return nil

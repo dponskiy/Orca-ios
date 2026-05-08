@@ -21,6 +21,7 @@ struct RecipeCaptureView: View {
     @State private var isFetching = false
     @State private var errorMessage: String? = nil
     @State private var savedMemory: Memory? = nil
+    @State private var showRecipeBuilder = false
     @FocusState private var urlFocused: Bool
 
     var body: some View {
@@ -115,6 +116,15 @@ struct RecipeCaptureView: View {
                 .disabled(urlText.isEmpty || isFetching)
                 .padding(.horizontal, 20)
 
+                // Don't have a URL option
+                Button {
+                    showRecipeBuilder = true
+                } label: {
+                    Text("Don't have a URL? Build your own")
+                        .font(.custom("DMSans-Medium", size: 14))
+                        .foregroundColor(.oceanTeal)
+                }
+
                 Spacer()
             }
             .background(Color.white)
@@ -131,13 +141,21 @@ struct RecipeCaptureView: View {
                 isPresented = false
                 onComplete?("Recipe saved to Cooking 👨‍🍳")
                 if !UserDefaults.standard.bool(forKey: "orcaShownGroceryHint") {
-                        UserDefaults.standard.set(true, forKey: "orcaShownGroceryHint")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            NotificationCenter.default.post(name: .groceryModeHint, object: nil)
-                        }
+                    UserDefaults.standard.set(true, forKey: "orcaShownGroceryHint")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        NotificationCenter.default.post(name: .groceryModeHint, object: nil)
                     }
+                }
             }) { memory in
                 MemoryDetailView(memory: memory)
+            }
+            .sheet(isPresented: $showRecipeBuilder) {
+                RecipeBuilderView(onComplete: { message in
+                    showRecipeBuilder = false
+                    isPresented = false
+                    onComplete?(message)
+                })
+                .environment(authService)
             }
         }
     }

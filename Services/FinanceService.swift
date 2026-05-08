@@ -446,11 +446,21 @@ class FinanceService {
             guard sym.count >= 2 else { continue }
             let searchIn = sym.count >= 4 ? text : firstLine
             let escaped = NSRegularExpression.escapedPattern(for: sym)
-            let pattern = "(?<![A-Za-z])\(escaped)(?![A-Za-z])"
-            if let regex = try? NSRegularExpression(pattern: pattern),
-               regex.firstMatch(in: searchIn, range: NSRange(searchIn.startIndex..., in: searchIn)) != nil {
-                return FinanceTicker(symbol: sym, companyName: name)
+            if sym.count <= 4 {
+                let upperPattern = "(?<![A-Z])\(escaped)(?![A-Z])"
+                guard let upperRegex = try? NSRegularExpression(pattern: upperPattern),
+                      upperRegex.firstMatch(in: searchIn, range: NSRange(searchIn.startIndex..., in: searchIn)) != nil else {
+                    continue
+                }
+            } else {
+                let pattern = "(?<![A-Za-z])\(escaped)(?![A-Za-z])"
+                guard let regex = try? NSRegularExpression(pattern: pattern),
+                      regex.firstMatch(in: searchIn, range: NSRange(searchIn.startIndex..., in: searchIn)) != nil else {
+                    continue
+                }
             }
+            
+            return FinanceTicker(symbol: sym, companyName: name)
         }
         return nil
     }

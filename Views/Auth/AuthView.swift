@@ -72,17 +72,10 @@ struct AuthView: View {
                     .frame(height: 52)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                     
-                    Button {
-                        onSkip()
-                    } label: {
-                        Text("Skip for now")
-                            .font(.custom("DMSans-Regular", size: 15))
-                            .foregroundColor(.white.opacity(0.5))
-                    }
-                    
-                    Text("Sign in to sync across devices")
+                    Text("Reminders, sync, and the full Orca experience require an account. Sign in takes 3 seconds.")
                         .font(.custom("DMSans-Regular", size: 12))
                         .foregroundColor(.white.opacity(0.3))
+                        .multilineTextAlignment(.center)
                 }
                 .padding(.horizontal, 32)
                 .padding(.bottom, 40)

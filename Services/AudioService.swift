@@ -15,13 +15,13 @@ class AudioService {
     var transcription = ""
     var audioLevel: Float = 0.0
     var recordingDuration: TimeInterval = 0
-    
+
     private var audioEngine = AVAudioEngine()
     private var speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var timer: Timer?
-    
+
     func requestPermissions(completion: @escaping (Bool) -> Void) {
         AVAudioApplication.requestRecordPermission { micGranted in
             guard micGranted else {
@@ -35,13 +35,17 @@ class AudioService {
             }
         }
     }
-    
+
     func startRecording() {
         guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else { return }
-        
+
+        // Full reset before each session — prevents stale engine state after multiple recordings
+        audioEngine.stop()
+        audioEngine.reset()
+
         transcription = ""
         recordingDuration = 0
-        
+
         let audioSession = AVAudioSession.sharedInstance()
         do {
             try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -50,19 +54,19 @@ class AudioService {
             print("Audio session error: \(error)")
             return
         }
-        
+
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
         guard let recognitionRequest = recognitionRequest else { return }
         recognitionRequest.shouldReportPartialResults = true
-        
+
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        
+
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
             self?.updateAudioLevel(buffer: buffer)
         }
-        
+
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
             guard let self = self else { return }
             if let result = result {
@@ -70,12 +74,9 @@ class AudioService {
                     self.transcription = result.bestTranscription.formattedString
                 }
             }
-            if error != nil || (result?.isFinal ?? false) {
-                self.audioEngine.stop()
-                inputNode.removeTap(onBus: 0)
-            }
+            // Teardown is owned exclusively by stopRecording() — no engine touches here
         }
-        
+
         do {
             try audioEngine.start()
             isRecording = true
@@ -84,21 +85,20 @@ class AudioService {
             print("Engine start error: \(error)")
         }
     }
-    
+
     func stopRecording() {
         audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
         recognitionRequest = nil
         recognitionTask?.cancel()
         recognitionTask = nil
-        audioEngine.inputNode.removeTap(onBus: 0)
         isRecording = false
         timer?.invalidate()
         timer = nil
-        
-        try? AVAudioSession.sharedInstance().setActive(false)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
-    
+
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self = self else { return }
@@ -110,7 +110,7 @@ class AudioService {
             }
         }
     }
-    
+
     private func updateAudioLevel(buffer: AVAudioPCMBuffer) {
         guard let channelData = buffer.floatChannelData?[0] else { return }
         let frames = UInt32(buffer.frameLength)
@@ -132,17 +132,21 @@ class AudioEditService {
     var isRecording = false
     var transcription = ""
     var audioLevel: Float = 0.0
-    
+
     private var audioEngine = AVAudioEngine()
     private var speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    
+
     func startRecording() {
         guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else { return }
-        
+
+        // Full reset before each session — prevents stale engine state after multiple recordings
+        audioEngine.stop()
+        audioEngine.reset()
+
         transcription = ""
-        
+
         let audioSession = AVAudioSession.sharedInstance()
         do {
             try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -151,19 +155,19 @@ class AudioEditService {
             print("Audio session error: \(error)")
             return
         }
-        
+
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
         guard let recognitionRequest = recognitionRequest else { return }
         recognitionRequest.shouldReportPartialResults = true
-        
+
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        
+
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
             self?.updateAudioLevel(buffer: buffer)
         }
-        
+
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
             guard let self = self else { return }
             if let result = result {
@@ -171,12 +175,9 @@ class AudioEditService {
                     self.transcription = result.bestTranscription.formattedString
                 }
             }
-            if error != nil || (result?.isFinal ?? false) {
-                self.audioEngine.stop()
-                inputNode.removeTap(onBus: 0)
-            }
+            // Teardown is owned exclusively by stopRecording() — no engine touches here
         }
-        
+
         do {
             try audioEngine.start()
             isRecording = true
@@ -184,18 +185,18 @@ class AudioEditService {
             print("Engine start error: \(error)")
         }
     }
-    
+
     func stopRecording() {
         audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
         recognitionRequest = nil
         recognitionTask?.cancel()
         recognitionTask = nil
-        audioEngine.inputNode.removeTap(onBus: 0)
         isRecording = false
-        try? AVAudioSession.sharedInstance().setActive(false)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
-    
+
     private func updateAudioLevel(buffer: AVAudioPCMBuffer) {
         guard let channelData = buffer.floatChannelData?[0] else { return }
         let frames = UInt32(buffer.frameLength)

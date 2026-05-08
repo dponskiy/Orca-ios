@@ -23,8 +23,11 @@ struct DashboardView: View {
     @State private var detailMemory: Memory?
     @State private var showQuickLog = false
     @State private var navigateToWorkoutEcho = false
+    @State private var showWeatherDetail = false
     @StateObject private var weatherService = WeatherService.shared
     @StateObject private var locationService = LocationService.shared
+    @State private var showGroceryMode = false
+    @State private var showMediaMode = false
 
     // MARK: - Computed Properties
 
@@ -97,19 +100,16 @@ struct DashboardView: View {
 
     // MARK: - Shortcuts Logic
 
-    /// Returns true if any workout memory exists (drives Workout Mode card visibility)
     private var hasWorkoutMemories: Bool {
         guard let id = echos.first(where: { $0.name.lowercased().contains("workout") })?.id else { return false }
         return memories.contains { $0.echoId == id }
     }
 
-    /// Returns true if any cooking memory with a checklist exists (drives Grocery Mode card)
     private var hasCookingWithChecklist: Bool {
         guard let id = echos.first(where: { $0.name.lowercased() == "cooking" })?.id else { return false }
         return memories.contains { $0.echoId == id && $0.hasChecklist }
     }
 
-    // Always show — Workout Mode is useful even on first session
     private var showShortcutsStrip: Bool { true }
 
     private var workoutEcho: Echo? { echos.first { $0.name.lowercased().contains("workout") } }
@@ -167,14 +167,24 @@ struct DashboardView: View {
                                     .font(.custom("InstrumentSerif-Regular", size: 28))
                                     .foregroundColor(.deepNavy)
                                 Spacer()
+
+                                // UPDATED: Weather chip is now tappable
                                 if !weatherService.temperature.isEmpty {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: weatherService.symbolName)
-                                            .font(.system(size: 14)).foregroundColor(.oceanTeal)
-                                        Text(weatherService.temperature)
-                                            .font(.custom("DMMono-Regular", size: 14)).foregroundColor(.deepNavy)
+                                    Button {
+                                        showWeatherDetail = true
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: weatherService.symbolName)
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.oceanTeal)
+                                            Text(weatherService.temperature)
+                                                .font(.custom("DMMono-Regular", size: 14))
+                                                .foregroundColor(.deepNavy)
+                                        }
                                     }
+                                    .buttonStyle(.plain)
                                 }
+
                                 NavigationLink(destination: SettingsView()) {
                                     ZStack {
                                         Circle().fill(Color.mist).frame(width: 36, height: 36)
@@ -260,10 +270,8 @@ struct DashboardView: View {
                         }
                     }
 
-                    // ── QUICK ACTIONS STRIP ──
-                    if showShortcutsStrip {
-                        quickActionsStrip
-                    }
+                    // Quick Actions Strip
+                    if showShortcutsStrip { quickActionsStrip }
 
                     // Your Echos header
                     HStack {
@@ -287,8 +295,6 @@ struct DashboardView: View {
                 .padding(.top, 16)
             }
             .background(Color.pearl)
-
-            // Hidden NavigationLink — fires after Quick Log Done
             .background(
                 NavigationLink(
                     destination: Group {
@@ -299,7 +305,6 @@ struct DashboardView: View {
                     isActive: $navigateToWorkoutEcho
                 ) { EmptyView() }
             )
-
             .onAppear {
                 showUpcoming = true
                 showPinned = true
@@ -313,13 +318,23 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showCreateEcho) { EchoEditSheet(echo: nil) }
             .sheet(item: $editingMemory) { MemoryEditView(memory: $0) }
+            .sheet(isPresented: $showGroceryMode) {
+                GroceryModeView(memories: memories.filter { $0.echoId == cookingEcho?.id })
+            }
             .sheet(item: $detailMemory) { MemoryDetailView(memory: $0) }
+            .sheet(isPresented: $showMediaMode) {
+                WatchModeView()
+            }
             .sheet(isPresented: $showQuickLog) {
                 QuickLogView(onFinish: {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         navigateToWorkoutEcho = true
                     }
                 })
+            }
+            // NEW: Weather detail sheet
+            .sheet(isPresented: $showWeatherDetail) {
+                WeatherDetailView()
             }
         }
     }
@@ -334,92 +349,34 @@ struct DashboardView: View {
                 .tracking(0.5)
 
             HStack(spacing: 10) {
-                // Grocery Mode card — only if cooking memories exist
-                if hasCookingWithChecklist, let echo = cookingEcho {
-                    NavigationLink(destination: EchoDetailView(echo: echo)) {
-                        shortcutCard(
-                            icon: "cart.fill",
-                            iconColor: Color.oceanTeal,
-                            title: "Grocery\nmode",
-                            subtitle: "From recipes",
-                            accentBorder: false
-                        )
-                    }
-                } else {
-                    // Placeholder slot so Workout card always lines up in position 2
-                    shortcutCard(
-                        icon: "cart.fill",
-                        iconColor: Color.gray.opacity(0.4),
-                        title: "Grocery\nmode",
-                        subtitle: "No recipes yet",
-                        accentBorder: false
-                    )
-                    .opacity(0.45)
-                    .allowsHitTesting(false)
+                Button { showGroceryMode = true } label: {
+                    shortcutCard(icon: "cart.fill", iconColor: Color.oceanTeal, title: "Shopping\nmode", subtitle: hasCookingWithChecklist ? "From recipes" : "Build your list", accentBorder: false)
                 }
 
-                // Workout Mode card — only if workout memories exist
                 Button { showQuickLog = true } label: {
-                    shortcutCard(
-                        icon: "figure.strengthtraining.traditional",
-                        iconColor: Color.oceanTeal,
-                        title: "Workout\nmode",
-                        subtitle: hasWorkoutMemories ? "Log a set" : "Start first session",
-                        accentBorder: true
-                    )
+                    shortcutCard(icon: "figure.strengthtraining.traditional", iconColor: Color.oceanTeal, title: "Workout\nmode", subtitle: hasWorkoutMemories ? "Log a set" : "Start first session", accentBorder: true)
                 }
 
-                // Coming soon placeholder
-                shortcutCard(
-                    icon: "clock.fill",
-                    iconColor: Color.gray.opacity(0.35),
-                    title: "Coming\nsoon",
-                    subtitle: "More modes",
-                    accentBorder: false
-                )
-                .opacity(0.4)
-                .allowsHitTesting(false)
+                Button { showMediaMode = true } label: {
+                    shortcutCard(icon: "popcorn.fill", iconColor: Color.oceanTeal, title: "Media\nmode", subtitle: "Shows, movies & books", accentBorder: false)
+                }
             }
         }
     }
 
-    private func shortcutCard(
-        icon: String,
-        iconColor: Color,
-        title: String,
-        subtitle: String,
-        accentBorder: Bool
-    ) -> some View {
+    private func shortcutCard(icon: String, iconColor: Color, title: String, subtitle: String, accentBorder: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundColor(iconColor)
-                .frame(width: 32, height: 32)
-
+            Image(systemName: icon).font(.system(size: 18)).foregroundColor(iconColor).frame(width: 32, height: 32)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.custom("DMSans-Medium", size: 13))
-                    .foregroundColor(.deepNavy)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(subtitle)
-                    .font(.custom("DMSans-Regular", size: 11))
-                    .foregroundColor(.gray)
-                    .lineLimit(1)
+                Text(title).font(.custom("DMSans-Medium", size: 13)).foregroundColor(.deepNavy).multilineTextAlignment(.leading).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                Text(subtitle).font(.custom("DMSans-Regular", size: 11)).foregroundColor(.gray).lineLimit(1)
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(
-                    accentBorder ? Color.oceanTeal.opacity(0.35) : Color.black.opacity(0.08),
-                    lineWidth: accentBorder ? 1.0 : 0.5
-                )
-        )
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(accentBorder ? Color.oceanTeal.opacity(0.35) : Color.black.opacity(0.08), lineWidth: accentBorder ? 1.0 : 0.5))
         .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
     }
 
@@ -428,21 +385,15 @@ struct DashboardView: View {
     private func pinnedRow(memory: Memory) -> some View {
         let expired = isExpired(memory)
         return HStack(spacing: 12) {
-            Image(systemName: "pin.fill")
-                .font(.system(size: 13))
-                .foregroundColor(expired ? .gray.opacity(0.4) : .coral).frame(width: 24)
+            Image(systemName: "pin.fill").font(.system(size: 13)).foregroundColor(expired ? .gray.opacity(0.4) : .coral).frame(width: 24)
             VStack(alignment: .leading, spacing: 4) {
-                Text(memory.text)
-                    .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(expired ? .gray : .deepNavy).lineLimit(2)
+                Text(memory.text).font(.custom("DMSans-Regular", size: 15)).foregroundColor(expired ? .gray : .deepNavy).lineLimit(2)
                 if let echo = echos.first(where: { $0.id == memory.echoId }) {
                     HStack(spacing: 3) {
                         Text(echo.emoji).font(.system(size: 11))
-                        Text(echo.name).font(.custom("DMSans-Medium", size: 12))
-                            .foregroundColor(expired ? .gray : .deepNavy)
+                        Text(echo.name).font(.custom("DMSans-Medium", size: 12)).foregroundColor(expired ? .gray : .deepNavy)
                     }
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Color.mist).clipShape(Capsule())
+                    .padding(.horizontal, 6).padding(.vertical, 2).background(Color.mist).clipShape(Capsule())
                 }
             }
             Spacer()
@@ -470,15 +421,10 @@ struct DashboardView: View {
                 Text(echo.emoji).font(.system(size: 16)).frame(width: 24).opacity(expired ? 0.4 : 1.0)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(memory.text)
-                    .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(expired ? .gray : .deepNavy).lineLimit(2)
-
-                // For recurring pings fireDate is the original date (past) — don't filter by date
+                Text(memory.text).font(.custom("DMSans-Regular", size: 15)).foregroundColor(expired ? .gray : .deepNavy).lineLimit(2)
                 let activePing = pings
                     .filter { $0.memoryId == memory.id && $0.isActive }
                     .sorted { p1, p2 in
-                        // Prefer recurring pings, then soonest fireDate
                         if p1.recurrence != .none && p2.recurrence == .none { return true }
                         if p1.recurrence == .none && p2.recurrence != .none { return false }
                         return p1.fireDate < p2.fireDate
@@ -500,15 +446,12 @@ struct DashboardView: View {
                     }
                     return memory.detectedDate
                 }()
-
                 if let date = displayDate {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
-                            Image(systemName: "clock").font(.system(size: 10))
-                                .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
+                            Image(systemName: "clock").font(.system(size: 10)).foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
                             Text(date, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
-                                .font(.custom("DMMono-Regular", size: 12))
-                                .foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
+                                .font(.custom("DMMono-Regular", size: 12)).foregroundColor(expired ? .gray.opacity(0.5) : .oceanTeal)
                         }
                         let daysUntil = Calendar.current.dateComponents([.day],
                             from: Calendar.current.startOfDay(for: Date()),
@@ -554,10 +497,8 @@ struct DashboardView: View {
         VStack(spacing: 16) {
             Spacer().frame(height: 40)
             FinIcon().fill(Color.seafoam.opacity(0.3)).frame(width: 60, height: 72)
-            Text("Drop your first memory")
-                .font(.custom("DMSans-Medium", size: 18)).foregroundColor(.deepNavy)
-            Text("Tap the fin button below to get started")
-                .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.gray)
+            Text("Drop your first memory").font(.custom("DMSans-Medium", size: 18)).foregroundColor(.deepNavy)
+            Text("Tap the fin button below to get started").font(.custom("DMSans-Regular", size: 14)).foregroundColor(.gray)
         }
         .frame(maxWidth: .infinity)
     }
@@ -571,12 +512,8 @@ struct DashboardView: View {
                 let count = memories.filter { $0.echoId == echo.id }.count
                 let isEmpty = count == 0
                 NavigationLink(destination: EchoDetailView(echo: echo)) {
-                    EchoBubbleView(
-                        echo: echo, count: count,
-                        pendingCount: isEmpty ? 0 : pendingCountFor(echo: echo),
-                        totalMemories: memories.count
-                    )
-                    .opacity(isEmpty ? 0.5 : 1.0)
+                    EchoBubbleView(echo: echo, count: count, pendingCount: isEmpty ? 0 : pendingCountFor(echo: echo), totalMemories: memories.count)
+                        .opacity(isEmpty ? 0.5 : 1.0)
                 }
                 .offset(
                     x: isEmpty ? 0 : CGFloat([8, -6, 10, -8, 5, -10, 7, -5, 9, -7, 6, -9, 8, -6][index % 14]),

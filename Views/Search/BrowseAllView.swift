@@ -17,7 +17,7 @@ struct BrowseAllView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthService.self) private var authService
 
-    @State private var sortMode: SortMode = .byMonth
+    @State private var sortMode: SortMode = .mostRecent
     @State private var selectedEchoId: UUID?
     @State private var selectedPersonId: UUID?
     @State private var editingMemory: Memory?
@@ -26,10 +26,10 @@ struct BrowseAllView: View {
     private let calendar = Calendar.current
 
     enum SortMode: String, CaseIterable {
+        case mostRecent = "Most Recent"
         case byMonth = "By Month"
         case byEcho = "By Echo"
         case byPerson = "By Person"
-        case mostRecent = "Most Recent"
     }
 
     var activeEchos: [Echo] {
@@ -39,34 +39,30 @@ struct BrowseAllView: View {
     var filteredMemories: [Memory] {
         var result = Array(memories)
 
-        // Echo filter
         if let echoId = selectedEchoId {
             result = result.filter { $0.echoId == echoId }
         }
 
-        // Person filter — match on first name
         if let personId = selectedPersonId,
            let person = persons.first(where: { $0.id == personId }) {
             let firstName = person.name.split(separator: " ").first.map(String.init) ?? person.name
             result = result.filter { $0.text.localizedCaseInsensitiveContains(firstName) }
         }
 
-        return result.sorted {
-            let d1 = $0.detectedDate ?? $0.updatedAt
-            let d2 = $1.detectedDate ?? $1.updatedAt
-            return d1 < d2
-        }
+        return result.sorted { $0.createdAt > $1.createdAt }
     }
 
     private func isExpired(_ memory: Memory) -> Bool {
         let expiryDate = memory.endDate ?? memory.detectedDate
         guard let date = expiryDate, date < Date() else { return false }
-        let memoryPings = pings.filter { $0.memoryId == memory.id }
-        if memoryPings.contains(where: { $0.recurrence != .none }) { return false }
-        return !memoryPings.contains { $0.fireDate > Date() }
+        // Pre-extract ping properties to avoid SwiftData detachment crash
+        let memoryPingData = pings
+            .filter { $0.memoryId == memory.id }
+            .map { (recurrence: $0.recurrence, fireDate: $0.fireDate) }
+        if memoryPingData.contains(where: { $0.recurrence != .none }) { return false }
+        return !memoryPingData.contains { $0.fireDate > Date() }
     }
 
-    // Memories for a given person by first name match
     private func memoriesFor(person: Person) -> [Memory] {
         let firstName = person.name.split(separator: " ").first.map(String.init) ?? person.name
         return filteredMemories.filter { $0.text.localizedCaseInsensitiveContains(firstName) }
@@ -92,7 +88,7 @@ struct BrowseAllView: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
 
-            // Sort mode pills
+            // Sort mode pills — Most Recent first
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(SortMode.allCases, id: \.self) { mode in
@@ -116,7 +112,6 @@ struct BrowseAllView: View {
             // Filter pills — Echos + People
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    // All
                     Button {
                         selectedEchoId = nil
                         selectedPersonId = nil
@@ -130,7 +125,6 @@ struct BrowseAllView: View {
                             .overlay(Capsule().stroke(Color.gray.opacity(0.3), lineWidth: 1))
                     }
 
-                    // Echo pills
                     ForEach(activeEchos) { echo in
                         Button { selectedEchoId = echo.id; selectedPersonId = nil } label: {
                             HStack(spacing: 4) {
@@ -146,14 +140,12 @@ struct BrowseAllView: View {
                         }
                     }
 
-                    // Person pills — only show persons who have memories
                     ForEach(persons.filter { person in
                         let firstName = person.name.split(separator: " ").first.map(String.init) ?? person.name
                         return memories.contains { $0.text.localizedCaseInsensitiveContains(firstName) }
                     }) { person in
                         Button { selectedPersonId = person.id; selectedEchoId = nil } label: {
                             HStack(spacing: 4) {
-                                // Mini avatar
                                 let colors = personColors(for: person.colorIndex)
                                 ZStack {
                                     Circle().fill(colors.0).frame(width: 16, height: 16)
@@ -181,6 +173,9 @@ struct BrowseAllView: View {
             // Memory list
             List {
                 switch sortMode {
+                case .mostRecent:
+                    ForEach(filteredMemories) { memory in memoryRow(memory: memory) }
+
                 case .byMonth:
                     ForEach(groupedByMonth, id: \.key) { month, monthMemories in
                         Section {
@@ -193,6 +188,7 @@ struct BrowseAllView: View {
                             }
                         }
                     }
+
                 case .byEcho:
                     ForEach(groupedByEcho, id: \.key) { echoName, echoMemories in
                         Section {
@@ -206,6 +202,7 @@ struct BrowseAllView: View {
                             }
                         }
                     }
+
                 case .byPerson:
                     ForEach(groupedByPerson, id: \.key) { personName, personMemories in
                         Section {
@@ -218,8 +215,6 @@ struct BrowseAllView: View {
                             }
                         }
                     }
-                case .mostRecent:
-                    ForEach(filteredMemories) { memory in memoryRow(memory: memory) }
                 }
             }
             .listStyle(.plain)
@@ -303,7 +298,7 @@ struct BrowseAllView: View {
         return grouped.sorted { pair1, pair2 in
             let d1 = pair1.value.first.flatMap { $0.detectedDate ?? $0.updatedAt } ?? Date.distantPast
             let d2 = pair2.value.first.flatMap { $0.detectedDate ?? $0.updatedAt } ?? Date.distantPast
-            return d1 < d2
+            return d1 > d2
         }
     }
 

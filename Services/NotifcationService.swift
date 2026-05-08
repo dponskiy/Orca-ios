@@ -1,5 +1,5 @@
 //
-//  NotifcationService.swift
+//  NotificationService.swift
 //  Orca
 //
 //  Created by David Piliponskiy on 2/24/26.
@@ -12,10 +12,8 @@ class NotificationService {
     static let shared = NotificationService()
 
     // MARK: - Clean notification text
-    // Strips relative time words that are stale when the ping fires
     private func cleanNotificationText(_ text: String) -> String {
         var result = text
-
         let replacements: [(String, String)] = [
             ("tomorrow", "today"),
             ("tonight", "today"),
@@ -30,15 +28,9 @@ class NotificationService {
             ("next saturday", "this saturday"),
             ("next sunday", "this sunday"),
         ]
-
         for (original, replacement) in replacements {
-            result = result.replacingOccurrences(
-                of: original,
-                with: replacement,
-                options: .caseInsensitive
-            )
+            result = result.replacingOccurrences(of: original, with: replacement, options: .caseInsensitive)
         }
-
         return result.trimmingCharacters(in: .whitespaces)
     }
 
@@ -101,6 +93,73 @@ class NotificationService {
         print("🔔 Scheduled notification for: \(memoryText) at \(triggerComponents)")
     }
 
+    // MARK: - Follow-up for unresolved pings
+
+    func checkAndScheduleFollowUps(pings: [Ping], memories: [Memory]) {
+        let now = Date()
+        let twoHoursAgo = Calendar.current.date(byAdding: .hour, value: -2, to: now) ?? now
+        let twoDaysAgo = Calendar.current.date(byAdding: .day, value: -2, to: now) ?? now
+
+        // Pre-extract memory properties to avoid SwiftData detachment crash
+        struct MemorySnapshot {
+            let id: UUID
+            let isActionable: Bool
+            let isCompleted: Bool
+            let text: String
+        }
+        let memorySnapshots = memories.map {
+            MemorySnapshot(id: $0.id, isActionable: $0.isActionable, isCompleted: $0.isCompleted, text: $0.text)
+        }
+
+        // Pre-extract ping properties
+        struct PingSnapshot {
+            let ping: Ping
+            let id: UUID
+            let recurrence: Ping.Recurrence
+            let followUpScheduled: Bool
+            let lastFired: Date?
+            let fireDate: Date
+            let memoryId: UUID
+        }
+        let pingSnapshots = pings.map {
+            PingSnapshot(ping: $0, id: $0.id, recurrence: $0.recurrence, followUpScheduled: $0.followUpScheduled, lastFired: $0.lastFired, fireDate: $0.fireDate, memoryId: $0.memoryId)
+        }
+
+        for snapshot in pingSnapshots {
+            guard snapshot.recurrence == .none else { continue }
+            guard snapshot.followUpScheduled == false else { continue }
+
+            if snapshot.lastFired == nil && snapshot.fireDate < now {
+                snapshot.ping.lastFired = snapshot.fireDate
+            }
+
+            guard let lastFired = snapshot.ping.lastFired else { continue }
+            guard lastFired <= twoHoursAgo else { continue }
+            guard lastFired >= twoDaysAgo else { continue }
+
+            guard let memory = memorySnapshots.first(where: { $0.id == snapshot.memoryId }) else { continue }
+            guard memory.isActionable && !memory.isCompleted else { continue }
+
+            scheduleFollowUp(pingId: snapshot.id, memoryText: memory.text)
+            snapshot.ping.followUpScheduled = true
+
+            print("🔁 Follow-up scheduled for: \(memory.text)")
+        }
+    }
+
+    private func scheduleFollowUp(pingId: UUID, memoryText: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Still need to do this?"
+        content.body = cleanNotificationText(memoryText)
+        content.sound = .default
+
+        // Fire 2 minutes from now (the check already waited 2 hours)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 120, repeats: false)
+        let identifier = "followup-\(pingId.uuidString)"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request)
+    }
+
     func scheduleInactivityReminder(afterDays days: Int = 5) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["inactivity_reminder"])
 
@@ -113,20 +172,12 @@ class NotificationService {
             timeInterval: TimeInterval(days * 24 * 60 * 60),
             repeats: false
         )
-
-        let request = UNNotificationRequest(
-            identifier: "inactivity_reminder",
-            content: content,
-            trigger: trigger
-        )
-
+        let request = UNNotificationRequest(identifier: "inactivity_reminder", content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
     }
 
     func cancelInactivityReminder() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(
-            withIdentifiers: ["inactivity_reminder"]
-        )
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["inactivity_reminder"])
     }
 
     func cancelPing(pingId: UUID) {
@@ -140,7 +191,9 @@ class NotificationService {
             let orphaned = requests
                 .map { $0.identifier }
                 .filter { id in
-                    id != "inactivity_reminder" && !validIds.contains(id)
+                    id != "inactivity_reminder" &&
+                    !id.hasPrefix("followup-") &&
+                    !validIds.contains(id)
                 }
             if !orphaned.isEmpty {
                 UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: orphaned)

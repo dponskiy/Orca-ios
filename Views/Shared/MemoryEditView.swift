@@ -36,11 +36,19 @@ struct MemoryEditView: View {
     @State private var showLocationSearch = false
     @State private var showMapOptions = false
     @State private var addressCopied = false
+    @State private var estimatedMinutes: Int? = nil
 
     @State private var pingEntries: [PingEntry] = []
     @State private var isFetchingRecipe = false
     @State private var recipeErrorMessage: String? = nil
     @State private var showRecipeSuccess = false
+
+    // Expand states for inline pickers
+    @State private var showDatePicker = false
+    @State private var showTimePicker = false
+    @State private var showEndDatePicker = false
+    @State private var showDurationPicker = false
+    @State private var expandedPingId: UUID? = nil
 
     private let sonarEngine = SonarEngine()
 
@@ -72,13 +80,9 @@ struct MemoryEditView: View {
         }
     }
 
-    var memoryPings: [Ping] {
-        pings.filter { $0.memoryId == memory.id }
-    }
-
+    var memoryPings: [Ping] { pings.filter { $0.memoryId == memory.id } }
     var memorySubTasks: [SubTask] {
-        subTasks.filter { $0.memoryId == memory.id }
-            .sorted { $0.sortOrder < $1.sortOrder }
+        subTasks.filter { $0.memoryId == memory.id }.sorted { $0.sortOrder < $1.sortOrder }
     }
 
     var isCookingEcho: Bool {
@@ -87,94 +91,538 @@ struct MemoryEditView: View {
         echos.first { $0.id == selectedEchoId }?.emoji == "🍳" ||
         echos.first { $0.id == selectedEchoId }?.emoji == "🍽️"
     }
-
-    var isDiningOrEvents: Bool {
-        let name = echos.first { $0.id == selectedEchoId }?.name ?? ""
-        return name == "Dining" || name == "Events"
+    var isTravelEcho: Bool {
+        echos.first { $0.id == selectedEchoId }?.name == "Travel"
     }
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    textSection
+            List {
+                // MARK: Memory text
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextEditor(text: $editedText)
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.deepNavy)
+                            .scrollContentBackground(.hidden)
+                            .frame(minHeight: 80, maxHeight: 160)
 
-                    if showRerunSonar {
-                        Button { rerunSonar() } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "waveform.badge.magnifyingglass")
-                                    .font(.system(size: 14))
-                                Text("Re-run Sonar")
-                                    .font(.custom("DMSans-Medium", size: 14))
+                        if audioEditService.isRecording && !audioEditService.transcription.isEmpty {
+                            Text(audioEditService.transcription)
+                                .font(.custom("DMSans-Regular", size: 13))
+                                .foregroundColor(.oceanTeal)
+                        }
+
+                        HStack(spacing: 12) {
+                            Button {
+                                if audioEditService.isRecording {
+                                    audioEditService.stopRecording()
+                                    if !audioEditService.transcription.isEmpty {
+                                        editedText = audioEditService.transcription
+                                    }
+                                } else {
+                                    audioEditService.startRecording()
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    if audioEditService.isRecording {
+                                        Circle().fill(Color.coral).frame(width: 7, height: 7)
+                                        Text("Stop").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.coral)
+                                    } else {
+                                        Image(systemName: "mic.fill").font(.system(size: 12)).foregroundColor(.oceanTeal)
+                                        Text("Re-record").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal)
+                                    }
+                                }
                             }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.oceanTeal)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .buttonStyle(.plain)
+
+                            if showRerunSonar {
+                                Spacer()
+                                Button { rerunSonar() } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "waveform.badge.magnifyingglass").font(.system(size: 12))
+                                        Text("Re-run Sonar").font(.custom("DMSans-Medium", size: 13))
+                                    }
+                                    .foregroundColor(.oceanTeal)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("Memory")
+                        .font(.custom("DMSans-Medium", size: 11))
+                        .foregroundColor(.gray)
+                        .textCase(nil)
+                }
 
-                    echoSection
-
-                    if memory.hasChecklist || !memorySubTasks.isEmpty {
-                        checklistSection
-                    }
-
-                    urlSection
-                    locationSection
-
-                    Toggle(isOn: Binding(
-                        get: { memory.isPinned },
-                        set: { memory.isPinned = $0 }
-                    )) {
+                // MARK: Echo
+                Section {
+                    ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
-                            Image(systemName: "pin.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(.coral)
-                            Text("Pin to Dashboard")
-                                .font(.custom("DMSans-Regular", size: 15))
-                                .foregroundColor(.deepNavy)
+                            ForEach(echos.sorted { e1, e2 in
+                                if e1.id == selectedEchoId { return true }
+                                if e2.id == selectedEchoId { return false }
+                                return e1.sortOrder < e2.sortOrder
+                            }) { echo in
+                                Button { selectedEchoId = echo.id } label: {
+                                    HStack(spacing: 4) {
+                                        Text(echo.emoji).font(.system(size: 13))
+                                        Text(echo.name)
+                                            .font(.custom("DMSans-Medium", size: 12))
+                                            .foregroundColor(selectedEchoId == echo.id ? .white : .deepNavy)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(selectedEchoId == echo.id ? Color.oceanTeal : Color.mist)
+                                    .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
+                        .padding(.vertical, 4)
                     }
-                    .tint(.coral)
+                } header: {
+                    Text("Echo")
+                        .font(.custom("DMSans-Medium", size: 11))
+                        .foregroundColor(.gray)
+                        .textCase(nil)
+                }
 
+                // MARK: Details
+                Section {
+                    // Task toggle
                     Toggle(isOn: Binding(
                         get: { memory.isActionable },
                         set: { memory.isActionable = $0 }
                     )) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "checkmark.circle")
-                                .font(.system(size: 14))
-                                .foregroundColor(.oceanTeal)
-                            Text("Mark as Task")
-                                .font(.custom("DMSans-Regular", size: 15))
-                                .foregroundColor(.deepNavy)
-                        }
+                        Text("Task")
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.deepNavy)
                     }
                     .tint(.oceanTeal)
 
-                    dateSection
+                    // Pin toggle
+                    Toggle(isOn: Binding(
+                        get: { memory.isPinned },
+                        set: { memory.isPinned = $0 }
+                    )) {
+                        Text("Pin to dashboard")
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.deepNavy)
+                    }
+                    .tint(.coral)
 
-                    if hasDate {
-                        pingSection
+                    // Date row
+                    Toggle(isOn: $hasDate) {
+                        Text("Date")
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.deepNavy)
+                    }
+                    .tint(.oceanTeal)
+                    .onChange(of: hasDate) { _, newValue in
+                        if !newValue {
+                            pingEntries.removeAll()
+                            hasEndDate = false
+                            showDatePicker = false
+                            showTimePicker = false
+                        }
                     }
 
+                    if hasDate {
+                        // Date value row — taps to expand
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showDatePicker.toggle()
+                                showTimePicker = false
+                            }
+                        } label: {
+                            HStack {
+                                Text("Start date")
+                                    .font(.custom("DMSans-Regular", size: 15))
+                                    .foregroundColor(.deepNavy)
+                                Spacer()
+                                Text(selectedDate.map {
+                                    $0.formatted(.dateTime.month(.abbreviated).day().year())
+                                } ?? "None")
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.oceanTeal)
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        if showDatePicker {
+                            DatePicker(
+                                "",
+                                selection: Binding(
+                                    get: { selectedDate ?? Date() },
+                                    set: { selectedDate = $0 }
+                                ),
+                                displayedComponents: [.date]
+                            )
+                            .datePickerStyle(.graphical)
+                            .tint(.oceanTeal)
+                        }
+
+                        // Time row
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showTimePicker.toggle()
+                                showDatePicker = false
+                            }
+                        } label: {
+                            HStack {
+                                Text("Time")
+                                    .font(.custom("DMSans-Regular", size: 15))
+                                    .foregroundColor(.deepNavy)
+                                Spacer()
+                                Text(selectedDate.map {
+                                    $0.formatted(.dateTime.hour().minute())
+                                } ?? "None")
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.oceanTeal)
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        if showTimePicker {
+                            DatePicker(
+                                "",
+                                selection: Binding(
+                                    get: { selectedDate ?? Date() },
+                                    set: { selectedDate = $0 }
+                                ),
+                                displayedComponents: [.hourAndMinute]
+                            )
+                            .datePickerStyle(.wheel)
+                            .tint(.oceanTeal)
+                            .frame(maxWidth: .infinity)
+                        }
+
+                        // End date toggle
+                        Toggle(isOn: $hasEndDate) {
+                            Text("End date")
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.deepNavy)
+                        }
+                        .tint(.oceanTeal)
+                        .onChange(of: hasEndDate) { _, newValue in
+                            if newValue && selectedEndDate <= (selectedDate ?? Date()) {
+                                selectedEndDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate ?? Date()) ?? Date()
+                            }
+                        }
+
+                        if hasEndDate {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showEndDatePicker.toggle()
+                                }
+                            } label: {
+                                HStack {
+                                    Text("End date")
+                                        .font(.custom("DMSans-Regular", size: 15))
+                                        .foregroundColor(.deepNavy)
+                                    Spacer()
+                                    Text(selectedEndDate.formatted(.dateTime.month(.abbreviated).day().year()))
+                                        .font(.custom("DMSans-Regular", size: 15))
+                                        .foregroundColor(.oceanTeal)
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            if showEndDatePicker {
+                                DatePicker(
+                                    "",
+                                    selection: $selectedEndDate,
+                                    in: (selectedDate ?? Date())...,
+                                    displayedComponents: [.date]
+                                )
+                                .datePickerStyle(.graphical)
+                                .tint(.oceanTeal)
+                            }
+                        }
+                    }
+
+                    // Duration row
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showDurationPicker.toggle()
+                        }
+                    } label: {
+                        HStack {
+                            Text("Duration")
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.deepNavy)
+                            Spacer()
+                            if let mins = estimatedMinutes, mins > 0 {
+                                Text(DurationParser.shared.format(mins))
+                                    .font(.custom("DMMono-Regular", size: 15))
+                                    .foregroundColor(.oceanTeal)
+                            } else {
+                                Text("None")
+                                    .font(.custom("DMSans-Regular", size: 15))
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if showDurationPicker {
+                        VStack(spacing: 0) {
+                            HStack(spacing: 0) {
+                                VStack(spacing: 2) {
+                                    Text("Hours")
+                                        .font(.custom("DMSans-Regular", size: 12))
+                                        .foregroundColor(.gray)
+                                    Picker("Hours", selection: Binding(
+                                        get: { (estimatedMinutes ?? 0) / 60 },
+                                        set: { estimatedMinutes = ($0 * 60) + ((estimatedMinutes ?? 0) % 60) }
+                                    )) {
+                                        ForEach(0..<25, id: \.self) { h in Text("\(h)").tag(h) }
+                                    }
+                                    .pickerStyle(.wheel)
+                                    .frame(height: 100)
+                                }
+                                Text("h")
+                                    .font(.custom("DMSans-Medium", size: 16))
+                                    .foregroundColor(.deepNavy)
+                                    .padding(.top, 18)
+
+                                VStack(spacing: 2) {
+                                    Text("Minutes")
+                                        .font(.custom("DMSans-Regular", size: 12))
+                                        .foregroundColor(.gray)
+                                    Picker("Minutes", selection: Binding(
+                                        get: { ((estimatedMinutes ?? 0) % 60 / 5) * 5 },
+                                        set: { estimatedMinutes = (((estimatedMinutes ?? 0) / 60) * 60) + $0 }
+                                    )) {
+                                        ForEach([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55], id: \.self) { m in
+                                            Text("\(m)").tag(m)
+                                        }
+                                    }
+                                    .pickerStyle(.wheel)
+                                    .frame(height: 100)
+                                }
+                                Text("m")
+                                    .font(.custom("DMSans-Medium", size: 16))
+                                    .foregroundColor(.deepNavy)
+                                    .padding(.top, 18)
+                            }
+
+                            if let mins = estimatedMinutes, mins > 0 {
+                                Button {
+                                    estimatedMinutes = nil
+                                } label: {
+                                    Text("Clear duration")
+                                        .font(.custom("DMSans-Regular", size: 13))
+                                        .foregroundColor(.gray)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.bottom, 4)
+                            }
+                        }
+                    }
+
+                } header: {
+                    Text("Details")
+                        .font(.custom("DMSans-Medium", size: 11))
+                        .foregroundColor(.gray)
+                        .textCase(nil)
+                }
+
+                // MARK: Reminders
+                if hasDate {
+                    Section {
+                        ForEach($pingEntries) { $entry in
+                            pingRow(entry: $entry)
+                        }
+
+                        Button {
+                            pingEntries.append(PingEntry())
+                        } label: {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.oceanTeal)
+                                Text("Add reminder")
+                                    .font(.custom("DMSans-Regular", size: 15))
+                                    .foregroundColor(.oceanTeal)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } header: {
+                        Text("Reminders")
+                            .font(.custom("DMSans-Medium", size: 11))
+                            .foregroundColor(.gray)
+                            .textCase(nil)
+                    }
+                }
+
+                // MARK: Link
+                Section {
+                    HStack(spacing: 8) {
+                        Image(systemName: "link")
+                            .font(.system(size: 13))
+                            .foregroundColor(.gray)
+                        TextField("Add a URL...", text: $editedURL)
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.deepNavy)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                        if !editedURL.isEmpty || memory.url != nil {
+                            Button {
+                                editedURL = ""
+                                memory.url = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.gray.opacity(0.4))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if !editedURL.isEmpty || memory.url != nil {
+                        let activeURL = editedURL.isEmpty ? (memory.url ?? "") : editedURL
+                        HStack(spacing: 12) {
+                            if let url = URL(string: activeURL), UIApplication.shared.canOpenURL(url) {
+                                Button {
+                                    UIApplication.shared.open(url)
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.up.right.square").font(.system(size: 12))
+                                        Text("Open").font(.custom("DMSans-Medium", size: 13))
+                                    }
+                                    .foregroundColor(.oceanTeal)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            Button { fetchRecipe(url: activeURL) } label: {
+                                HStack(spacing: 4) {
+                                    if isFetchingRecipe {
+                                        ProgressView().scaleEffect(0.7)
+                                    } else {
+                                        Image(systemName: showRecipeSuccess ? "checkmark" : "fork.knife")
+                                            .font(.system(size: 12))
+                                    }
+                                    Text(isFetchingRecipe ? "Fetching..." : showRecipeSuccess ? "Imported!" : "Fetch Recipe")
+                                        .font(.custom("DMSans-Medium", size: 13))
+                                }
+                                .foregroundColor(.oceanTeal)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isFetchingRecipe)
+                        }
+
+                        if let error = recipeErrorMessage {
+                            Text(error)
+                                .font(.custom("DMSans-Regular", size: 12))
+                                .foregroundColor(.coral)
+                        }
+                    }
+                } header: {
+                    Text("Link")
+                        .font(.custom("DMSans-Medium", size: 11))
+                        .foregroundColor(.gray)
+                        .textCase(nil)
+                }
+
+                // MARK: Location
+                if !isTravelEcho {
+                    Section {
+                        locationRow
+                    } header: {
+                        Text("Location")
+                            .font(.custom("DMSans-Medium", size: 11))
+                            .foregroundColor(.gray)
+                            .textCase(nil)
+                    }
+                }
+
+                // MARK: Checklist
+                if memory.hasChecklist || !memorySubTasks.isEmpty {
+                    Section {
+                        ForEach(memorySubTasks) { subTask in
+                            HStack(spacing: 10) {
+                                Button {
+                                    withAnimation(.spring(duration: 0.2)) { subTask.isCompleted.toggle() }
+                                } label: {
+                                    if subTask.isCompleted {
+                                        ZStack {
+                                            Circle().fill(Color.oceanTeal).frame(width: 20, height: 20)
+                                            Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundColor(.white)
+                                        }
+                                    } else {
+                                        Circle().stroke(Color.oceanTeal, lineWidth: 1.5).frame(width: 20, height: 20)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+
+                                Text(subTask.text)
+                                    .font(.custom("DMSans-Regular", size: 15))
+                                    .foregroundColor(subTask.isCompleted ? .gray : .deepNavy)
+                                    .strikethrough(subTask.isCompleted)
+
+                                Spacer()
+
+                                Button { modelContext.delete(subTask) } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.gray.opacity(0.4))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        HStack(spacing: 10) {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: 16))
+                                .foregroundColor(.oceanTeal)
+                            TextField("Add item...", text: $newSubTaskText)
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.deepNavy)
+                                .onSubmit { addSubTask() }
+                        }
+                    } header: {
+                        let completed = memorySubTasks.filter { $0.isCompleted }.count
+                        let total = memorySubTasks.count
+                        HStack {
+                            Text("Checklist")
+                                .font(.custom("DMSans-Medium", size: 11))
+                                .foregroundColor(.gray)
+                                .textCase(nil)
+                            if total > 0 {
+                                Spacer()
+                                Text("\(completed)/\(total)")
+                                    .font(.custom("DMMono-Regular", size: 11))
+                                    .foregroundColor(.gray)
+                                    .textCase(nil)
+                            }
+                        }
+                    }
+                }
+
+                // MARK: Actions
+                Section {
                     if !memory.hasChecklist && memorySubTasks.isEmpty {
-                        Button { convertToChecklist() } label: {
-                            HStack(spacing: 6) {
+                        Button {
+                            convertToChecklist()
+                        } label: {
+                            HStack(spacing: 8) {
                                 Image(systemName: "list.bullet")
                                     .font(.system(size: 14))
                                     .foregroundColor(.oceanTeal)
-                                Text("Convert to Checklist")
-                                    .font(.custom("DMSans-Medium", size: 14))
+                                Text("Convert to checklist")
+                                    .font(.custom("DMSans-Regular", size: 15))
                                     .foregroundColor(.oceanTeal)
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.oceanTeal.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
+                        .buttonStyle(.plain)
                     }
 
                     Button(role: .destructive) {
@@ -188,21 +636,18 @@ struct MemoryEditView: View {
                         Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
                         dismiss()
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             Image(systemName: "trash").font(.system(size: 14))
-                            Text("Delete Memory").font(.custom("DMSans-Medium", size: 14))
+                            Text("Delete memory").font(.custom("DMSans-Regular", size: 15))
                         }
                         .foregroundColor(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.red.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                 }
-                .padding(20)
             }
-            .background(Color.white)
-            .navigationTitle("Edit Memory")
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.visible)
+            .background(Color.pearl)
+            .navigationTitle("Edit memory")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -237,238 +682,151 @@ struct MemoryEditView: View {
         }
     }
 
-    // MARK: - Text Section
-    private var textSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Memory")
-                    .font(.custom("DMSans-Medium", size: 14))
-                    .foregroundColor(.gray)
-                Spacer()
-                Button {
-                    if audioEditService.isRecording {
-                        audioEditService.stopRecording()
-                        if !audioEditService.transcription.isEmpty {
-                            editedText = audioEditService.transcription
-                        }
-                    } else {
-                        audioEditService.startRecording()
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        if audioEditService.isRecording {
-                            Circle().fill(Color.coral).frame(width: 8, height: 8)
-                            Text("Stop").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.coral)
-                        } else {
-                            Image(systemName: "mic.fill").font(.system(size: 13)).foregroundColor(.oceanTeal)
-                            Text("Re-record").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal)
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(audioEditService.isRecording ? Color.coral.opacity(0.1) : Color.oceanTeal.opacity(0.1))
-                    .clipShape(Capsule())
+    // MARK: - Ping Row
+
+    @ViewBuilder
+    private func pingRow(entry: Binding<PingEntry>) -> some View {
+        let isExpanded = expandedPingId == entry.wrappedValue.id
+
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    expandedPingId = isExpanded ? nil : entry.wrappedValue.id
                 }
-            }
-
-            if audioEditService.isRecording && !audioEditService.transcription.isEmpty {
-                Text(audioEditService.transcription)
-                    .font(.custom("DMSans-Regular", size: 14))
-                    .foregroundColor(.oceanTeal.opacity(0.8))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.oceanTeal.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-
-            TextEditor(text: $editedText)
-                .font(.custom("DMSans-Regular", size: 16))
-                .foregroundColor(.deepNavy)
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 100, maxHeight: 200)
-                .padding(12)
-                .background(Color.pearl)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
-        }
-    }
-
-    // MARK: - Echo Section
-    private var echoSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Echo").font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(echos.sorted { e1, e2 in
-                        if e1.id == selectedEchoId { return true }
-                        if e2.id == selectedEchoId { return false }
-                        return e1.sortOrder < e2.sortOrder
-                    }) { echo in
-                        Button { selectedEchoId = echo.id } label: {
-                            HStack(spacing: 4) {
-                                Text(echo.emoji).font(.system(size: 14))
-                                Text(echo.name)
-                                    .font(.custom("DMSans-Medium", size: 13))
-                                    .foregroundColor(selectedEchoId == echo.id ? .white : .deepNavy)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(selectedEchoId == echo.id ? Color.oceanTeal : Color.mist)
-                            .clipShape(Capsule())
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Checklist Section
-    private var checklistSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Checklist").font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
-                Spacer()
-                let completed = memorySubTasks.filter { $0.isCompleted }.count
-                let total = memorySubTasks.count
-                if total > 0 {
-                    Text("\(completed)/\(total)").font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
-                }
-            }
-
-            ForEach(memorySubTasks) { subTask in
-                HStack(spacing: 10) {
-                    Button {
-                        withAnimation(.spring(duration: 0.2)) { subTask.isCompleted.toggle() }
-                    } label: {
-                        if subTask.isCompleted {
-                            ZStack {
-                                Circle().fill(Color.oceanTeal).frame(width: 22, height: 22)
-                                Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
-                            }
-                        } else {
-                            Circle().stroke(Color.oceanTeal, lineWidth: 1.5).frame(width: 22, height: 22)
-                        }
-                    }
-                    Text(subTask.text)
-                        .font(.custom("DMSans-Regular", size: 15))
-                        .foregroundColor(subTask.isCompleted ? .gray : .deepNavy)
-                        .strikethrough(subTask.isCompleted)
-                    Spacer()
-                    Button { modelContext.delete(subTask) } label: {
-                        Image(systemName: "xmark").font(.system(size: 11, weight: .medium)).foregroundColor(.gray.opacity(0.5))
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-
-            HStack(spacing: 10) {
-                Circle().stroke(Color.gray.opacity(0.3), lineWidth: 1.5).frame(width: 22, height: 22)
-                TextField("Add item...", text: $newSubTaskText)
-                    .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(.deepNavy)
-                    .onSubmit { addSubTask() }
-                if !newSubTaskText.isEmpty {
-                    Button { addSubTask() } label: {
-                        Image(systemName: "plus.circle.fill").font(.system(size: 20)).foregroundColor(.oceanTeal)
-                    }
-                }
-            }
-            .padding(.vertical, 4)
-        }
-        .padding(16)
-        .background(Color.pearl)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    // MARK: - URL Section
-    private var urlSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Link").font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
-            HStack(spacing: 8) {
-                Image(systemName: "link").font(.system(size: 14)).foregroundColor(.gray)
-                TextField("Add a URL...", text: $editedURL)
-                    .font(.custom("DMSans-Regular", size: 15))
-                    .foregroundColor(.deepNavy)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-            }
-            .padding(12)
-            .background(Color.pearl)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
-
-            if !editedURL.isEmpty {
-                HStack(spacing: 10) {
-                    if let url = URL(string: editedURL), UIApplication.shared.canOpenURL(url) {
-                        Button { UIApplication.shared.open(url) } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.up.right.square").font(.system(size: 13))
-                                Text("Open Link").font(.custom("DMSans-Medium", size: 13))
-                            }
-                            .foregroundColor(.oceanTeal)
-                            .padding(.horizontal, 12).padding(.vertical, 8)
-                            .background(Color.oceanTeal.opacity(0.1))
-                            .clipShape(Capsule())
-                        }
-                    }
-                    Button { fetchRecipe() } label: {
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.wrappedValue.leadTime.rawValue)
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(.deepNavy)
                         HStack(spacing: 6) {
-                            if isFetchingRecipe {
-                                ProgressView().scaleEffect(0.75).tint(isCookingEcho ? .white : .oceanTeal)
-                            } else {
-                                Image(systemName: showRecipeSuccess ? "checkmark" : "fork.knife").font(.system(size: 13))
-                            }
-                            Text(isFetchingRecipe ? "Fetching..." : showRecipeSuccess ? "Imported!" : "Fetch Recipe")
-                                .font(.custom("DMSans-Medium", size: 13))
+                            Text(entry.wrappedValue.time, format: .dateTime.hour().minute())
+                                .font(.custom("DMMono-Regular", size: 12))
+                                .foregroundColor(.gray)
+                            Text("·")
+                                .foregroundColor(.gray)
+                                .font(.system(size: 11))
+                            Text(entry.wrappedValue.recurrence == .none ? "One time" : entry.wrappedValue.recurrence.rawValue.capitalized)
+                                .font(.custom("DMMono-Regular", size: 12))
+                                .foregroundColor(.gray)
                         }
-                        .foregroundColor(isCookingEcho ? .white : .oceanTeal)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(isCookingEcho ? Color.oceanTeal : Color.oceanTeal.opacity(0.1))
-                        .clipShape(Capsule())
                     }
-                    .disabled(isFetchingRecipe)
-                }
-                if let error = recipeErrorMessage {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.circle").font(.system(size: 12)).foregroundColor(.coral)
-                        Text(error).font(.custom("DMSans-Regular", size: 12)).foregroundColor(.coral)
+                    Spacer()
+                    Button {
+                        pingEntries.removeAll { $0.id == entry.wrappedValue.id }
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.red.opacity(0.7))
                     }
-                    .padding(.top, 2)
+                    .buttonStyle(.plain)
                 }
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    Divider().padding(.top, 8)
+
+                    // Lead time
+                    Text("When")
+                        .font(.custom("DMSans-Medium", size: 12))
+                        .foregroundColor(.gray)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(PingLeadTime.allCases, id: \.self) { lead in
+                                Button { entry.wrappedValue.leadTime = lead } label: {
+                                    Text(lead.rawValue)
+                                        .font(.custom("DMSans-Medium", size: 12))
+                                        .foregroundColor(entry.wrappedValue.leadTime == lead ? .white : .deepNavy)
+                                        .padding(.horizontal, 10).padding(.vertical, 6)
+                                        .background(entry.wrappedValue.leadTime == lead ? Color.oceanTeal : Color.mist)
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    // Time
+                    DatePicker(
+                        "Time",
+                        selection: entry.time,
+                        displayedComponents: .hourAndMinute
+                    )
+                    .font(.custom("DMSans-Regular", size: 14))
+                    .tint(.oceanTeal)
+
+                    // Recurrence
+                    Text("Repeat")
+                        .font(.custom("DMSans-Medium", size: 12))
+                        .foregroundColor(.gray)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach([
+                                (Ping.Recurrence.none, "One time"),
+                                (Ping.Recurrence.daily, "Daily"),
+                                (Ping.Recurrence.weekly, "Weekly"),
+                                (Ping.Recurrence.monthly, "Monthly"),
+                                (Ping.Recurrence.yearly, "Yearly"),
+                            ], id: \.0) { recurrence, label in
+                                Button { entry.wrappedValue.recurrence = recurrence } label: {
+                                    Text(label)
+                                        .font(.custom("DMSans-Medium", size: 12))
+                                        .foregroundColor(entry.wrappedValue.recurrence == recurrence ? .white : .deepNavy)
+                                        .padding(.horizontal, 10).padding(.vertical, 6)
+                                        .background(entry.wrappedValue.recurrence == recurrence ? Color.oceanTeal : Color.mist)
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    // Fire date preview
+                    if let date = selectedDate {
+                        let fireDate = Calendar.current.date(byAdding: .day, value: -entry.wrappedValue.leadTime.days, to: date) ?? date
+                        HStack(spacing: 5) {
+                            Image(systemName: "bell.fill").font(.system(size: 10)).foregroundColor(.oceanTeal)
+                            Text("Fires \(fireDate.formatted(.dateTime.month(.abbreviated).day())) at \(entry.wrappedValue.time.formatted(.dateTime.hour().minute()))")
+                                .font(.custom("DMMono-Regular", size: 11))
+                                .foregroundColor(.gray)
+                        }
+                        .padding(7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.mist)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                    }
+                }
+                .padding(.top, 4)
+                .padding(.bottom, 8)
             }
         }
     }
 
-    // MARK: - Location Section
-    private var locationSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Location").font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
+    // MARK: - Location Row
 
-            if let name = locationName,
-               let lat = locationLat,
-               let lng = locationLng {
-                let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lng)
-                let region = MKCoordinateRegion(
-                    center: coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
-                )
+    @ViewBuilder
+    private var locationRow: some View {
+        if let name = locationName, let lat = locationLat, let lng = locationLng {
+            let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lng)
+            let region = MKCoordinateRegion(
+                center: coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+            )
 
-                // Mini map — tap opens Maps
+            VStack(alignment: .leading, spacing: 8) {
                 ZStack {
                     Map(position: .constant(.region(region))) {
-                        Marker(name, coordinate: coordinate)
-                            .tint(Color.coral)
+                        Marker(name, coordinate: coordinate).tint(Color.coral)
                     }
-                    .frame(height: 140)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .frame(height: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .disabled(true)
-
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onTapGesture { showMapOptions = true }
+                    Color.clear.contentShape(Rectangle()).onTapGesture { showMapOptions = true }
                 }
-                .frame(height: 140)
                 .confirmationDialog("Open in Maps", isPresented: $showMapOptions, titleVisibility: .hidden) {
                     Button("Apple Maps") {
                         let item = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
@@ -485,308 +843,100 @@ struct MemoryEditView: View {
                     Button("Cancel", role: .cancel) {}
                 }
 
-                // Name + address + copy
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.coral)
-
+                HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(name)
-                            .font(.custom("DMSans-Medium", size: 15))
+                            .font(.custom("DMSans-Medium", size: 14))
                             .foregroundColor(.deepNavy)
                         if let address = locationAddress {
                             Text(address)
-                                .font(.custom("DMSans-Regular", size: 13))
+                                .font(.custom("DMSans-Regular", size: 12))
                                 .foregroundColor(.gray)
                         }
                     }
-
                     Spacer()
-
-                    // Copy button
                     Button {
-                        let textToCopy = [name, locationAddress]
-                            .compactMap { $0 }
-                            .joined(separator: ", ")
+                        let textToCopy = [name, locationAddress].compactMap { $0 }.joined(separator: ", ")
                         UIPasteboard.general.string = textToCopy
-                        withAnimation(.easeInOut(duration: 0.2)) { addressCopied = true }
+                        withAnimation { addressCopied = true }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            withAnimation(.easeInOut(duration: 0.2)) { addressCopied = false }
+                            withAnimation { addressCopied = false }
                         }
                     } label: {
                         Image(systemName: addressCopied ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 15))
+                            .font(.system(size: 14))
                             .foregroundColor(addressCopied ? .seafoam : .gray)
                     }
+                    .buttonStyle(.plain)
 
-                    // Clear button
                     Button {
-                        locationName = nil
-                        locationAddress = nil
-                        locationLat = nil
-                        locationLng = nil
+                        locationName = nil; locationAddress = nil
+                        locationLat = nil; locationLng = nil
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 18))
                             .foregroundColor(.gray.opacity(0.4))
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(12)
-                .background(Color.pearl)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
 
-                // Open in Maps + Change Location row
-                HStack(spacing: 12) {
-                    Button { showMapOptions = true } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "map").font(.system(size: 13))
-                            Text("Open in Maps").font(.custom("DMSans-Medium", size: 13))
-                        }
+                Button { showLocationSearch = true } label: {
+                    Text("Change location")
+                        .font(.custom("DMSans-Medium", size: 13))
                         .foregroundColor(.oceanTeal)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color.oceanTeal.opacity(0.1))
-                        .clipShape(Capsule())
-                    }
-
-                    Button { showLocationSearch = true } label: {
-                        Text("Change Location")
-                            .font(.custom("DMSans-Medium", size: 13))
-                            .foregroundColor(.gray)
-                    }
                 }
-
-            } else {
-                Button {
-                    showLocationSearch = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "mappin.circle")
-                            .font(.system(size: 16))
-                            .foregroundColor(.gray)
-                        Text("Add Location")
-                            .font(.custom("DMSans-Regular", size: 15))
-                            .foregroundColor(.gray)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12))
-                            .foregroundColor(.gray.opacity(0.4))
-                    }
-                    .padding(12)
-                    .background(Color.pearl)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
-                }
+                .buttonStyle(.plain)
             }
-        }
-    }
-    // MARK: - Date Section
-    private var dateSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Date").font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
-            Toggle(isOn: $hasDate) {
-                Text("Associated date").font(.custom("DMSans-Regular", size: 15)).foregroundColor(.deepNavy)
-            }
-            .tint(.oceanTeal)
-            .onChange(of: hasDate) { _, newValue in
-                if !newValue {
-                    pingEntries.removeAll()
-                    hasEndDate = false
-                }
-            }
-            if hasDate {
-                DatePicker(
-                    "Start Date",
-                    selection: Binding(get: { selectedDate ?? Date() }, set: { selectedDate = $0 }),
-                    displayedComponents: [.date, .hourAndMinute]
-                )
-                .datePickerStyle(.graphical)
-                .tint(.oceanTeal)
-
-                Toggle(isOn: $hasEndDate) {
-                    Text("Has end date (date range)")
+        } else {
+            Button { showLocationSearch = true } label: {
+                HStack {
+                    Text("Add location")
                         .font(.custom("DMSans-Regular", size: 15))
-                        .foregroundColor(.deepNavy)
-                }
-                .tint(.oceanTeal)
-                .onChange(of: hasEndDate) { _, newValue in
-                    if newValue && selectedEndDate <= (selectedDate ?? Date()) {
-                        selectedEndDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate ?? Date()) ?? Date()
-                    }
-                }
-
-                if hasEndDate {
-                    DatePicker(
-                        "End Date",
-                        selection: $selectedEndDate,
-                        in: (selectedDate ?? Date())...,
-                        displayedComponents: [.date]
-                    )
-                    .datePickerStyle(.compact)
-                    .tint(.oceanTeal)
-                }
-            }
-        }
-    }
-
-    // MARK: - Ping Section
-    private var pingSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Pings (Reminders)")
-                    .font(.custom("DMSans-Medium", size: 14))
-                    .foregroundColor(.gray)
-                Spacer()
-                Button {
-                    pingEntries.append(PingEntry())
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
-                        Text("Add Ping").font(.custom("DMSans-Medium", size: 13))
-                    }
-                    .foregroundColor(.oceanTeal)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.oceanTeal.opacity(0.1))
-                    .clipShape(Capsule())
-                }
-            }
-
-            if pingEntries.isEmpty {
-                Button {
-                    pingEntries.append(PingEntry())
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("🔔").font(.system(size: 16))
-                        Text("Add a reminder")
-                            .font(.custom("DMSans-Regular", size: 15))
-                            .foregroundColor(.deepNavy)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12))
-                            .foregroundColor(.gray.opacity(0.5))
-                    }
-                    .padding(14)
-                    .background(Color.pearl)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-            } else {
-                ForEach($pingEntries) { $entry in
-                    pingEntryRow(entry: $entry)
-                }
-            }
-        }
-        .padding(16)
-        .background(Color.pearl)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    @ViewBuilder
-    private func pingEntryRow(entry: Binding<PingEntry>) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("🔔 Reminder \(pingEntries.firstIndex(where: { $0.id == entry.id }).map { $0 + 1 } ?? 1)")
-                    .font(.custom("DMSans-Medium", size: 13))
-                    .foregroundColor(.deepNavy)
-                Spacer()
-                Button {
-                    pingEntries.removeAll { $0.id == entry.id }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
+                        .foregroundColor(.gray)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
                         .foregroundColor(.gray.opacity(0.4))
                 }
             }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(PingLeadTime.allCases, id: \.self) { lead in
-                        Button { entry.wrappedValue.leadTime = lead } label: {
-                            Text(lead.rawValue)
-                                .font(.custom("DMSans-Medium", size: 12))
-                                .foregroundColor(entry.wrappedValue.leadTime == lead ? .white : .deepNavy)
-                                .padding(.horizontal, 10).padding(.vertical, 7)
-                                .background(entry.wrappedValue.leadTime == lead ? Color.oceanTeal : Color.mist)
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-            }
-
-            DatePicker("Time", selection: entry.time, displayedComponents: .hourAndMinute)
-                .font(.custom("DMSans-Regular", size: 14))
-                .tint(.oceanTeal)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach([
-                        (Ping.Recurrence.none, "One time"),
-                        (Ping.Recurrence.daily, "Daily"),
-                        (Ping.Recurrence.weekly, "Weekly"),
-                        (Ping.Recurrence.monthly, "Monthly"),
-                        (Ping.Recurrence.yearly, "Yearly"),
-                    ], id: \.0) { recurrence, label in
-                        Button { entry.wrappedValue.recurrence = recurrence } label: {
-                            Text(label)
-                                .font(.custom("DMSans-Medium", size: 12))
-                                .foregroundColor(entry.wrappedValue.recurrence == recurrence ? .white : .deepNavy)
-                                .padding(.horizontal, 10).padding(.vertical, 7)
-                                .background(entry.wrappedValue.recurrence == recurrence ? Color.oceanTeal : Color.mist)
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-            }
-
-            if let date = selectedDate {
-                let fireDate = Calendar.current.date(byAdding: .day, value: -entry.wrappedValue.leadTime.days, to: date) ?? date
-                HStack(spacing: 6) {
-                    Image(systemName: "bell.fill").font(.system(size: 11)).foregroundColor(.oceanTeal)
-                    Text("Will fire: \(fireDate, format: .dateTime.month(.abbreviated).day()) at \(entry.wrappedValue.time, format: .dateTime.hour().minute())")
-                        .font(.custom("DMMono-Regular", size: 12))
-                        .foregroundColor(.deepNavy)
-                }
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.mist)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
+            .buttonStyle(.plain)
         }
-        .padding(12)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.oceanTeal.opacity(0.15), lineWidth: 1))
     }
 
     // MARK: - Re-run Sonar
+
     private func rerunSonar() {
         let result = sonarEngine.process(text: editedText, echos: echos)
         if let echoId = result.echoId { selectedEchoId = echoId }
         if let detected = result.detectedDate { selectedDate = detected; hasDate = true }
-        if let end = result.endDate {
-            selectedEndDate = end
-            hasEndDate = true
-        }
+        if let end = result.endDate { selectedEndDate = end; hasEndDate = true }
+        estimatedMinutes = result.estimatedMinutes
         if let suggestion = result.pingSuggestions.first {
             var entry = PingEntry()
             entry.recurrence = suggestion.recurrence
             if let fireTime = suggestion.fireTime { entry.time = fireTime }
-            if pingEntries.isEmpty { pingEntries.append(entry) }
+            if pingEntries.isEmpty {
+                pingEntries.append(entry)
+            } else {
+                pingEntries[0].recurrence = suggestion.recurrence
+                if let fireTime = suggestion.fireTime { pingEntries[0].time = fireTime }
+            }
         }
         originalText = editedText
         showRerunSonar = false
     }
 
     // MARK: - Fetch Recipe
-    private func fetchRecipe() {
-        guard !editedURL.isEmpty else { return }
+
+    private func fetchRecipe(url: String? = nil) {
+        let urlToFetch = url ?? editedURL
+        guard !urlToFetch.isEmpty else { return }
         recipeErrorMessage = nil
         showRecipeSuccess = false
         isFetchingRecipe = true
         Task {
             do {
-                let recipe = try await RecipeExtractor.shared.extract(from: editedURL)
+                let recipe = try await RecipeExtractor.shared.extract(from: urlToFetch)
                 await MainActor.run {
                     populateFromRecipe(recipe)
                     isFetchingRecipe = false
@@ -835,6 +985,7 @@ struct MemoryEditView: View {
     }
 
     // MARK: - Helpers
+
     private func addSubTask() {
         guard !newSubTaskText.isEmpty else { return }
         let nextOrder = (memorySubTasks.last?.sortOrder ?? -1) + 1
@@ -862,6 +1013,7 @@ struct MemoryEditView: View {
     }
 
     // MARK: - Load / Save
+
     private func loadState() {
         editedText = memory.text
         originalText = memory.text
@@ -873,6 +1025,7 @@ struct MemoryEditView: View {
             hasEndDate = true
         }
         editedURL = memory.url ?? ""
+        estimatedMinutes = memory.estimatedMinutes
         locationName = memory.locationName
         locationAddress = memory.locationAddress
         locationLat = memory.latitude
@@ -898,7 +1051,9 @@ struct MemoryEditView: View {
         memory.endDate = (hasDate && hasEndDate) ? selectedEndDate : nil
         memory.wasEdited = true
         memory.updatedAt = Date()
-        memory.url = editedURL.isEmpty ? nil : editedURL
+        if !editedURL.isEmpty { memory.url = editedURL }
+        // URL is only cleared via the X button which sets memory.url = nil directly
+        memory.estimatedMinutes = (estimatedMinutes ?? 0) > 0 ? estimatedMinutes : nil
         memory.locationName = locationName
         memory.locationAddress = locationAddress
         memory.latitude = locationLat

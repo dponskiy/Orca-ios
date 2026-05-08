@@ -29,6 +29,7 @@ struct TodayView: View {
     @State private var showBanner = false
     @State private var bannerSonarResult: SonarResult?
     @State private var bannerMemory: Memory?
+    @State private var showWeatherDetail = false
     @FocusState private var quickAddFocused: Bool
 
     @StateObject private var weatherService = WeatherService.shared
@@ -77,6 +78,31 @@ struct TodayView: View {
         memory.updatedAt = Date()
     }
 
+    // MARK: - Load Awareness
+
+    private var totalEstimatedMinutes: Int {
+        (todayTasks + overdueTasks + completedTasks)
+            .compactMap { $0.estimatedMinutes }
+            .reduce(0, +)
+    }
+
+    private var remainingLoadLabel: String {
+        let remaining = max((8 * 60) - totalEstimatedMinutes, 0)
+        return DurationParser.shared.format(remaining)
+    }
+
+    private var loadFraction: Double {
+        min(Double(totalEstimatedMinutes) / (8.0 * 60.0), 1.0)
+    }
+
+    private var loadLabel: String {
+        DurationParser.shared.format(totalEstimatedMinutes)
+    }
+
+    private var hasAnyDuration: Bool {
+        (todayTasks + overdueTasks + completedTasks).contains { $0.estimatedMinutes != nil }
+    }
+
     // MARK: - Computed Data
 
     var todayTasks: [Memory] {
@@ -123,10 +149,7 @@ struct TodayView: View {
             guard let detectedDate = memory.detectedDate else { return false }
             let memoryPings = pings.filter { $0.memoryId == memory.id }
             let isRecurring = memoryPings.contains { $0.recurrence != .none }
-            if isRecurring {
-                if isCompletedOn(memory, date: selectedDate) { return false }
-                return false
-            }
+            if isRecurring { return false }
             if todayTasks.contains(where: { $0.id == memory.id }) { return false }
             if let endDate = memory.endDate,
                selectedDate >= calendar.startOfDay(for: detectedDate) &&
@@ -256,6 +279,14 @@ struct TodayView: View {
         }
     }
 
+    private func updateBannerMemoryDuration(_ minutes: Int) {
+        guard let memory = bannerMemory, minutes > 0 else { return }
+        memory.estimatedMinutes = minutes
+        if let userId = authService.userId {
+            Task { await SupabaseSyncService.shared.pushMemory(memory, userId: userId) }
+        }
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -316,8 +347,13 @@ struct TodayView: View {
                             transcription: quickAddText,
                             sonarResult: sonarResult,
                             echos: echos,
-                            onDone: { isTask in
-                                if let memory = bannerMemory { memory.isActionable = isTask }
+                            onDone: { isTask, duration in
+                                if let memory = bannerMemory {
+                                    memory.isActionable = isTask
+                                    if let duration = duration, duration > 0 {
+                                        updateBannerMemoryDuration(duration)
+                                    }
+                                }
                                 showBanner = false
                                 quickAddText = ""
                                 bannerMemory = nil
@@ -336,6 +372,10 @@ struct TodayView: View {
                             onEdit: {
                                 editingMemory = bannerMemory
                                 showBanner = false
+                            },
+                            onAddToWatchlist: { title, type, service in
+                                let item = WatchlistItem(title: title, itemType: type, streamingService: service)
+                                modelContext.insert(item)
                             }
                         )
                     }
@@ -360,6 +400,7 @@ struct TodayView: View {
             }
             .sheet(item: $editingMemory) { memory in MemoryEditView(memory: memory) }
             .sheet(item: $detailMemory) { memory in MemoryDetailView(memory: memory) }
+            .sheet(isPresented: $showWeatherDetail) { WeatherDetailView() }
             .sheet(item: $snoozeMemory) { memory in
                 SnoozeSheet(memory: memory) { snoozeMemory = nil }
             }
@@ -457,8 +498,13 @@ struct TodayView: View {
         memory.dateConfidence = result.dateConfidence
         memory.sonarConfidence = result.echoConfidence
         memory.isActionable = true
+        memory.estimatedMinutes = result.estimatedMinutes
         modelContext.insert(memory)
-        SpotlightService.shared.indexMemory(memory, echoName: result.echoName, echoEmoji: echos.first { $0.id == memory.echoId }?.emoji ?? "📋")
+        SpotlightService.shared.indexMemory(
+            memory,
+            echoName: result.echoName,
+            echoEmoji: echos.first { $0.id == memory.echoId }?.emoji ?? "📋"
+        )
 
         if let userId = authService.userId {
             Task {
@@ -566,12 +612,15 @@ struct TodayView: View {
 
             HStack(spacing: 12) {
                 if calendar.isDateInToday(selectedDate) && !weatherService.temperature.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: weatherService.symbolName)
-                            .font(.system(size: 13)).foregroundColor(.oceanTeal)
-                        Text(weatherService.temperature)
-                            .font(.custom("DMMono-Regular", size: 13)).foregroundColor(.deepNavy)
+                    Button { showWeatherDetail = true } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: weatherService.symbolName)
+                                .font(.system(size: 13)).foregroundColor(.oceanTeal)
+                            Text(weatherService.temperature)
+                                .font(.custom("DMMono-Regular", size: 13)).foregroundColor(.deepNavy)
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
                 Button {
                     selectedDate = calendar.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
@@ -629,43 +678,86 @@ struct TodayView: View {
         let total = todayTasks.count + completedTasks.count + overdueTasks.count
         let done = completedTasks.count
 
-        return HStack(spacing: 16) {
-            if total > 0 {
-                HStack(spacing: 6) {
-                    ZStack {
-                        Circle().stroke(Color.mist, lineWidth: 3).frame(width: 32, height: 32)
-                        Circle()
-                            .trim(from: 0, to: total > 0 ? CGFloat(done) / CGFloat(total) : 0)
-                            .stroke(Color.oceanTeal, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                            .frame(width: 32, height: 32)
-                            .rotationEffect(.degrees(-90))
+        return VStack(spacing: 8) {
+            HStack(spacing: 16) {
+                if total > 0 {
+                    HStack(spacing: 6) {
+                        ZStack {
+                            Circle().stroke(Color.mist, lineWidth: 3).frame(width: 32, height: 32)
+                            Circle()
+                                .trim(from: 0, to: total > 0 ? CGFloat(done) / CGFloat(total) : 0)
+                                .stroke(Color.oceanTeal, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                                .frame(width: 32, height: 32)
+                                .rotationEffect(.degrees(-90))
+                        }
+                        Text("\(done)/\(total) done")
+                            .font(.custom("DMSans-Medium", size: 14)).foregroundColor(.deepNavy)
                     }
-                    Text("\(done)/\(total) done")
-                        .font(.custom("DMSans-Medium", size: 14)).foregroundColor(.deepNavy)
+                }
+                if !overdueTasks.isEmpty {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.coral).frame(width: 8, height: 8)
+                        Text("\(overdueTasks.count) overdue")
+                            .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.coral)
+                    }
+                }
+                if !todayPings.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bell.fill").font(.system(size: 11)).foregroundColor(.oceanTeal)
+                        Text("\(todayPings.count) \(todayPings.count == 1 ? "ping" : "pings")")
+                            .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal)
+                    }
+                }
+                if !todayEvents.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill").font(.system(size: 11)).foregroundColor(.seafoam)
+                        Text("\(todayEvents.count) \(todayEvents.count == 1 ? "event" : "events")")
+                            .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.seafoam)
+                    }
+                }
+
+                if hasAnyDuration && totalEstimatedMinutes > 0 {
+                    Spacer()
+                    HStack(spacing: 3) {
+                        Image(systemName: "clock").font(.system(size: 10)).foregroundColor(.gray)
+                        Text("~\(loadLabel)")
+                            .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.mist)
+                    .clipShape(Capsule())
+                }
+
+                if !hasAnyDuration || totalEstimatedMinutes == 0 {
+                    Spacer()
                 }
             }
-            if !overdueTasks.isEmpty {
-                HStack(spacing: 4) {
-                    Circle().fill(Color.coral).frame(width: 8, height: 8)
-                    Text("\(overdueTasks.count) overdue")
-                        .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.coral)
+
+            if calendar.isDateInToday(selectedDate) && hasAnyDuration && totalEstimatedMinutes > 0 {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Daily load")
+                            .font(.custom("DMSans-Medium", size: 11))
+                            .foregroundColor(.gray)
+                        Spacer()
+                        Text("~\(remainingLoadLabel) available")
+                            .font(.custom("DMMono-Regular", size: 11))
+                            .foregroundColor(.gray)
+                    }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 100)
+                                .fill(Color.mist)
+                                .frame(height: 5)
+                            RoundedRectangle(cornerRadius: 100)
+                                .fill(loadFraction > 0.8 ? Color.coral : Color.oceanTeal)
+                                .frame(width: geo.size.width * loadFraction, height: 5)
+                        }
+                    }
+                    .frame(height: 5)
                 }
             }
-            if !todayPings.isEmpty {
-                HStack(spacing: 4) {
-                    Image(systemName: "bell.fill").font(.system(size: 11)).foregroundColor(.oceanTeal)
-                    Text("\(todayPings.count) \(todayPings.count == 1 ? "ping" : "pings")")
-                        .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal)
-                }
-            }
-            if !todayEvents.isEmpty {
-                HStack(spacing: 4) {
-                    Image(systemName: "star.fill").font(.system(size: 11)).foregroundColor(.seafoam)
-                    Text("\(todayEvents.count) \(todayEvents.count == 1 ? "event" : "events")")
-                        .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.seafoam)
-                }
-            }
-            Spacer()
         }
     }
 
@@ -724,16 +816,21 @@ struct TodayView: View {
 
             ForEach(todayPings) { ping in
                 if let memory = allMemories.first(where: { $0.id == ping.memoryId }) {
+                    let memoryText = memory.text
+                    let hasChecklist = memory.hasChecklist
+                    let fireTime = ping.fireTime
+                    let recurrence = ping.recurrence
+
                     Button { detailMemory = memory } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "bell.fill")
                                 .font(.system(size: 14)).foregroundColor(.oceanTeal).frame(width: 24)
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(memory.text)
+                                Text(memoryText)
                                     .font(.custom("DMSans-Regular", size: 15))
                                     .foregroundColor(.deepNavy)
-                                    .lineLimit(memory.hasChecklist ? 1 : 2)
-                                if memory.hasChecklist {
+                                    .lineLimit(hasChecklist ? 1 : 2)
+                                if hasChecklist {
                                     let subTasks = fetchSubTasks(for: memory)
                                     if !subTasks.isEmpty {
                                         let completed = subTasks.filter { $0.isCompleted }.count
@@ -745,10 +842,10 @@ struct TodayView: View {
                                     }
                                 }
                                 HStack(spacing: 8) {
-                                    Text(ping.fireTime, format: .dateTime.hour().minute())
+                                    Text(fireTime, format: .dateTime.hour().minute())
                                         .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
-                                    if ping.recurrence != .none {
-                                        Text(ping.recurrence.rawValue.capitalized)
+                                    if recurrence != .none {
+                                        Text(recurrence.rawValue.capitalized)
                                             .font(.custom("DMMono-Regular", size: 11)).foregroundColor(.oceanTeal)
                                     }
                                 }
@@ -792,26 +889,38 @@ struct TodayView: View {
                 .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 4, trailing: 20))
 
             ForEach(todayEvents) { memory in
+                let memoryText = memory.text
+                let memoryEchoId = memory.echoId
+                let detectedDate = memory.detectedDate
+                let estimatedMinutes = memory.estimatedMinutes
+
                 Button { detailMemory = memory } label: {
                     HStack(spacing: 12) {
-                        if let echo = echos.first(where: { $0.id == memory.echoId }) {
+                        if let echo = echos.first(where: { $0.id == memoryEchoId }) {
                             Text(echo.emoji).font(.system(size: 16)).frame(width: 24)
                         } else {
                             Image(systemName: "star.fill").font(.system(size: 14)).foregroundColor(.seafoam).frame(width: 24)
                         }
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(memory.text)
+                            Text(memoryText)
                                 .font(.custom("DMSans-Regular", size: 15)).foregroundColor(.deepNavy).lineLimit(2)
                             HStack(spacing: 8) {
-                                if let echo = echos.first(where: { $0.id == memory.echoId }) {
+                                if let echo = echos.first(where: { $0.id == memoryEchoId }) {
                                     Text(echo.name)
                                         .font(.custom("DMSans-Medium", size: 12)).foregroundColor(.deepNavy)
                                         .padding(.horizontal, 6).padding(.vertical, 2)
                                         .background(Color.mist).clipShape(Capsule())
                                 }
-                                if let date = memory.detectedDate {
+                                if let date = detectedDate {
                                     Text(date, format: .dateTime.hour().minute())
                                         .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                                }
+                                if let mins = estimatedMinutes {
+                                    Text(DurationParser.shared.format(mins))
+                                        .font(.custom("DMMono-Regular", size: 11))
+                                        .foregroundColor(.gray)
+                                        .padding(.horizontal, 5).padding(.vertical, 2)
+                                        .background(Color.mist).clipShape(Capsule())
                                 }
                             }
                         }
@@ -834,6 +943,7 @@ struct TodayView: View {
             }
         }
     }
+
     // MARK: - Completed Section
 
     private var completedSection: some View {
@@ -876,12 +986,15 @@ struct TodayView: View {
                 .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 4, trailing: 20))
 
             ForEach(droppedToday) { memory in
+                let memoryText = memory.text
+                let memoryEchoId = memory.echoId
+
                 Button { detailMemory = memory } label: {
                     HStack(spacing: 12) {
-                        if let echo = echos.first(where: { $0.id == memory.echoId }) {
+                        if let echo = echos.first(where: { $0.id == memoryEchoId }) {
                             Text(echo.emoji).font(.system(size: 16)).frame(width: 24)
                         }
-                        Text(memory.text)
+                        Text(memoryText)
                             .font(.custom("DMSans-Regular", size: 15)).foregroundColor(.deepNavy).lineLimit(2)
                         Spacer()
                     }
@@ -944,11 +1057,19 @@ struct TodayView: View {
     }
 
     private func taskRowHeader(memory: Memory, isOverdue: Bool, subTasks: [SubTask], isExpanded: Bool) -> some View {
-        HStack(spacing: 12) {
+        let memoryText = memory.text
+        let memoryEchoId = memory.echoId
+        let detectedDate = memory.detectedDate
+        let estimatedMinutes = memory.estimatedMinutes
+        let memoryId = memory.id
+        let memoryPings = pings.filter { $0.memoryId == memory.id }
+        let isRecurring = memoryPings.contains { $0.recurrence != .none }
+        let displayDate: Date? = isRecurring ? selectedDate : detectedDate
+        let hasPing = hasPingToday(memory)
+
+        return HStack(spacing: 12) {
             Button {
                 withAnimation(.spring(duration: 0.3)) {
-                    let memoryPings = pings.filter { $0.memoryId == memory.id }
-                    let isRecurring = memoryPings.contains { $0.recurrence != .none }
                     if isRecurring {
                         setCompleted(memory, date: selectedDate)
                     } else {
@@ -970,10 +1091,10 @@ struct TodayView: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(memory.text)
+                Text(memoryText)
                     .font(.custom("DMSans-Regular", size: 15)).foregroundColor(.deepNavy).lineLimit(2)
                 HStack(spacing: 6) {
-                    if let echo = echos.first(where: { $0.id == memory.echoId }) {
+                    if let echo = echos.first(where: { $0.id == memoryEchoId }) {
                         HStack(spacing: 3) {
                             Text(echo.emoji).font(.system(size: 11))
                             Text(echo.name)
@@ -982,15 +1103,20 @@ struct TodayView: View {
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(Color.mist).clipShape(Capsule())
                     }
-                    let memoryPings = pings.filter { $0.memoryId == memory.id }
-                    let isRecurring = memoryPings.contains { $0.recurrence != .none }
-                    let displayDate: Date? = isRecurring ? selectedDate : memory.detectedDate
                     if let date = displayDate {
                         Text(date, format: .dateTime.month(.abbreviated).day())
                             .font(.custom("DMMono-Regular", size: 12))
                             .foregroundColor(isOverdue ? .coral : .gray).fixedSize()
                     }
-                    if hasPingToday(memory) {
+                    if let mins = estimatedMinutes {
+                        Text(DurationParser.shared.format(mins))
+                            .font(.custom("DMMono-Regular", size: 11))
+                            .foregroundColor(.gray)
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(Color.mist).clipShape(Capsule())
+                            .fixedSize()
+                    }
+                    if hasPing {
                         HStack(spacing: 3) {
                             Image(systemName: "bell.fill").font(.system(size: 10)).foregroundColor(.oceanTeal)
                             Text("Ping").font(.custom("DMMono-Regular", size: 11)).foregroundColor(.oceanTeal).fixedSize()
@@ -1001,9 +1127,9 @@ struct TodayView: View {
                     Button {
                         withAnimation(.easeOut(duration: 0.2)) {
                             if isExpanded {
-                                expandedMemoryIds.remove(memory.id)
+                                expandedMemoryIds.remove(memoryId)
                             } else {
-                                expandedMemoryIds.insert(memory.id)
+                                expandedMemoryIds.insert(memoryId)
                             }
                         }
                     } label: {
@@ -1084,11 +1210,13 @@ struct TodayView: View {
     // MARK: - Completed Row
 
     private func completedRow(memory: Memory) -> some View {
-        HStack(spacing: 12) {
+        let memoryText = memory.text
+        let memoryPings = pings.filter { $0.memoryId == memory.id }
+        let isRecurring = memoryPings.contains { $0.recurrence != .none }
+
+        return HStack(spacing: 12) {
             Button {
                 withAnimation(.spring(duration: 0.3)) {
-                    let memoryPings = pings.filter { $0.memoryId == memory.id }
-                    let isRecurring = memoryPings.contains { $0.recurrence != .none }
                     if isRecurring {
                         setUncompleted(memory, date: selectedDate)
                     } else {
@@ -1097,7 +1225,7 @@ struct TodayView: View {
                         memory.updatedAt = Date()
                         for ping in memoryPings {
                             ping.isActive = true
-                            NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                            NotificationService.shared.schedulePing(ping: ping, memoryText: memoryText)
                         }
                     }
                 }
@@ -1108,7 +1236,8 @@ struct TodayView: View {
                 }
             }
             .buttonStyle(.plain)
-            Text(memory.text)
+
+            Text(memoryText)
                 .font(.custom("DMSans-Regular", size: 15)).foregroundColor(.gray).strikethrough().lineLimit(2)
             Spacer()
         }
@@ -1144,7 +1273,7 @@ struct TodayView: View {
         }
         return calendar.isDate(memory.createdAt, inSameDayAs: targetDate)
     }
-} // ← closes TodayView
+}
 
 // MARK: - Snooze Sheet
 

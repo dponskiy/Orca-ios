@@ -36,7 +36,7 @@ class Memory {
     var locationAddress: String?
     var latitude: Double?
     var longitude: Double?
-    
+    var estimatedMinutes: Int? // duration in minutes, nil = not detected
 
     enum CaptureType: String, Codable {
         case voice, screenshot, typed

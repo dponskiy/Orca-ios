@@ -158,6 +158,7 @@ struct OnboardingFlow: View {
             ("mic.fill", "Voice-first memory capture", "Say anything — Orca hears it, files it, and reminds you exactly when it matters."),
             ("sparkles", "Sonar sorts everything", "Sports, Finance, Workouts, Travel, Gifts, People — Orca routes every memory automatically."),
             ("person.2.fill", "People & Gift Mode", "Track birthdays, gift ideas, budgets, and countdowns for everyone who matters."),
+            ("popcorn.fill", "Media Mode", "Queue shows, movies, and books. Mark them done, rate them, and track what to watch next."),
         ]
 
         var body: some View {
@@ -227,13 +228,12 @@ struct OnboardingFlow: View {
         @State private var titleVisible = false
 
         let bubbles: [(String, String)] = [
-            ("🎂", "Cara's birthday December 8th"),
-            ("🏋️", "Bench press 185 pounds 4 sets of 8"),
+            ("🎂", "Cara's birthday December 4th"),
+            ("🍿", "Want to watch Severance on Apple TV+ — added to watch list"),
             ("✈️", "Screenshot flight confirmation → auto-saved"),
             ("🍽️", "Carbone — try the lamb chops, skip the pasta"),
-            ("📈", "AAPL drops below 180 — alert me"),
             ("🎁", "Get Miles AirPods for Christmas"),
-            ("🏈", "Ravens game Sunday 1pm — section 112"),
+            ("📋", "Grab coffee with Jake next Tuesday at 9am"),
             ("🍳", "Paste recipe URL → ingredients auto-imported"),
             ("🏨", "Screenshot hotel booking → check-in April 16"),
             ("💊", "Dog heartworm pill every 1st of the month"),
@@ -357,7 +357,6 @@ struct OnboardingFlow: View {
                     Spacer()
 
                     VStack(spacing: 12) {
-                        // URL row
                         HStack(spacing: 10) {
                             Image(systemName: "link").font(.system(size: 14)).foregroundColor(.white.opacity(0.5))
                             Text("https://nytcooking.com/recipes/...")
@@ -378,7 +377,6 @@ struct OnboardingFlow: View {
                         Image(systemName: "arrow.down").font(.system(size: 20, weight: .medium)).foregroundColor(.oceanTeal)
                             .opacity(showArrow ? 1 : 0).animation(.easeOut(duration: 0.3), value: showArrow)
 
-                        // Recipe card
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 10) {
                                 Text("🍽").font(.system(size: 24))
@@ -395,7 +393,6 @@ struct OnboardingFlow: View {
                                 HStack {
                                     Text("INGREDIENTS").font(.custom("DMSans-Medium", size: 11)).foregroundColor(.oceanTeal).tracking(1)
                                     Spacer()
-                                    // Grocery Mode badge
                                     if showGrocery {
                                         HStack(spacing: 4) {
                                             Image(systemName: "cart.fill").font(.system(size: 10))
@@ -495,6 +492,7 @@ struct OnboardingFlow: View {
         let onMemorySaved: (String) -> Void
 
         @Environment(\.modelContext) private var modelContext
+        @Environment(AuthService.self) private var authService
         @Query private var echos: [Echo]
 
         @State private var audioService = AudioService()
@@ -666,31 +664,42 @@ struct OnboardingFlow: View {
             sonarResult = sonarEngine.process(text: savedTranscription, echos: echos)
             onMemorySaved(savedTranscription)
 
-            let matchedEcho = echos.first { $0.name == sonarResult?.echoName }
-            let echoId = matchedEcho?.id ?? echos.first?.id ?? UUID()
-            let memory = Memory(text: savedTranscription, echoId: echoId)
-            memory.tags = sonarResult?.tags ?? []
-            memory.detectedDate = sonarResult?.detectedDate
-            memory.endDate = sonarResult?.endDate
-            memory.echoConfidence = sonarResult?.echoConfidence ?? 1.0
-            memory.dateConfidence = sonarResult?.dateConfidence
-            memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
-            memory.isActionable = sonarResult?.isActionable ?? false
-            modelContext.insert(memory)
+            // Small delay to ensure echos are fully loaded on first launch
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                let matchedEcho = echos.first { $0.name == sonarResult?.echoName }
+                let echoId = matchedEcho?.id ?? echos.first?.id ?? UUID()
+                let memory = Memory(text: savedTranscription, echoId: echoId)
+                memory.tags = sonarResult?.tags ?? []
+                memory.detectedDate = sonarResult?.detectedDate
+                memory.endDate = sonarResult?.endDate
+                memory.echoConfidence = sonarResult?.echoConfidence ?? 1.0
+                memory.dateConfidence = sonarResult?.dateConfidence
+                memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
+                memory.isActionable = sonarResult?.isActionable ?? false
+                modelContext.insert(memory)
 
-            if let detectedURL = sonarEngine.detectURL(text: savedTranscription) { memory.url = detectedURL }
-            if let result = sonarResult {
-                for suggestion in result.pingSuggestions {
-                    let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
-                    let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
-                    if let fireTime = suggestion.fireTime { ping.fireTime = fireTime }
-                    modelContext.insert(ping)
-                    NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                if let detectedURL = sonarEngine.detectURL(text: savedTranscription) {
+                    memory.url = detectedURL
                 }
-            }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                withAnimation(.spring(duration: 0.5, bounce: 0.3)) { showResult = true }
+                if let result = sonarResult {
+                    for suggestion in result.pingSuggestions {
+                        let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
+                        let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
+                        if let fireTime = suggestion.fireTime { ping.fireTime = fireTime }
+                        modelContext.insert(ping)
+                        NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                    }
+                }
+
+                // Push to Supabase so it shows on dashboard after onboarding
+                if let userId = authService.userId {
+                    Task { await SupabaseSyncService.shared.pushMemory(memory, userId: userId) }
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    withAnimation(.spring(duration: 0.5, bounce: 0.3)) { showResult = true }
+                }
             }
         }
     }
@@ -807,10 +816,12 @@ struct OnboardingFlow: View {
 
         let tips: [(String, String)] = [
             ("🎙️", "Tap the fin button for instant voice capture"),
+            ("🛒", "Shopping Mode — Grocery, Hardware, or Warehouse lists with aisle grouping"),
+            ("🍿", "Media Mode — queue shows, movies & books. Rate them when done"),
             ("📸", "Swipe up → Photo to scan flights, hotels & recipes"),
             ("👥", "People tab — track birthdays, gifts & budgets"),
             ("🏈", "Say your pro sports team to track scores & schedules"),
-            ("🏈", "Say your pro sports team to track scores & schedules"),
+            ("🍽️", "Paste your Recipes to track ingredients & cook times"),
             ("💪", "Log workouts by voice — sets, reps, cardio auto-parsed"),
             ("🔍", "Search or browse all memories by echo or person"),
             ("⚙️", "Set Orca as your Action Button in iOS Settings"),
@@ -841,6 +852,10 @@ struct OnboardingFlow: View {
                         Text("The more you Drop, the smarter it gets.")
                             .font(.custom("DMSans-Regular", size: 15)).foregroundColor(.white.opacity(0.4))
                             .multilineTextAlignment(.center).padding(.horizontal, 32)
+
+                        Text("Sign in to enable reminders and sync. Takes 3 seconds.")
+                            .font(.custom("DMSans-Regular", size: 13)).foregroundColor(.white.opacity(0.3))
+                            .multilineTextAlignment(.center).padding(.horizontal, 32)
                     }
                     .opacity(contentVisible ? 1 : 0)
                     .animation(.easeOut(duration: 0.4).delay(0.3), value: contentVisible)
@@ -868,7 +883,7 @@ struct OnboardingFlow: View {
                         AnalyticsService.shared.trackOnboardingCompleted(droppedFirstMemory: true)
                         onDone()
                     } label: {
-                        Text("Start using Orca")
+                        Text("One last step →")
                             .font(.custom("DMSans-Medium", size: 17)).foregroundColor(.white)
                             .frame(maxWidth: .infinity).padding(.vertical, 16)
                             .background(LinearGradient(colors: [.oceanTeal, .seafoam], startPoint: .leading, endPoint: .trailing))

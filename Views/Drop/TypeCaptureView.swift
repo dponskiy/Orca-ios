@@ -30,7 +30,6 @@ struct TypeCaptureView: View {
 
     private func handleRecipeFetch(_ recipe: RecipeResult) {
         guard let memory = savedMemory else { return }
-        
         var parts: [String] = ["🍽 \(recipe.title)"]
         var meta: [String] = []
         if let prep = recipe.prepTime { meta.append("Prep: \(prep)") }
@@ -44,7 +43,6 @@ struct TypeCaptureView: View {
             }
         }
         memory.text = parts.joined(separator: "\n")
-        
         if !recipe.ingredients.isEmpty {
             memory.hasChecklist = true
             for (index, ingredient) in recipe.ingredients.enumerated() {
@@ -58,6 +56,20 @@ struct TypeCaptureView: View {
         let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         if let last = try? modelContext.fetch(descriptor).first {
             last.echoId = echoId
+        }
+    }
+
+    private func updateLastMemoryTask(isTask: Bool) {
+        let recent = try? modelContext.fetch(
+            FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        )
+        if let last = recent?.first { last.isActionable = isTask }
+    }
+
+    private func updateLastMemoryDuration(_ minutes: Int) {
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        if let last = try? modelContext.fetch(descriptor).first {
+            last.estimatedMinutes = minutes
         }
     }
 
@@ -88,17 +100,16 @@ struct TypeCaptureView: View {
                         transcription: text,
                         sonarResult: sonarResult,
                         echos: echos,
-                        onDone: { isTask in
+                        onDone: { isTask, duration in
                             updateLastMemoryTask(isTask: isTask)
+                            if let duration = duration, duration > 0 {
+                                updateLastMemoryDuration(duration)
+                            }
                             isPresented = false
                         },
                         onUndo: { undoMemory() },
-                        onEchoChanged: { newEchoId in
-                            updateLastMemoryEcho(newEchoId)
-                        },
-                        onRecipeFetched: { recipe in
-                            handleRecipeFetch(recipe)
-                        },
+                        onEchoChanged: { newEchoId in updateLastMemoryEcho(newEchoId) },
+                        onRecipeFetched: { recipe in handleRecipeFetch(recipe) },
                         onEdit: {
                             let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
                             editMemory = try? modelContext.fetch(descriptor).first
@@ -107,10 +118,11 @@ struct TypeCaptureView: View {
                             updateLastMemoryLocation(name: name, address: address, lat: lat, lng: lng)
                         },
                         onGroceryHint: {
-                            NotificationCenter.default.post(
-                                name: .groceryModeHint,
-                                object: nil
-                            )
+                            NotificationCenter.default.post(name: .groceryModeHint, object: nil)
+                        },
+                        onAddToWatchlist: { title, type, service in
+                            let item = WatchlistItem(title: title, itemType: type, streamingService: service)
+                            modelContext.insert(item)
                         }
                     )
                 }
@@ -119,28 +131,20 @@ struct TypeCaptureView: View {
                     Color.deepNavy.ignoresSafeArea()
                     
                     VStack(spacing: 0) {
-                        // Header
                         HStack {
-                            Button("Cancel") {
-                                isPresented = false
-                            }
-                            .font(.custom("DMSans-Regular", size: 16))
-                            .foregroundColor(.white.opacity(0.6))
-                            
+                            Button("Cancel") { isPresented = false }
+                                .font(.custom("DMSans-Regular", size: 16))
+                                .foregroundColor(.white.opacity(0.6))
                             Spacer()
-                            
-                            Button("Save") {
-                                saveMemory()
-                            }
-                            .font(.custom("DMSans-Medium", size: 16))
-                            .foregroundColor(text.isEmpty ? .white.opacity(0.3) : .oceanTeal)
-                            .disabled(text.isEmpty)
+                            Button("Save") { saveMemory() }
+                                .font(.custom("DMSans-Medium", size: 16))
+                                .foregroundColor(text.isEmpty ? .white.opacity(0.3) : .oceanTeal)
+                                .disabled(text.isEmpty)
                         }
                         .padding(.horizontal, 20)
                         .padding(.top, 16)
                         .padding(.bottom, 12)
                         
-                        // Text input
                         ZStack(alignment: .topLeading) {
                             TextEditor(text: $text)
                                 .font(.custom("DMSans-Regular", size: 18))
@@ -148,7 +152,6 @@ struct TypeCaptureView: View {
                                 .scrollContentBackground(.hidden)
                                 .padding(.horizontal, 16)
                                 .focused($isFocused)
-                            
                             if text.isEmpty {
                                 Text("Type a memory...")
                                     .font(.custom("DMSans-Regular", size: 18))
@@ -159,7 +162,6 @@ struct TypeCaptureView: View {
                             }
                         }
                         
-                        // URL section
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 8) {
                                 Image(systemName: "link")
@@ -195,29 +197,21 @@ struct TypeCaptureView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                             
                             if !urlText.isEmpty {
-                                Button {
-                                    fetchRecipeInline()
-                                } label: {
+                                Button { fetchRecipeInline() } label: {
                                     HStack(spacing: 6) {
                                         if isFetchingRecipe {
                                             ProgressView().scaleEffect(0.7).tint(.white)
-                                            Text("Fetching...")
-                                                .font(.custom("DMSans-Medium", size: 13))
+                                            Text("Fetching...").font(.custom("DMSans-Medium", size: 13))
                                         } else if recipeFetched {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .font(.system(size: 13))
-                                            Text("Recipe fetched!")
-                                                .font(.custom("DMSans-Medium", size: 13))
+                                            Image(systemName: "checkmark.circle.fill").font(.system(size: 13))
+                                            Text("Recipe fetched!").font(.custom("DMSans-Medium", size: 13))
                                         } else {
-                                            Image(systemName: "fork.knife")
-                                                .font(.system(size: 13))
-                                            Text("Fetch Recipe")
-                                                .font(.custom("DMSans-Medium", size: 13))
+                                            Image(systemName: "fork.knife").font(.system(size: 13))
+                                            Text("Fetch Recipe").font(.custom("DMSans-Medium", size: 13))
                                         }
                                     }
                                     .foregroundColor(recipeFetched ? .green : .white)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
                                     .background(recipeFetched ? Color.green.opacity(0.2) : Color.oceanTeal.opacity(0.3))
                                     .clipShape(Capsule())
                                 }
@@ -234,9 +228,7 @@ struct TypeCaptureView: View {
                         .padding(.bottom, 20)
                     }
                 }
-                .onAppear {
-                    isFocused = true
-                }
+                .onAppear { isFocused = true }
             }
         }
         .sheet(item: $editMemory) { memory in
@@ -249,7 +241,6 @@ struct TypeCaptureView: View {
         recipeError = nil
         isFetchingRecipe = true
         isFocused = false
-        
         Task {
             do {
                 let recipe = try await RecipeExtractor.shared.extract(from: urlText)
@@ -281,10 +272,8 @@ struct TypeCaptureView: View {
     
     private func saveMemory() {
         guard !text.isEmpty else { return }
-
         sonarResult = sonarEngine.process(text: text, echos: echos)
 
-        // Fix #5: if Sonar routes to Workout and today's session exists, merge into it
         let isWorkout = sonarResult?.echoName.lowercased().contains("workout") == true
         if isWorkout,
            let existing = WorkoutSessionManager.shared.mergeIntoTodaySession(
@@ -306,9 +295,14 @@ struct TypeCaptureView: View {
         memory.dateConfidence = sonarResult?.dateConfidence
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
+        memory.estimatedMinutes = sonarResult?.estimatedMinutes
         memory.url = urlText.isEmpty ? nil : urlText
         modelContext.insert(memory)
-        SpotlightService.shared.indexMemory(memory, echoName: sonarResult?.echoName ?? "Notes", echoEmoji: echos.first { $0.id == memory.echoId }?.emoji ?? "📝")
+        SpotlightService.shared.indexMemory(
+            memory,
+            echoName: sonarResult?.echoName ?? "Notes",
+            echoEmoji: echos.first { $0.id == memory.echoId }?.emoji ?? "📝"
+        )
         savedMemory = memory
         NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
 
@@ -351,15 +345,6 @@ struct TypeCaptureView: View {
         withAnimation(.spring(duration: 0.4)) { showBanner = true }
     }
     
-    private func updateLastMemoryTask(isTask: Bool) {
-        let recent = try? modelContext.fetch(
-            FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
-        )
-        if let last = recent?.first {
-            last.isActionable = isTask
-        }
-    }
-    
     private func undoMemory() {
         let recent = try? modelContext.fetch(
             FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
@@ -367,9 +352,7 @@ struct TypeCaptureView: View {
         if let last = recent?.first {
             let id = last.id
             modelContext.delete(last)
-            Task {
-                await SupabaseSyncService.shared.deleteMemory(id: id)
-            }
+            Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
         }
         isPresented = false
     }

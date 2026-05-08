@@ -115,15 +115,17 @@ class WorkoutParser {
         (["stairmaster", "stair climber", "stairs"], "Stairmaster", "cardio", true),
         (["jump rope", "skipping"], "Jump Rope", "cardio", true),
         (["spin class", "spinning", "peloton", "stationary bike"], "Cycling", "cardio", true),
-        (["swim", "swam", "swimming"], "Swim", "cardio", true),
-        (["rowing machine", "rower", "erg"], "Rowing", "cardio", true),
+        (["swim", "swam", "swimming", "swum", "laps"], "Swim", "cardio", true),
+        (["rowing machine", "rower", "erg", "rowed", "rowing"], "Rowing", "cardio", true),
         (["elliptical"], "Elliptical", "cardio", true),
         (["crossfit", "wod"], "CrossFit", "cardio", true),
         (["hiit", "circuit training", "circuit"], "HIIT", "cardio", true),
-        (["outdoor bike", "bike ride", "cycling"], "Cycling", "cardio", true),
+        (["outdoor bike", "bike ride", "biked", "biking", "cycled", "cycling",
+           "on my bike", "road bike", "mountain bike", "bike"], "Cycling", "cardio", true),
+        (["hiked", "hiking", "hike", "trail run", "trail running"], "Hike", "cardio", true),
         (["5k", "10k", "half marathon", "marathon", "tempo run", "easy run", "long run",
            "running", "jog", "jogging", "run", "ran", "ran for", "went for a run"], "Run", "cardio", true),
-        (["walk", "walking"], "Walk", "cardio", true),
+        (["walk", "walking", "walked"], "Walk", "cardio", true),
 
         // Recovery & Wellness
         (["sauna", "steam room", "steam bath"], "Sauna", "recovery", false),
@@ -169,6 +171,12 @@ class WorkoutParser {
         (["upper body", "upper day"], "Upper body"),
         (["lower body", "lower day"], "Lower body"),
     ]
+
+    private let cyclingKeywords = ["bike", "biked", "biking", "cycled", "cycling", "bicycle", "pedal"]
+    private let hikingKeywords  = ["hike", "hiked", "hiking", "trail"]
+    private let swimKeywords    = ["swim", "swam", "swimming", "swum", "laps", "pool"]
+    private let rowKeywords     = ["row", "rowed", "rowing", "erg"]
+    private let walkKeywords    = ["walk", "walked", "walking"]
 
     // MARK: - Spoken Number Normalization
 
@@ -251,11 +259,51 @@ class WorkoutParser {
             .filter { !$0.hasPrefix("Workout ·") && !$0.hasPrefix("Workout·") }
             .joined(separator: "\n")
 
+        // Split on sentence boundaries
         for sep in [". ", "! ", "; ", " — ", " – "] {
             normalized = normalized.replacingOccurrences(of: sep, with: "\n")
         }
         for sep in [" then ", " also did ", " also "] {
             normalized = normalized.replacingOccurrences(of: sep, with: "\n", options: .caseInsensitive)
+        }
+
+        // Build alias list once for both smart splits
+        let allAliases = exerciseMap.flatMap { $0.aliases }
+
+        // Smart comma split — only replace comma with newline if next chunk starts with a known exercise alias
+        let commaChunks = normalized.components(separatedBy: ",")
+        if commaChunks.count > 1 {
+            var rebuilt = ""
+            for (i, chunk) in commaChunks.enumerated() {
+                let trimmed = chunk.trimmingCharacters(in: .whitespaces).lowercased()
+                let startsWithExercise = allAliases.contains { trimmed.contains($0) }
+                if i == 0 {
+                    rebuilt += chunk
+                } else if startsWithExercise {
+                    rebuilt += "\n" + chunk
+                } else {
+                    rebuilt += "," + chunk
+                }
+            }
+            normalized = rebuilt
+        }
+
+        // Smart "and" split — only replace " and " with newline if next chunk starts with a known exercise alias
+        let andChunks = normalized.components(separatedBy: " and ")
+        if andChunks.count > 1 {
+            var rebuilt = ""
+            for (i, chunk) in andChunks.enumerated() {
+                let trimmed = chunk.trimmingCharacters(in: .whitespaces).lowercased()
+                let startsWithExercise = allAliases.contains { trimmed.hasPrefix($0) }
+                if i == 0 {
+                    rebuilt += chunk
+                } else if startsWithExercise {
+                    rebuilt += "\n" + chunk
+                } else {
+                    rebuilt += " and " + chunk
+                }
+            }
+            normalized = rebuilt
         }
 
         let chunks = normalized
@@ -269,7 +317,9 @@ class WorkoutParser {
             let lower = chunk.lowercased()
             for entry in exerciseMap {
                 if entry.aliases.contains(where: { lower.contains($0) }) {
-                    if let idx = groups.firstIndex(where: { $0.canonical == entry.canonical }) {
+                    // Cardio exercises always get their own group — two runs are two separate sessions
+                    // Lifting exercises merge into the same group — multiple sets of the same exercise
+                    if !entry.isCardio, let idx = groups.firstIndex(where: { $0.canonical == entry.canonical }) {
                         groups[idx].texts.append(chunk)
                     } else {
                         groups.append((entry.canonical, entry, [chunk]))
@@ -279,24 +329,38 @@ class WorkoutParser {
             }
         }
 
-        // Fallback: distance + time with no explicit exercise → Run
+        // Fallback: distance + time with no explicit exercise match
         let hasDistanceTime =
             text.range(of: #"\d+(?:\.\d+)?\s*(?:miles?|km|meters?)\b"#, options: .regularExpression) != nil &&
             text.range(of: #"\d+\s*(?:minutes?|mins?|hours?|hr)\b"#, options: .regularExpression) != nil
-        if groups.isEmpty && hasDistanceTime {
-            if let runEntry = exerciseMap.first(where: { $0.canonical == "Run" }) {
-                groups.append(("Run", runEntry, [text]))
+
+        if hasDistanceTime && !groups.contains(where: { $0.entry.isCardio }) {
+            let lower = text.lowercased()
+            let fallbackCanonical: String
+            if cyclingKeywords.contains(where: { lower.contains($0) }) {
+                fallbackCanonical = "Cycling"
+            } else if hikingKeywords.contains(where: { lower.contains($0) }) {
+                fallbackCanonical = "Hike"
+            } else if swimKeywords.contains(where: { lower.contains($0) }) {
+                fallbackCanonical = "Swim"
+            } else if rowKeywords.contains(where: { lower.contains($0) }) {
+                fallbackCanonical = "Rowing"
+            } else if walkKeywords.contains(where: { lower.contains($0) }) {
+                fallbackCanonical = "Walk"
+            } else {
+                fallbackCanonical = "Run"
+            }
+            if let entry = exerciseMap.first(where: { $0.canonical == fallbackCanonical }) {
+                groups.append((fallbackCanonical, entry, [text]))
             }
         }
 
-        // Join with newline so parseLifting can split lines for multi-set detection
         return groups.map { ($0.texts.joined(separator: "\n"), $0.entry) }
     }
 
     // MARK: - Lifting Parser
 
     private func parseLifting(segment: String, entry: ExerciseEntry, isPR: Bool) -> ParsedExercise {
-        // Parse each line separately to catch multiple sets for the same exercise
         let lines = segment.components(separatedBy: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
@@ -317,7 +381,6 @@ class WorkoutParser {
             }
         }
 
-        // Fall back to parsing whole segment if line-by-line found nothing
         if allSets.isEmpty {
             allSets = extractSets(from: segment, exerciseName: entry.canonical)
         }
@@ -342,7 +405,7 @@ class WorkoutParser {
         let lower = segment.lowercased()
         let duration = extractDuration(from: lower)
         let (distVal, distUnit) = extractDistance(from: lower)
-        let pace = calculatePace(dist: distVal, unit: distUnit, minutes: duration)
+        let pace = calculateMetric(canonical: entry.canonical, dist: distVal, unit: distUnit, minutes: duration)
         let calories = extractInt(pattern: #"(\d+)\s*(?:cal(?:ories?)?|cals?)\b"#, from: lower)
         let hr = extractInt(pattern: #"(\d+)\s*(?:bpm|heart\s*rate)\b"#, from: lower)
         return ParsedExercise(
@@ -367,17 +430,16 @@ class WorkoutParser {
         let unit = lower.contains("kg") || lower.contains("kilo") ? "kg" : "lb"
         let isBodyweight = bodyweightExercises.contains(exerciseName)
 
-        // Bodyweight — just extract rep count, no weight
         if isBodyweight {
-            let reps = extractInt(pattern: #"(\d+)\s*(?:reps?|times?|pushups?|pullups?|crunches?|lunges?|dips?)?"#, from: lower)
+            let reps = extractInt(pattern: #"(\d+)\s*(?:reps?|times?|push[\s\-]?ups?|pull[\s\-]?ups?|crunches?|lunges?|dips?)\b"#, from: lower)
                 ?? extractInt(pattern: #"did\s+(\d+)"#, from: lower)
-                ?? extractInt(pattern: #"(\d+)"#, from: lower)
+                ?? extractInt(pattern: #"\b(\d+)\s*(?:push[\s\-]?ups?|pull[\s\-]?ups?|sit[\s\-]?ups?|crunches?|dips?|lunges?)"#, from: lower)
+                ?? extractInt(pattern: #"\b([1-9]\d+)\b"#, from: lower)
             guard let r = reps else { return [] }
             let setCount = extractSetCountFromText(lower) ?? 1
             return (0..<setCount).map { WorkoutSet(setNumber: $0+1, weight: nil, reps: r, unit: "") }
         }
 
-        // A: NxM pairs — "225x5" or "185x8"
         let pairs = findAll(pattern: #"(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+)"#, in: text)
         if !pairs.isEmpty {
             var sets: [WorkoutSet] = []
@@ -400,7 +462,6 @@ class WorkoutParser {
             if !sets.isEmpty { return sets }
         }
 
-        // B: "3 sets of 8 at 185"
         if let nums = matchFirst(
             pattern: #"(\d+)\s*sets?\s*of\s*(\d+)(?:\s*reps?)?\s*(?:at|@|with)?\s*(\d+)"#,
             in: text), nums.count >= 3 {
@@ -408,7 +469,6 @@ class WorkoutParser {
             return (0..<n).map { WorkoutSet(setNumber: $0+1, weight: w, reps: r, unit: unit) }
         }
 
-        // C: "185 for 3 sets of 8"
         if let nums = matchFirst(
             pattern: #"(\d+(?:\.\d+)?)\s*(?:lbs?|kg)?\s*for\s*(\d+)\s*sets?\s*of\s*(\d+)"#,
             in: text), nums.count >= 3 {
@@ -416,7 +476,6 @@ class WorkoutParser {
             return (0..<n).map { WorkoutSet(setNumber: $0+1, weight: w, reps: r, unit: unit) }
         }
 
-        // D: "185 for 8 reps"
         if let nums = matchFirst(
             pattern: #"(\d+(?:\.\d+)?)\s*(?:lbs?|kg)?\s*for\s*(\d+)\s*(?:reps?)?"#,
             in: text), nums.count >= 2 {
@@ -424,7 +483,6 @@ class WorkoutParser {
             return (0..<n).map { WorkoutSet(setNumber: $0+1, weight: nums[0], reps: Int(nums[1]), unit: unit) }
         }
 
-        // D1b: "20 curls 20 pounds" — exercise word between reps and weight
         if let nums = matchFirst(
             pattern: #"(\d+)\s*(?:reps?|times?|curls?|pushups?|pullups?|squats?|crunches?|lunges?|dips?)\s+(\d+(?:\.\d+)?)\s*(?:lbs?|pounds?|kgs?|kilos?)"#,
             in: text), nums.count >= 2 {
@@ -433,7 +491,6 @@ class WorkoutParser {
             return (0..<n).map { WorkoutSet(setNumber: $0+1, weight: w, reps: reps, unit: unit) }
         }
 
-        // D2: "135 pounds 6 times" or "135 lb 6 reps"
         if let nums = matchFirst(
             pattern: #"(\d+(?:\.\d+)?)\s*(?:lbs?|pounds?|kgs?|kilos?)\s+(?:for\s+)?(\d+)\s*(?:times?|reps?)"#,
             in: text), nums.count >= 2 {
@@ -441,7 +498,6 @@ class WorkoutParser {
             return (0..<n).map { WorkoutSet(setNumber: $0+1, weight: nums[0], reps: Int(nums[1]), unit: unit) }
         }
 
-        // D3: "6 times at 135" or "6 reps 135 pounds"
         if let nums = matchFirst(
             pattern: #"(\d+)\s*(?:times?|reps?)\s*(?:at|@|with|of)?\s*(\d+(?:\.\d+)?)\s*(?:lbs?|pounds?|kgs?|kilos?)?"#,
             in: text), nums.count >= 2 {
@@ -450,7 +506,6 @@ class WorkoutParser {
             return (0..<n).map { WorkoutSet(setNumber: $0+1, weight: w, reps: reps, unit: unit) }
         }
 
-        // D4: bare "135 6 times" — weight then reps
         if let nums = matchFirst(
             pattern: #"(\d{2,3})\s+(\d{1,2})\s*(?:times?|reps?)"#,
             in: text), nums.count >= 2 {
@@ -460,7 +515,6 @@ class WorkoutParser {
             return (0..<n).map { WorkoutSet(setNumber: $0+1, weight: w, reps: reps, unit: unit) }
         }
 
-        // D5: bare "6 times 135" — reps then weight
         if let nums = matchFirst(
             pattern: #"(\d{1,2})\s*(?:times?|reps?)\s+(\d{2,3})"#,
             in: text), nums.count >= 2 {
@@ -470,7 +524,6 @@ class WorkoutParser {
             return (0..<n).map { WorkoutSet(setNumber: $0+1, weight: w, reps: reps, unit: unit) }
         }
 
-        // E: "225, 245, 265 for 5 reps each"
         if let repsNums = matchFirst(pattern: #"for\s*(\d+)\s*(?:reps?\s*each|reps?)"#, in: text),
            let reps = repsNums.first {
             let weights = findAllSingle(pattern: #"(\d{2,3})\b"#, in: text)
@@ -482,7 +535,6 @@ class WorkoutParser {
             }
         }
 
-        // F: Explicit unit word — "20 pounds" or "135 kg"
         if let nums = matchFirst(
             pattern: #"(\d+(?:\.\d+)?)\s*(?:lbs?|pounds?|kgs?|kilos?)"#,
             in: text) {
@@ -491,7 +543,6 @@ class WorkoutParser {
             return [WorkoutSet(setNumber: 1, weight: w, reps: reps, unit: unit)]
         }
 
-        // G: Last resort — any 2-3 digit number as weight
         let heavy = findAllSingle(pattern: #"\b(\d{2,3}(?:\.\d+)?)\b"#, in: text)
             .filter { $0 >= 5 && $0 < 1500 }
         if let w = heavy.first {
@@ -521,17 +572,48 @@ class WorkoutParser {
         if let n = extractDouble(pattern: #"(\d+(?:\.\d+)?)\s*(?:miles?|mi)\b"#, from: text) { return (n, "mi") }
         if let n = extractDouble(pattern: #"(\d+(?:\.\d+)?)\s*(?:km|kilometers?)\b"#, from: text) { return (n, "km") }
         if let n = extractDouble(pattern: #"(\d+(?:\.\d+)?)\s*k\b"#, from: text) { return (n, "km") }
-        if let n = extractDouble(pattern: #"(\d+(?:\.\d+)?)\s*(?:meters?)\b"#, from: text) { return (n, "m") }
+        if let n = extractDouble(pattern: #"(\d+(?:\.\d+)?)\s*(?:meters?|m)\b"#, from: text) { return (n, "m") }
+        if let n = extractDouble(pattern: #"(\d+(?:\.\d+)?)\s*(?:yards?|yds?)\b"#, from: text) { return (n, "yd") }
+        if let n = extractDouble(pattern: #"(\d+)\s*laps?\b"#, from: text) { return (n, "laps") }
         return (nil, nil)
     }
 
-    private func calculatePace(dist: Double?, unit: String?, minutes: Double?) -> String? {
-        guard let d = dist, let m = minutes, d > 0 else { return nil }
-        var miles = d
-        if unit == "km" { miles = d / 1.60934 } else if unit == "m" { miles = d / 1609.34 }
-        let pace = m / miles
-        let mins = Int(pace); let secs = Int((pace - Double(mins)) * 60)
-        return "\(mins):\(String(format: "%02d", secs))/mi"
+    private func calculateMetric(canonical: String, dist: Double?, unit: String?, minutes: Double?) -> String? {
+        guard let d = dist, let m = minutes, d > 0, m > 0 else { return nil }
+
+        switch canonical {
+        case "Cycling", "Rowing", "Elliptical":
+            var miles = d
+            if unit == "km" { miles = d / 1.60934 }
+            else if unit == "m" { miles = d / 1609.34 }
+            let mph = miles / (m / 60)
+            return String(format: "%.1f mph", mph)
+
+        case "Swim":
+            if unit == "laps" {
+                let pacePerLap = m / d
+                let mins = Int(pacePerLap)
+                let secs = Int((pacePerLap - Double(mins)) * 60)
+                return "\(mins):\(String(format: "%02d", secs))/lap"
+            }
+            var meters = d
+            if unit == "mi" { meters = d * 1609.34 }
+            else if unit == "km" { meters = d * 1000 }
+            else if unit == "yd" { meters = d * 0.9144 }
+            let pacePer100 = (m / meters) * 100
+            let mins = Int(pacePer100)
+            let secs = Int((pacePer100 - Double(mins)) * 60)
+            return "\(mins):\(String(format: "%02d", secs))/100m"
+
+        default:
+            var miles = d
+            if unit == "km" { miles = d / 1.60934 }
+            else if unit == "m" { miles = d / 1609.34 }
+            let pace = m / miles
+            let mins = Int(pace)
+            let secs = Int((pace - Double(mins)) * 60)
+            return "\(mins):\(String(format: "%02d", secs))/mi"
+        }
     }
 
     // MARK: - Regex Helpers

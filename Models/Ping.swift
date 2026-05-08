@@ -17,6 +17,7 @@ class Ping {
     var recurrence: Recurrence = Recurrence.none
     var isActive: Bool = true
     var lastFired: Date?
+    var followUpScheduled: Bool = false
     var createdAt: Date = Date()
 
     enum Recurrence: String, Codable {

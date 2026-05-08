@@ -19,7 +19,7 @@ struct OrcaApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     let modelContainer: ModelContainer = {
-        guard let container = try? ModelContainer(for: Memory.self, Echo.self, Ping.self, SubTask.self, GroceryList.self, Person.self, GiftItem.self) else {
+        guard let container = try? ModelContainer(for: Memory.self, Echo.self, Ping.self, SubTask.self, GroceryList.self, Person.self, GiftItem.self, WatchlistItem.self) else {
             fatalError("Failed to create ModelContainer")
         }
         return container
@@ -30,7 +30,8 @@ struct OrcaApp: App {
             Group {
                 if !hasCompletedOnboarding {
                     OnboardingFlow()
-                } else if authService.isAuthenticated || hasSkippedAuth {
+                        .environment(authService)
+                } else if authService.isAuthenticated {
                     ContentView()
                         .environment(authService)
                 } else {
@@ -53,12 +54,15 @@ struct OrcaApp: App {
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }
                 let context = modelContainer.mainContext
-                Task {
+                Task { @MainActor in
                     let memories = (try? context.fetch(FetchDescriptor<Memory>())) ?? []
+                    let pings = (try? context.fetch(FetchDescriptor<Ping>())) ?? []
+                    // Call synchronous check FIRST before any async work invalidates the context
+                    NotificationService.shared.checkAndScheduleFollowUps(pings: pings, memories: memories)
                     await FinanceService.shared.checkPriceAlerts(memories: memories)
                     await SportsMemoryService.shared.refreshGamePings(
                         memories: memories,
-                        modelContext: modelContainer.mainContext
+                        modelContext: context
                     )
                 }
             }

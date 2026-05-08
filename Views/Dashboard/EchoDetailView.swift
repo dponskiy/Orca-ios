@@ -12,12 +12,25 @@ struct EchoDetailView: View {
     let echo: Echo
     @Query private var memories: [Memory]
     @Query private var pings: [Ping]
-    @State private var editingMemory: Memory?
-    @State private var detailMemory: Memory?
-    @State private var showGroceryMode = false
     @State private var showSportsInUpcoming: Bool = UserDefaults.standard.showSportsInUpcoming
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthService.self) private var authService
+
+    enum ActiveSheet: Identifiable {
+        case editMemory(Memory)
+        case detailMemory(Memory)
+        case groceryMode
+        case recipeBuilder
+        var id: String {
+            switch self {
+            case .editMemory(let m): return "edit-\(m.id)"
+            case .detailMemory(let m): return "detail-\(m.id)"
+            case .groceryMode: return "grocery"
+            case .recipeBuilder: return "builder"
+            }
+        }
+    }
+    @State private var activeSheet: ActiveSheet? = nil
 
     var filteredMemories: [Memory] {
         memories.filter { $0.echoId == echo.id }
@@ -36,21 +49,44 @@ struct EchoDetailView: View {
         List {
             // Count + mode buttons
             Section {
-                HStack {
-                    Text("\(filteredMemories.count) \(filteredMemories.count == 1 ? "memory" : "memories")")
-                        .font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
-                    Spacer()
-                    if echo.name == "Cooking" && filteredMemories.contains(where: { $0.hasChecklist }) {
-                        Button {
-                            showGroceryMode = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "cart.fill").font(.system(size: 13))
-                                Text("Grocery Mode").font(.custom("DMSans-Medium", size: 13))
+                VStack(spacing: 10) {
+                    HStack {
+                        Text("\(filteredMemories.count) \(filteredMemories.count == 1 ? "memory" : "memories")")
+                            .font(.custom("DMSans-Medium", size: 14)).foregroundColor(.gray)
+                        Spacer()
+                    }
+
+                    if echo.name == "Cooking" {
+                        HStack(spacing: 8) {
+                            Button {
+                                activeSheet = .groceryMode
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "cart.fill").font(.system(size: 13))
+                                    Text("Grocery Mode").font(.custom("DMSans-Medium", size: 13))
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(Color.oceanTeal).clipShape(Capsule())
                             }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(Color.oceanTeal).clipShape(Capsule())
+                            .buttonStyle(.plain)
+
+                            Button {
+                                activeSheet = .recipeBuilder
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "plus").font(.system(size: 13))
+                                    Text("Build Recipe").font(.custom("DMSans-Medium", size: 13))
+                                }
+                                .foregroundColor(.oceanTeal)
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(Color.oceanTeal.opacity(0.1))
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -96,10 +132,13 @@ struct EchoDetailView: View {
             // Workout echo view
             if echo.name.lowercased().contains("workout") && !filteredMemories.isEmpty {
                 Section {
-                    WorkoutEchoView(memories: filteredMemories, detailMemory: $detailMemory)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                    WorkoutEchoView(memories: filteredMemories, detailMemory: Binding(
+                        get: { nil },
+                        set: { if let m = $0 { activeSheet = .detailMemory(m) } }
+                    ))
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
             }
 
@@ -168,7 +207,7 @@ struct EchoDetailView: View {
                             }
                         }
                         Spacer()
-                        Button { editingMemory = memory } label: {
+                        Button { activeSheet = .editMemory(memory) } label: {
                             ZStack {
                                 Circle().fill(Color.mist).frame(width: 40, height: 40)
                                 Image(systemName: "pencil")
@@ -181,7 +220,7 @@ struct EchoDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .listRowBackground(expired ? Color(red: 0.91, green: 0.94, blue: 0.97) : Color.white)
                     .contentShape(Rectangle())
-                    .onTapGesture { detailMemory = memory }
+                    .onTapGesture { activeSheet = .detailMemory(memory) }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             let id = memory.id
@@ -195,7 +234,9 @@ struct EchoDetailView: View {
                             Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
                         } label: { Label("Delete", systemImage: "trash") }
                         .tint(.red)
-                        Button { editingMemory = memory } label: { Label("Edit", systemImage: "pencil") }
+                        Button { activeSheet = .editMemory(memory) } label: {
+                            Label("Edit", systemImage: "pencil")
+                        }
                         .tint(.oceanTeal)
                     }
                 }
@@ -214,9 +255,19 @@ struct EchoDetailView: View {
         }
         .navigationTitle("\(echo.emoji) \(echo.name)")
         .listStyle(.plain)
-        .sheet(item: $editingMemory) { MemoryEditView(memory: $0) }
-        .sheet(item: $detailMemory) { MemoryDetailView(memory: $0) }
-        .sheet(isPresented: $showGroceryMode) { GroceryModeView(memories: filteredMemories) }
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .editMemory(let memory):
+                MemoryEditView(memory: memory)
+            case .detailMemory(let memory):
+                MemoryDetailView(memory: memory)
+            case .groceryMode:
+                GroceryModeView(memories: filteredMemories)
+            case .recipeBuilder:
+                RecipeBuilderView()
+                    .environment(authService)
+            }
+        }
     }
 }
 

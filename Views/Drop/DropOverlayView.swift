@@ -26,6 +26,8 @@ struct DropOverlayView: View {
     @State private var visibleTipIndices: [Int] = []
     @State private var tipTimer: Timer? = nil
     @State private var silenceTimer: Timer? = nil
+    @State private var showSonarAnimation = false
+    @State private var tipsActive = false
 
     private let sonarEngine = SonarEngine()
 
@@ -48,6 +50,22 @@ struct DropOverlayView: View {
         let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         if let last = try? modelContext.fetch(descriptor).first {
             last.echoId = echoId
+        }
+    }
+
+    private func updateLastMemoryTask(isTask: Bool) {
+        let recent = try? modelContext.fetch(
+            FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        )
+        if let last = recent?.first {
+            last.isActionable = isTask
+        }
+    }
+
+    private func updateLastMemoryDuration(_ minutes: Int) {
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        if let last = try? modelContext.fetch(descriptor).first {
+            last.estimatedMinutes = minutes
         }
     }
 
@@ -129,10 +147,22 @@ struct DropOverlayView: View {
         return result.count > 2 ? result.capitalized : text
     }
 
+    // MARK: - Body
+
     var body: some View {
         ZStack {
-            if showBanner {
-                Color.black.opacity(0.35)
+            if showSonarAnimation {
+                SonarAnimationView()
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+            } else if permissionDenied {
+                permissionDeniedView
+            } else if showBanner {
+                // Keep recording view visible, dimmed behind banner
+                recordingView
+                    .allowsHitTesting(false)
+
+                Color.black.opacity(0.45)
                     .ignoresSafeArea()
                     .onTapGesture { dismissAndClose() }
 
@@ -142,8 +172,11 @@ struct DropOverlayView: View {
                         transcription: savedTranscription,
                         sonarResult: sonarResult,
                         echos: echos,
-                        onDone: { isTask in
+                        onDone: { isTask, duration in
                             updateLastMemoryTask(isTask: isTask)
+                            if let duration = duration, duration > 0 {
+                                updateLastMemoryDuration(duration)
+                            }
                             dismissAndClose()
                         },
                         onUndo: { undoAndClose() },
@@ -162,11 +195,13 @@ struct DropOverlayView: View {
                         },
                         onGroceryHint: {
                             NotificationCenter.default.post(name: .groceryModeHint, object: nil)
+                        },
+                        onAddToWatchlist: { title, type, service in 
+                            let item = WatchlistItem(title: title, itemType: type, streamingService: service)
+                            modelContext.insert(item)
                         }
                     )
                 }
-            } else if permissionDenied {
-                permissionDeniedView
             } else {
                 recordingView
             }
@@ -227,15 +262,17 @@ struct DropOverlayView: View {
     // MARK: - Tip Rotation
 
     private func startTipRotation() {
+        guard !showBanner && !showSonarAnimation else { return }
         let initialCount = min(3, tips.count)
         for i in 0..<initialCount {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.2) {
                 withAnimation(.spring(duration: 0.4, bounce: 0.3)) {
-                    visibleTipIndices.append(i)
+                    if !visibleTipIndices.contains(i) {
+                        visibleTipIndices.append(i)
+                    }
                 }
             }
         }
-
         var nextTipIndex = initialCount
         tipTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { _ in
             guard nextTipIndex < tips.count else {
@@ -243,9 +280,7 @@ struct DropOverlayView: View {
                 return
             }
             withAnimation(.easeOut(duration: 0.3)) {
-                if !visibleTipIndices.isEmpty {
-                    visibleTipIndices.removeFirst()
-                }
+                if !visibleTipIndices.isEmpty { visibleTipIndices.removeFirst() }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                 withAnimation(.spring(duration: 0.4, bounce: 0.2)) {
@@ -273,7 +308,6 @@ struct DropOverlayView: View {
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
-
                 // TOP HALF — Tips
                 VStack(alignment: .leading, spacing: 0) {
                     Text("WHAT CAN I SAY?")
@@ -307,7 +341,6 @@ struct DropOverlayView: View {
                             ))
                         }
                     }
-
                     Spacer()
                 }
                 .frame(maxHeight: .infinity)
@@ -316,7 +349,6 @@ struct DropOverlayView: View {
 
                 // BOTTOM HALF — Recording controls
                 VStack(spacing: 16) {
-
                     if !audioService.transcription.isEmpty {
                         Text(audioService.transcription)
                             .font(.custom("DMSans-Regular", size: 15))
@@ -366,8 +398,15 @@ struct DropOverlayView: View {
                 .frame(maxHeight: .infinity)
             }
         }
-        .onAppear { startTipRotation() }
-        .onDisappear { stopTipRotation() }
+        .onAppear {
+            guard !showBanner && !showSonarAnimation else { return }
+            startTipRotation()
+            tipsActive = true
+        }
+        .onDisappear {
+            stopTipRotation()
+            tipsActive = false
+        }
         .onChange(of: audioService.transcription) { _, newValue in
             if !newValue.isEmpty { cancelSilenceTimer() }
         }
@@ -378,22 +417,18 @@ struct DropOverlayView: View {
     private var permissionDeniedView: some View {
         ZStack {
             Color.deepNavy.ignoresSafeArea()
-
             VStack(spacing: 16) {
                 Image(systemName: "mic.slash.fill")
                     .font(.system(size: 48))
                     .foregroundColor(.coral)
-
                 Text("Microphone Access Needed")
                     .font(.custom("DMSans-Medium", size: 18))
                     .foregroundColor(.white)
-
                 Text("Orca needs your microphone to capture voice memories. Open Settings to enable it.")
                     .font(.custom("DMSans-Regular", size: 14))
                     .foregroundColor(.white.opacity(0.6))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
-
                 Button("Open Settings") {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
@@ -402,7 +437,6 @@ struct DropOverlayView: View {
                 .font(.custom("DMSans-Medium", size: 16))
                 .foregroundColor(.oceanTeal)
                 .padding(.top, 8)
-
                 Button("Cancel") { isPresented = false }
                     .font(.custom("DMSans-Regular", size: 14))
                     .foregroundColor(.white.opacity(0.5))
@@ -411,23 +445,11 @@ struct DropOverlayView: View {
         }
     }
 
-    // MARK: - Update Last Memory
-
-    private func updateLastMemoryTask(isTask: Bool) {
-        let recent = try? modelContext.fetch(
-            FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
-        )
-        if let last = recent?.first {
-            last.isActionable = isTask
-        }
-    }
-
     // MARK: - Helpers
 
-    // To this:
     private func barHeight(index: Int) -> CGFloat {
         let base: CGFloat = 6
-        let level = CGFloat(max(audioService.audioLevel, 0.15)) // minimum movement even in silence
+        let level = CGFloat(max(audioService.audioLevel, 0.15))
         let time = Date().timeIntervalSince1970
         let wave1 = sin(Double(index) * 0.6 + time * 4.0) * 0.5 + 0.5
         let wave2 = sin(Double(index) * 1.2 + time * 2.5 + 1.0) * 0.3 + 0.3
@@ -453,8 +475,22 @@ struct DropOverlayView: View {
             return
         }
 
-        sonarResult = sonarEngine.process(text: savedTranscription, echos: echos)
+        withAnimation(.easeOut(duration: 0.2)) { visibleTipIndices = [] }
+        withAnimation(.easeIn(duration: 0.2)) { showSonarAnimation = true }
 
+        Task {
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.2)) { showSonarAnimation = false }
+                processSonarResult()
+            }
+        }
+    }
+
+    // MARK: - Process Sonar Result
+
+    private func processSonarResult() {
+        sonarResult = sonarEngine.process(text: savedTranscription, echos: echos)
         let isWorkout = sonarResult?.echoName.lowercased().contains("workout") == true
         if isWorkout,
            let existing = WorkoutSessionManager.shared.mergeIntoTodaySession(
@@ -475,6 +511,7 @@ struct DropOverlayView: View {
         memory.dateConfidence = sonarResult?.dateConfidence
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
+        memory.estimatedMinutes = sonarResult?.estimatedMinutes
         modelContext.insert(memory)
         SpotlightService.shared.indexMemory(
             memory,
@@ -523,7 +560,7 @@ struct DropOverlayView: View {
             }
         }
 
-        // Auto-create GiftItem if memory is gift-related and a person profile matches
+        // Auto-create GiftItem
         let isGiftsEcho = sonarResult?.echoName == "Gifts"
         let lowerText = savedTranscription.lowercased()
 
@@ -543,10 +580,9 @@ struct DropOverlayView: View {
                                    "mothers day", "father's day", "fathers day",
                                    "new year", "hanukkah", "thanksgiving"].contains { lowerText.contains($0) }
 
-        if (isGiftsEcho || (hasGiftKeyword && hasOccasionKeyword)) {
+        if isGiftsEcho || (hasGiftKeyword && hasOccasionKeyword) {
             let personDescriptor = FetchDescriptor<Person>()
             let allPersons = (try? modelContext.fetch(personDescriptor)) ?? []
-
             let detectedPeople = sonarResult?.detectedPeople ?? []
             let matchingPersons: [Person] = allPersons.filter { person in
                 let firstName = person.name.split(separator: " ").first.map(String.init) ?? person.name
@@ -556,21 +592,17 @@ struct DropOverlayView: View {
             }
 
             var giftCreatedForPersonIds = Set<UUID>()
-
             for matchedPerson in matchingPersons {
                 guard !giftCreatedForPersonIds.contains(matchedPerson.id) else { continue }
-
                 let alreadyExists = (try? modelContext.fetch(FetchDescriptor<GiftItem>()))?.contains {
                     $0.linkedMemoryId == memory.id && $0.personId == matchedPerson.id
                 } ?? false
 
                 if !alreadyExists {
                     let occasion: String
-                    if lowerText.contains("christmas") || lowerText.contains("xmas") {
-                        occasion = "Christmas"
-                    } else if lowerText.contains("birthday") || lowerText.contains("bday") {
-                        occasion = "Birthday"
-                    } else if lowerText.contains("anniversary") {
+                    if lowerText.contains("christmas") || lowerText.contains("xmas") { occasion = "Christmas" }
+                    else if lowerText.contains("birthday") || lowerText.contains("bday") { occasion = "Birthday" }
+                    else if lowerText.contains("anniversary") {
                         let customMatch = matchedPerson.customOccasions.first { occ in
                             let normalized = occ.lowercased().replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")
                             return normalized.contains("anniversary")
@@ -622,23 +654,15 @@ struct DropOverlayView: View {
                         occasion = "Holiday"
                     } else {
                         let matchedCustom = matchedPerson.customOccasions.first { occ in
-                            let normalized = occ.lowercased()
-                                .replacingOccurrences(of: "'", with: "")
-                                .replacingOccurrences(of: "\u{2019}", with: "")
-                            let normalizedText = lowerText
-                                .replacingOccurrences(of: "'", with: "")
-                                .replacingOccurrences(of: "\u{2019}", with: "")
+                            let normalized = occ.lowercased().replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")
+                            let normalizedText = lowerText.replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")
                             return normalizedText.contains(normalized)
                         }
                         occasion = matchedCustom ?? "Birthday"
                     }
 
                     let giftName = extractGiftName(from: savedTranscription, personName: matchedPerson.name)
-                    let giftItem = GiftItem(
-                        personId: matchedPerson.id,
-                        name: giftName,
-                        occasion: occasion
-                    )
+                    let giftItem = GiftItem(personId: matchedPerson.id, name: giftName, occasion: occasion)
                     giftItem.linkedMemoryId = memory.id
                     modelContext.insert(giftItem)
                     giftCreatedForPersonIds.insert(matchedPerson.id)

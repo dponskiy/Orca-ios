@@ -51,6 +51,11 @@
 		872F72722F51254C000A4AE3 /* UpcomingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72372F4F237F000A4AE3 /* UpcomingCard.swift */; };
 		872F72752F512601000A4AE3 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72442F4F240A000A4AE3 /* SettingsView.swift */; };
 		872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723D2F4F23C7000A4AE3 /* BrowseAllView.swift */; };
+		8788DA212F96F1F7004DD77D /* DurationParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8788DA202F96F1EF004DD77D /* DurationParser.swift */; };
+		8788DA232F96F217004DD77D /* EchoColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8788DA222F96F213004DD77D /* EchoColors.swift */; };
+		8788DA252FA37EC5004DD77D /* SonarAnimationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8788DA242FA37EBB004DD77D /* SonarAnimationView.swift */; };
+		8788DA272FA3B0B9004DD77D /* WatchListItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8788DA262FA3B0B5004DD77D /* WatchListItem.swift */; };
+		8788DA292FA3B0D9004DD77D /* WatchModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8788DA282FA3B0D3004DD77D /* WatchModeView.swift */; };
 		878C036F2F676FD70016D38A /* MemoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72452F4F2417000A4AE3 /* MemoryDetailView.swift */; };
 		878C03732F67A67E0016D38A /* RecipeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03722F67A67E0016D38A /* RecipeCaptureView.swift */; };
 		878C03752F6898970016D38A /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03742F68988D0016D38A /* WeatherService.swift */; };
@@ -63,6 +68,8 @@
 		878C03852F740EA90016D38A /* SportsMemoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03842F740EA40016D38A /* SportsMemoryService.swift */; };
 		878C03872F740EBB0016D38A /* SportsEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03862F740EB90016D38A /* SportsEchoView.swift */; };
 		878C03892F7411990016D38A /* ESPNService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03882F74118F0016D38A /* ESPNService.swift */; };
+		879E5B2E2F8C933D0017738D /* RecipeBuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 879E5B2D2F8C93330017738D /* RecipeBuilderView.swift */; };
+		87BBD7A52F805A4900CB8A33 /* WeatherDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87BBD7A42F805A4200CB8A33 /* WeatherDetailView.swift */; };
 		87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */; };
 		87CD0AE12F52917B00CAAB4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B932F4EB2FB0058324F /* Config.swift */; };
 		87CD0AE42F52992800CAAB4D /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9C2F4EB3F30058324F /* AuthService.swift */; };
@@ -132,15 +139,11 @@
 		872F72392F4F23A0000A4AE3 /* ConfirmBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmBannerView.swift; sourceTree = "<group>"; };
 		872F723A2F4F23AB000A4AE3 /* CaptureDrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureDrawerView.swift; sourceTree = "<group>"; };
 		872F723B2F4F23BA000A4AE3 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
-		872F723C2F4F23C0000A4AE3 /* ResultCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultCardView.swift; sourceTree = "<group>"; };
 		872F723D2F4F23C7000A4AE3 /* BrowseAllView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseAllView.swift; sourceTree = "<group>"; };
 		872F723E2F4F23D1000A4AE3 /* CalendarTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarTabView.swift; sourceTree = "<group>"; };
 		872F72412F4F23E7000A4AE3 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
-		872F72422F4F23F2000A4AE3 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
-		872F72432F4F23FE000A4AE3 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		872F72442F4F240A000A4AE3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		872F72452F4F2417000A4AE3 /* MemoryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryDetailView.swift; sourceTree = "<group>"; };
-		872F72462F4F2420000A4AE3 /* EchoScrollPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoScrollPicker.swift; sourceTree = "<group>"; };
 		872F72472F4FCF15000A4AE3 /* InstrumentSans-Italic-VariableFont_wdth,wght.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "InstrumentSans-Italic-VariableFont_wdth,wght.ttf"; sourceTree = "<group>"; };
 		872F72492F4FCF21000A4AE3 /* InstrumentSans-VariableFont_wdth,wght.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "InstrumentSans-VariableFont_wdth,wght.ttf"; sourceTree = "<group>"; };
 		872F724B2F4FCF33000A4AE3 /* DMSans-Italic-VariableFont_opsz,wght.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "DMSans-Italic-VariableFont_opsz,wght.ttf"; sourceTree = "<group>"; };
@@ -171,6 +174,11 @@
 		873C1BA02F4EB4350058324F /* Memory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Memory.swift; sourceTree = "<group>"; };
 		873C1BA12F4EB43E0058324F /* Echo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Echo.swift; sourceTree = "<group>"; };
 		873C1BA22F4EB4440058324F /* Ping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ping.swift; sourceTree = "<group>"; };
+		8788DA202F96F1EF004DD77D /* DurationParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DurationParser.swift; sourceTree = "<group>"; };
+		8788DA222F96F213004DD77D /* EchoColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoColors.swift; sourceTree = "<group>"; };
+		8788DA242FA37EBB004DD77D /* SonarAnimationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarAnimationView.swift; sourceTree = "<group>"; };
+		8788DA262FA3B0B5004DD77D /* WatchListItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchListItem.swift; sourceTree = "<group>"; };
+		8788DA282FA3B0D3004DD77D /* WatchModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchModeView.swift; sourceTree = "<group>"; };
 		878C03562F63B8BE0016D38A /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		878C03582F63B8BE0016D38A /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		878C03722F67A67E0016D38A /* RecipeCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeCaptureView.swift; sourceTree = "<group>"; };
@@ -184,6 +192,8 @@
 		878C03842F740EA40016D38A /* SportsMemoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsMemoryService.swift; sourceTree = "<group>"; };
 		878C03862F740EB90016D38A /* SportsEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsEchoView.swift; sourceTree = "<group>"; };
 		878C03882F74118F0016D38A /* ESPNService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNService.swift; sourceTree = "<group>"; };
+		879E5B2D2F8C93330017738D /* RecipeBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeBuilderView.swift; sourceTree = "<group>"; };
+		87BBD7A42F805A4200CB8A33 /* WeatherDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherDetailView.swift; sourceTree = "<group>"; };
 		87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseManager.swift; sourceTree = "<group>"; };
 		87CD0AE62F52995300CAAB4D /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
@@ -326,6 +336,9 @@
 		873C1B8D2F4EB2A60058324F /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				8788DA282FA3B0D3004DD77D /* WatchModeView.swift */,
+				8788DA262FA3B0B5004DD77D /* WatchListItem.swift */,
+				87BBD7A42F805A4200CB8A33 /* WeatherDetailView.swift */,
 				8729F53B2F789CA800B58E0B /* WorkoutSessionManager.swift */,
 				8729F52B2F7881EA00B58E0B /* WorkoutParser.swift */,
 				8729F5272F7727C000B58E0B /* FinanceService.swift */,
@@ -393,6 +406,8 @@
 		873C1BA42F4EB4580058324F /* Drop */ = {
 			isa = PBXGroup;
 			children = (
+				8788DA242FA37EBB004DD77D /* SonarAnimationView.swift */,
+				879E5B2D2F8C93330017738D /* RecipeBuilderView.swift */,
 				878C03722F67A67E0016D38A /* RecipeCaptureView.swift */,
 				87CD0AED2F57300500CAAB4D /* PhotoCaptureView.swift */,
 				872F726E2F4FF50B000A4AE3 /* TypeCaptureView.swift */,
@@ -407,7 +422,6 @@
 			isa = PBXGroup;
 			children = (
 				872F723D2F4F23C7000A4AE3 /* BrowseAllView.swift */,
-				872F723C2F4F23C0000A4AE3 /* ResultCardView.swift */,
 				872F723B2F4F23BA000A4AE3 /* SearchView.swift */,
 			);
 			path = Search;
@@ -416,6 +430,8 @@
 		873C1BA62F4EB4640058324F /* Calendar */ = {
 			isa = PBXGroup;
 			children = (
+				8788DA222F96F213004DD77D /* EchoColors.swift */,
+				8788DA202F96F1EF004DD77D /* DurationParser.swift */,
 				872F723E2F4F23D1000A4AE3 /* CalendarTabView.swift */,
 			);
 			path = Calendar;
@@ -433,8 +449,6 @@
 			isa = PBXGroup;
 			children = (
 				87CD0AE62F52995300CAAB4D /* AuthView.swift */,
-				872F72432F4F23FE000A4AE3 /* LoginView.swift */,
-				872F72422F4F23F2000A4AE3 /* SignUpView.swift */,
 			);
 			path = Auth;
 			sourceTree = "<group>";
@@ -462,7 +476,6 @@
 				878C037C2F6F940A0016D38A /* GroceryModeView.swift */,
 				878C037A2F6F228B0016D38A /* LocationSearchView.swift */,
 				872F72702F4FF9A9000A4AE3 /* MemoryEditView.swift */,
-				872F72462F4F2420000A4AE3 /* EchoScrollPicker.swift */,
 				872F72452F4F2417000A4AE3 /* MemoryDetailView.swift */,
 			);
 			path = Shared;
@@ -653,9 +666,12 @@
 				8729F5342F7882BD00B58E0B /* SportsDetailBlock.swift in Sources */,
 				87CD0AF02F57357500CAAB4D /* OrcaShortcuts.swift in Sources */,
 				872F726C2F4FF148000A4AE3 /* ConfirmBannerView.swift in Sources */,
+				8788DA292FA3B0D9004DD77D /* WatchModeView.swift in Sources */,
+				8788DA272FA3B0B9004DD77D /* WatchListItem.swift in Sources */,
 				872F725E2F4FDC7D000A4AE3 /* Echo.swift in Sources */,
 				87CD0AEC2F55407D00CAAB4D /* NotifcationService.swift in Sources */,
 				87CD0AF72F57930700CAAB4D /* OnboardingFlow.swift in Sources */,
+				8788DA232F96F217004DD77D /* EchoColors.swift in Sources */,
 				872F72722F51254C000A4AE3 /* UpcomingCard.swift in Sources */,
 				878C03852F740EA90016D38A /* SportsMemoryService.swift in Sources */,
 				872F72622F4FE4D1000A4AE3 /* DropButton.swift in Sources */,
@@ -684,14 +700,17 @@
 				872F72682F4FE746000A4AE3 /* CalendarTabView.swift in Sources */,
 				872F72642F4FE598000A4AE3 /* DashboardView.swift in Sources */,
 				872F725D2F4FDC77000A4AE3 /* Ping.swift in Sources */,
+				8788DA252FA37EC5004DD77D /* SonarAnimationView.swift in Sources */,
 				878C03772F6898C10016D38A /* LocationService.swift in Sources */,
 				8729F5322F78829F00B58E0B /* QuickLogView.swift in Sources */,
 				87CD0AF22F57443700CAAB4D /* SubTask.swift in Sources */,
 				872F725F2F4FDC8B000A4AE3 /* Memory.swift in Sources */,
 				87CD0AE72F52996100CAAB4D /* AuthView.swift in Sources */,
 				87CD0AE12F52917B00CAAB4D /* Config.swift in Sources */,
+				87BBD7A52F805A4900CB8A33 /* WeatherDetailView.swift in Sources */,
 				87CD0AE42F52992800CAAB4D /* AuthService.swift in Sources */,
 				8729F53A2F7883F500B58E0B /* TravelDetailBlock.swift in Sources */,
+				879E5B2E2F8C933D0017738D /* RecipeBuilderView.swift in Sources */,
 				872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */,
 				872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */,
 				878C037F2F6F9F160016D38A /* GroceryList.swift in Sources */,
@@ -704,6 +723,7 @@
 				8729F52C2F7881F600B58E0B /* WorkoutParser.swift in Sources */,
 				878C03892F7411990016D38A /* ESPNService.swift in Sources */,
 				872F72662F4FE723000A4AE3 /* SearchView.swift in Sources */,
+				8788DA212F96F1F7004DD77D /* DurationParser.swift in Sources */,
 				8729F52A2F7727E000B58E0B /* FinanceEchoView.swift in Sources */,
 				87CD0AE52F52992E00CAAB4D /* SupabaseManager.swift in Sources */,
 				878C037D2F6F940C0016D38A /* GroceryModeView.swift in Sources */,
@@ -862,8 +882,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -881,7 +902,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orca/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Orca;
+				INFOPLIST_KEY_CFBundleDisplayName = "Orca DEV";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Orca uses your camera to capture screenshots as memories";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -903,19 +924,21 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca;
+				MARKETING_VERSION = 1.4.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca.dev;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.2;
 			};
 			name = Debug;
@@ -927,7 +950,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -967,19 +990,20 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.4.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.2;
 			};
 			name = Release;

@@ -12,12 +12,18 @@ import Foundation
 class GroceryList {
     var id: UUID = UUID()
     var name: String
+    var listType: String = "grocery"
+    var customListName: String = ""
     var memoryIds: [String] = []
+    var extraItems: [String] = []
     var createdAt: Date = Date()
 
-    init(name: String, memoryIds: [UUID]) {
+    init(name: String, listType: String = "grocery", customListName: String = "", memoryIds: [UUID] = [], extraItems: [String] = []) {
         self.name = name
+        self.listType = listType
+        self.customListName = customListName
         self.memoryIds = memoryIds.map { $0.uuidString }
+        self.extraItems = extraItems
     }
 
     var memoryUUIDs: [UUID] {

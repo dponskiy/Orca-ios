@@ -7,7 +7,6 @@
 
 import SwiftUI
 import SwiftData
-import StoreKit
 
 struct SettingsView: View {
     @Environment(AuthService.self) private var authService
@@ -91,15 +90,12 @@ struct SettingsView: View {
                                 Text("Sign in")
                                     .font(.custom("DMSans-Medium", size: 16))
                                     .foregroundColor(.deepNavy)
-                                Text("Sync your memories across devices")
+                                Text("Reminders and sync require an account")
                                     .font(.custom("DMSans-Regular", size: 13))
                                     .foregroundColor(.gray)
                             }
                         }
                         .padding(.vertical, 4)
-                        .onTapGesture {
-                            hasSkippedAuth = false
-                        }
                     }
                 }
 
@@ -123,9 +119,7 @@ struct SettingsView: View {
                             .foregroundColor(.deepNavy)
                     }
 
-                    Button {
-                        showManageEchos = true
-                    } label: {
+                    Button { showManageEchos = true } label: {
                         Label("Manage Echos", systemImage: "circle.grid.2x2")
                             .foregroundColor(.deepNavy)
                     }
@@ -143,8 +137,8 @@ struct SettingsView: View {
 
                     Button {
                         AnalyticsService.shared.trackAppRated()
-                        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                            AppStore.requestReview(in: scene)
+                        if let url = URL(string: "https://apps.apple.com/app/id6760213977?action=write-review") {
+                            UIApplication.shared.open(url)
                         }
                     } label: {
                         Label("Rate Orca", systemImage: "star")
@@ -174,16 +168,12 @@ struct SettingsView: View {
 
                 // MARK: - Data
                 Section("Data") {
-                    Button {
-                        showCleanUpSheet = true
-                    } label: {
+                    Button { showCleanUpSheet = true } label: {
                         Label("Clean Up Old Tasks", systemImage: "sparkles.rectangle.stack")
                             .foregroundColor(.deepNavy)
                     }
 
-                    Button {
-                        showClearConfirm = true
-                    } label: {
+                    Button { showClearConfirm = true } label: {
                         Label("Clear All Memories", systemImage: "trash")
                             .foregroundColor(.red)
                     }
@@ -197,7 +187,7 @@ struct SettingsView: View {
                             FinIcon()
                                 .fill(Color.seafoam.opacity(0.4))
                                 .frame(width: 24, height: 28)
-                            Text("Orca v1.0")
+                            Text("Orca v1.4")
                                 .font(.custom("DMMono-Regular", size: 12))
                                 .foregroundColor(.gray)
                             Text("\(memories.count) memories saved")
@@ -224,34 +214,28 @@ struct SettingsView: View {
                         }
                         modelContext.delete(memory)
                         SpotlightService.shared.removeMemory(id: memory.id)
-                        Task {
-                            await SupabaseSyncService.shared.deleteMemory(id: id)
-                        }
+                        Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
                     }
                 }
             }
-            // Clear all memories — first confirmation
             .alert("Clear all memories?", isPresented: $showClearConfirm) {
                 Button("Clear All", role: .destructive) { showClearConfirmFinal = true }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will permanently delete all \(memories.count) memories. This cannot be undone.")
             }
-            // Clear all memories — second confirmation
             .alert("Are you sure?", isPresented: $showClearConfirmFinal) {
                 Button("Clear All", role: .destructive) { clearAllMemories() }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("All \(memories.count) memories will be gone forever.")
             }
-            // Delete account — first confirmation
             .alert("Delete your account?", isPresented: $showDeleteAccountConfirm) {
                 Button("Delete Account", role: .destructive) { showDeleteAccountFinal = true }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will permanently delete your account and all \(memories.count) memories. This cannot be undone.")
             }
-            // Delete account — second confirmation
             .alert("Are you absolutely sure?", isPresented: $showDeleteAccountFinal) {
                 Button("Yes, Delete Everything", role: .destructive) {
                     Task { await deleteAccount() }
@@ -282,34 +266,20 @@ struct SettingsView: View {
             }
             modelContext.delete(memory)
             SpotlightService.shared.removeMemory(id: id)
-            Task {
-                await SupabaseSyncService.shared.deleteMemory(id: id)
-            }
+            Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
         }
     }
 
     private func deleteAccount() async {
         isDeletingAccount = true
-
-        // 1. Cancel all notifications
-        for ping in pings {
-            NotificationService.shared.cancelPing(pingId: ping.id)
-        }
-
-        // 2. Delete all memories from Supabase
+        for ping in pings { NotificationService.shared.cancelPing(pingId: ping.id) }
         for memory in memories {
             await SupabaseSyncService.shared.deleteMemory(id: memory.id)
             SpotlightService.shared.removeMemory(id: memory.id)
         }
-
-        // 3. Delete local SwiftData
         for ping in pings { modelContext.delete(ping) }
         for memory in memories { modelContext.delete(memory) }
-
-        // 4. Delete Supabase account
         await authService.deleteAccount()
-
-        // 5. Reset app state
         await MainActor.run {
             isDeletingAccount = false
             hasSkippedAuth = false
@@ -328,34 +298,58 @@ struct SettingsView: View {
         @Environment(\.dismiss) private var dismiss
         @State private var deselected: Set<UUID> = []
 
-        private var candidates: [Memory] {
+        struct CandidateRow: Identifiable {
+            let id: UUID
+            let text: String
+            let completedAt: Date?
+            let detectedDate: Date?
+            let createdAt: Date
+        }
+
+        private var candidateRows: [CandidateRow] {
             let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
-            return memories.filter { memory in
-                guard memory.isActionable else { return false }
-                guard !memory.isPinned else { return false }
-                guard !memory.hasChecklist else { return false }
-                guard memory.url == nil || memory.url?.isEmpty == true else { return false }
-                let hasRecurringPing = pings.contains { $0.memoryId == memory.id && $0.recurrence != .none }
-                guard !hasRecurringPing else { return false }
-                if memory.isCompleted, let completedAt = memory.completedAt {
-                    return completedAt < cutoff
+            let recurringMemoryIds = Set(pings.filter { $0.recurrence != .none }.map { $0.memoryId })
+
+            return memories.compactMap { memory in
+                let id = memory.id
+                let isActionable = memory.isActionable
+                let isPinned = memory.isPinned
+                let hasChecklist = memory.hasChecklist
+                let url = memory.url
+                let isCompleted = memory.isCompleted
+                let completedAt = memory.completedAt
+                let detectedDate = memory.detectedDate
+                let createdAt = memory.createdAt
+                let text = memory.text
+
+                guard isActionable else { return nil }
+                guard !isPinned else { return nil }
+                guard !hasChecklist else { return nil }
+                guard url == nil || url?.isEmpty == true else { return nil }
+                guard !recurringMemoryIds.contains(id) else { return nil }
+
+                if isCompleted, let ca = completedAt {
+                    guard ca < cutoff else { return nil }
+                } else if let dd = detectedDate {
+                    guard dd < cutoff else { return nil }
+                } else {
+                    return nil
                 }
-                if let detectedDate = memory.detectedDate {
-                    return detectedDate < cutoff
-                }
-                return false
+
+                return CandidateRow(id: id, text: text, completedAt: completedAt, detectedDate: detectedDate, createdAt: createdAt)
             }
             .sorted { ($0.completedAt ?? $0.detectedDate ?? $0.createdAt) < ($1.completedAt ?? $1.detectedDate ?? $1.createdAt) }
         }
 
         private var toDelete: [Memory] {
-            candidates.filter { !deselected.contains($0.id) }
+            let ids = Set(candidateRows.filter { !deselected.contains($0.id) }.map { $0.id })
+            return memories.filter { ids.contains($0.id) }
         }
 
         var body: some View {
             NavigationStack {
                 Group {
-                    if candidates.isEmpty {
+                    if candidateRows.isEmpty {
                         VStack(spacing: 16) {
                             Spacer()
                             Image(systemName: "sparkles")
@@ -380,14 +374,14 @@ struct SettingsView: View {
                                     .listRowSeparator(.hidden)
                             }
 
-                            ForEach(candidates) { memory in
-                                let isSelected = !deselected.contains(memory.id)
+                            ForEach(candidateRows) { row in
+                                let isSelected = !deselected.contains(row.id)
                                 HStack(spacing: 12) {
                                     Button {
-                                        if deselected.contains(memory.id) {
-                                            deselected.remove(memory.id)
+                                        if deselected.contains(row.id) {
+                                            deselected.remove(row.id)
                                         } else {
-                                            deselected.insert(memory.id)
+                                            deselected.insert(row.id)
                                         }
                                     } label: {
                                         Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
@@ -397,13 +391,13 @@ struct SettingsView: View {
                                     .buttonStyle(.plain)
 
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(memory.text)
+                                        Text(row.text)
                                             .font(.custom("DMSans-Regular", size: 15))
                                             .foregroundColor(isSelected ? .deepNavy : .gray)
                                             .strikethrough(isSelected)
                                             .lineLimit(2)
 
-                                        if let date = memory.completedAt ?? memory.detectedDate {
+                                        if let date = row.completedAt ?? row.detectedDate {
                                             Text(date, format: .dateTime.month(.abbreviated).day().year())
                                                 .font(.custom("DMMono-Regular", size: 12))
                                                 .foregroundColor(.gray)
@@ -420,11 +414,9 @@ struct SettingsView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                            .foregroundColor(.gray)
+                        Button("Cancel") { dismiss() }.foregroundColor(.gray)
                     }
-
-                    if !candidates.isEmpty {
+                    if !candidateRows.isEmpty {
                         ToolbarItem(placement: .confirmationAction) {
                             Button {
                                 onConfirm(toDelete)
