@@ -185,9 +185,17 @@ struct MemoryDetailView: View {
                         Text(isCooking ? "INGREDIENTS" : "CHECKLIST")
                             .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal).tracking(1)
                         Spacer()
-                        let completed = memorySubTasks.filter { $0.isCompleted }.count
-                        Text("\(completed)/\(memorySubTasks.count)")
-                            .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                        if isCooking {
+                            Button { showInstructionEditor = true } label: {
+                                Text("Edit")
+                                    .font(.custom("DMSans-Medium", size: 13))
+                                    .foregroundColor(.oceanTeal)
+                            }
+                        } else {
+                            let completed = memorySubTasks.filter { $0.isCompleted }.count
+                            Text("\(completed)/\(memorySubTasks.count)")
+                                .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                        }
                     }
                     VStack(spacing: 0) {
                         ForEach(memorySubTasks) { subTask in

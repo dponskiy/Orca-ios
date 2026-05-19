@@ -100,15 +100,14 @@ struct OnboardingFlow: View {
                 VStack(spacing: 0) {
                     Spacer()
                     VStack(spacing: 20) {
-                        ZStack {
-                            Circle()
-                                .fill(LinearGradient(colors: [.oceanTeal, .seafoam], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .frame(width: 96, height: 96)
-                                .shadow(color: .oceanTeal.opacity(0.4), radius: 24, y: 8)
-                            FinIcon().fill(.white).frame(width: 48, height: 56)
-                        }
-                        .scaleEffect(logoScale)
-                        .opacity(logoOpacity)
+                        Image("OrcaLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 96, height: 96)
+                            .clipShape(RoundedRectangle(cornerRadius: 22))
+                            .shadow(color: .oceanTeal.opacity(0.4), radius: 24, y: 8)
+                            .scaleEffect(logoScale)
+                            .opacity(logoOpacity)
 
                         VStack(spacing: 6) {
                             Text("Orca").font(.custom("DMSans-Medium", size: 36)).foregroundColor(.white)
