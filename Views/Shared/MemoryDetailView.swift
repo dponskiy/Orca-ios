@@ -20,6 +20,7 @@ struct MemoryDetailView: View {
     @State private var showMapOptions = false
     @State private var addressCopied = false
     @State private var showReminders = true
+    @State private var showInstructionEditor = false
 
     var memorySubTasks: [SubTask] {
         subTasks.filter { $0.memoryId == memory.id }.sorted { $0.sortOrder < $1.sortOrder }
@@ -95,6 +96,9 @@ struct MemoryDetailView: View {
                 }
             }
             .sheet(item: $editingMemory) { MemoryEditView(memory: $0) }
+            .sheet(isPresented: $showInstructionEditor) {
+                RecipeInstructionEditorView(memory: memory)
+            }
         }
     }
 
@@ -227,8 +231,16 @@ struct MemoryDetailView: View {
             // MARK: Instructions (cooking only)
             if !instructionSteps.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("INSTRUCTIONS")
-                        .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal).tracking(1)
+                    HStack {
+                        Text("INSTRUCTIONS")
+                            .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal).tracking(1)
+                        Spacer()
+                        Button { showInstructionEditor = true } label: {
+                            Text("Edit")
+                                .font(.custom("DMSans-Medium", size: 13))
+                                .foregroundColor(.oceanTeal)
+                        }
+                    }
 
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(instructionSteps.enumerated()), id: \.offset) { index, step in

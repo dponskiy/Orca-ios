@@ -58,11 +58,13 @@ struct GroceryModeView: View {
     @State private var groupByAisle = false
     @State private var isRecording = false
     @State private var currentTranscription = ""
+    @State private var aiAisleOverrides: [String: String] = [:]
 
     // Recipe adding
     @State private var showAddRecipeOptions = false
     @State private var showURLInputSheet = false
     @State private var showRecipeBuilder = false
+    @State private var viewingRecipe: Memory? = nil
     @State private var showRecipePreview = false
     @State private var recipeURLInput = ""
     @State private var isFetchingRecipe = false
@@ -255,7 +257,6 @@ struct GroceryModeView: View {
         VStack(spacing: 0) {
             List {
                 Section {
-                    // Row 1 — permanent types
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(ListType.allCases, id: \.self) { type in
@@ -287,7 +288,6 @@ struct GroceryModeView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
 
-                    // Row 2 — custom lists + new list button
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(customLists) { list in
@@ -341,7 +341,6 @@ struct GroceryModeView: View {
                         .textCase(nil)
                 }
 
-                // MARK: Saved lists
                 if !savedListsForType.isEmpty {
                     Section {
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -393,7 +392,6 @@ struct GroceryModeView: View {
                     }
                 }
 
-                // MARK: Recipes — grocery only, not custom
                 if !isCustomActive && listType.hasRecipes {
                     if recipeMemories.isEmpty {
                         Section {
@@ -432,12 +430,17 @@ struct GroceryModeView: View {
                                 let isSelected = selectedMemoryIds.contains(memory.id)
                                 let items = subTasks(for: memory)
                                 HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(memory.text.components(separatedBy: "\n").first ?? memory.text)
-                                            .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy).lineLimit(2)
-                                        Text("\(items.count) \(items.count == 1 ? "ingredient" : "ingredients")")
-                                            .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                                    Button {
+                                        viewingRecipe = memory
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(memory.text.components(separatedBy: "\n").first ?? memory.text)
+                                                .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy).lineLimit(2)
+                                            Text("\(items.count) \(items.count == 1 ? "ingredient" : "ingredients")")
+                                                .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                                        }
                                     }
+                                    .buttonStyle(.plain)
                                     Spacer()
                                     Toggle("", isOn: Binding(
                                         get: { isSelected },
@@ -474,7 +477,6 @@ struct GroceryModeView: View {
                     }
                 }
 
-                // MARK: Items
                 Section {
                     ForEach(extraItems.indices, id: \.self) { index in
                         HStack(spacing: 10) {
@@ -541,7 +543,6 @@ struct GroceryModeView: View {
             .listStyle(.insetGrouped)
             .onAppear { restoreToday() }
 
-            // MARK: Bottom bar
             VStack(spacing: 0) {
                 Divider()
                 VStack(spacing: 10) {
@@ -626,9 +627,7 @@ struct GroceryModeView: View {
                 recipeFetchError = nil
                 showURLInputSheet = true
             }
-            Button("Build manually") {
-                showRecipeBuilder = true
-            }
+            Button("Build manually") { showRecipeBuilder = true }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Import ingredients automatically from a URL or build your own.")
@@ -659,9 +658,7 @@ struct GroceryModeView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    Button {
-                        fetchAndSaveRecipe()
-                    } label: {
+                    Button { fetchAndSaveRecipe() } label: {
                         HStack(spacing: 8) {
                             if isFetchingRecipe {
                                 ProgressView().scaleEffect(0.8).tint(.white)
@@ -700,54 +697,38 @@ struct GroceryModeView: View {
                 NavigationStack {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
-
-                            // Header
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(recipe.title)
                                     .font(.custom("DMSans-Medium", size: 22))
                                     .foregroundColor(.deepNavy)
                                 HStack(spacing: 8) {
                                     if let prep = recipe.prepTime {
-                                        Text("Prep: \(prep)")
-                                            .font(.custom("DMMono-Regular", size: 12))
-                                            .foregroundColor(.gray)
+                                        Text("Prep: \(prep)").font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
                                     }
                                     if let cook = recipe.cookTime {
-                                        Text("Cook: \(cook)")
-                                            .font(.custom("DMMono-Regular", size: 12))
-                                            .foregroundColor(.gray)
+                                        Text("Cook: \(cook)").font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
                                     }
                                     if let srv = recipe.servings {
-                                        Text("Serves: \(srv)")
-                                            .font(.custom("DMMono-Regular", size: 12))
-                                            .foregroundColor(.gray)
+                                        Text("Serves: \(srv)").font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
                                     }
                                 }
                             }
                             .padding(.horizontal, 20)
 
-                            // Ingredients
                             if !recipe.ingredients.isEmpty {
                                 VStack(alignment: .leading, spacing: 10) {
                                     Text("INGREDIENTS")
                                         .font(.custom("DMSans-Medium", size: 11))
-                                        .foregroundColor(.gray)
-                                        .tracking(0.5)
+                                        .foregroundColor(.gray).tracking(0.5)
                                         .padding(.horizontal, 20)
-
                                     VStack(alignment: .leading, spacing: 0) {
                                         ForEach(Array(recipe.ingredients.enumerated()), id: \.offset) { index, ingredient in
                                             HStack(spacing: 12) {
-                                                Circle()
-                                                    .fill(Color(red: 0.498, green: 0.467, blue: 0.867))
-                                                    .frame(width: 6, height: 6)
-                                                Text(ingredient)
-                                                    .font(.custom("DMSans-Regular", size: 15))
-                                                    .foregroundColor(.deepNavy)
+                                                Circle().fill(Color(red: 0.498, green: 0.467, blue: 0.867)).frame(width: 6, height: 6)
+                                                Text(ingredient).font(.custom("DMSans-Regular", size: 15)).foregroundColor(.deepNavy)
                                                 Spacer()
                                             }
-                                            .padding(.horizontal, 20)
-                                            .padding(.vertical, 10)
+                                            .padding(.horizontal, 20).padding(.vertical, 10)
                                             if index < recipe.ingredients.count - 1 {
                                                 Divider().padding(.leading, 44)
                                             }
@@ -760,32 +741,23 @@ struct GroceryModeView: View {
                                 }
                             }
 
-                            // Instructions
                             if !recipe.instructions.isEmpty {
                                 VStack(alignment: .leading, spacing: 10) {
                                     Text("INSTRUCTIONS")
                                         .font(.custom("DMSans-Medium", size: 11))
-                                        .foregroundColor(.gray)
-                                        .tracking(0.5)
+                                        .foregroundColor(.gray).tracking(0.5)
                                         .padding(.horizontal, 20)
-
                                     VStack(alignment: .leading, spacing: 0) {
                                         ForEach(Array(recipe.instructions.enumerated()), id: \.offset) { index, step in
                                             HStack(alignment: .top, spacing: 12) {
                                                 Text("\(index + 1)")
-                                                    .font(.custom("DMMono-Regular", size: 13))
-                                                    .foregroundColor(.white)
-                                                    .frame(width: 24, height: 24)
-                                                    .background(Color.oceanTeal)
-                                                    .clipShape(Circle())
-                                                Text(step)
-                                                    .font(.custom("DMSans-Regular", size: 14))
-                                                    .foregroundColor(.deepNavy)
+                                                    .font(.custom("DMMono-Regular", size: 13)).foregroundColor(.white)
+                                                    .frame(width: 24, height: 24).background(Color.oceanTeal).clipShape(Circle())
+                                                Text(step).font(.custom("DMSans-Regular", size: 14)).foregroundColor(.deepNavy)
                                                     .fixedSize(horizontal: false, vertical: true)
                                                 Spacer()
                                             }
-                                            .padding(.horizontal, 20)
-                                            .padding(.vertical, 12)
+                                            .padding(.horizontal, 20).padding(.vertical, 12)
                                             if index < recipe.instructions.count - 1 {
                                                 Divider().padding(.leading, 56)
                                             }
@@ -806,40 +778,29 @@ struct GroceryModeView: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") {
-                                showRecipePreview = false
-                                fetchedRecipe = nil
-                            }.foregroundColor(.gray)
+                            Button("Cancel") { showRecipePreview = false; fetchedRecipe = nil }.foregroundColor(.gray)
                         }
                         ToolbarItem(placement: .principal) {
-                            Text("Review Recipe")
-                                .font(.custom("DMSans-Medium", size: 17)).foregroundColor(.deepNavy)
+                            Text("Review Recipe").font(.custom("DMSans-Medium", size: 17)).foregroundColor(.deepNavy)
                         }
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("Add to list") {
-                                saveReviewedRecipe(recipe)
-                            }
-                            .font(.custom("DMSans-Medium", size: 16))
-                            .foregroundColor(.oceanTeal)
+                            Button("Add to list") { saveReviewedRecipe(recipe) }
+                                .font(.custom("DMSans-Medium", size: 16)).foregroundColor(.oceanTeal)
                         }
                     }
                 }
             }
         }
-        .sheet(isPresented: $showRecipeBuilder) {
-            RecipeBuilderView()
+        .sheet(isPresented: $showRecipeBuilder) { RecipeBuilderView() }
+        .sheet(item: $viewingRecipe) { recipe in
+            MemoryDetailView(memory: recipe)
         }
         .alert("Save List", isPresented: $showSaveSheet) {
             TextField("e.g. Weekly Meals, Sunday Shop...", text: $saveListName)
             Button("Save") {
                 let trimmed = saveListName.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.isEmpty else { return }
-                let list = GroceryList(
-                    name: trimmed,
-                    listType: listType.rawValue,
-                    memoryIds: Array(selectedMemoryIds),
-                    extraItems: extraItems
-                )
+                let list = GroceryList(name: trimmed, listType: listType.rawValue, memoryIds: Array(selectedMemoryIds), extraItems: extraItems)
                 modelContext.insert(list)
             }
             Button("Cancel", role: .cancel) {}
@@ -851,12 +812,7 @@ struct GroceryModeView: View {
             Button("Create") {
                 let trimmed = newCustomListName.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.isEmpty else { return }
-                let list = GroceryList(
-                    name: trimmed,
-                    listType: "custom",
-                    memoryIds: [],
-                    extraItems: []
-                )
+                let list = GroceryList(name: trimmed, listType: "custom", memoryIds: [], extraItems: [])
                 modelContext.insert(list)
                 activeCustomListId = list.id
                 extraItems = []
@@ -954,6 +910,28 @@ struct GroceryModeView: View {
             ToolbarItem(placement: .primaryAction) {
                 ShareLink(item: shareText) {
                     Image(systemName: "square.and.arrow.up").font(.system(size: 15)).foregroundColor(.oceanTeal)
+                }
+            }
+        }
+        // AI resolves "Other" items when user switches to By Section
+        .onChange(of: groupByAisle) { _, isGrouped in
+            guard isGrouped else { return }
+            let otherItems = extraItems.filter { item in
+                guard aiAisleOverrides[item] == nil else { return false }
+                let lower = item.lowercased()
+                switch listType {
+                case .grocery: return groceryCategory(for: lower) == "📦 Other"
+                case .hardware: return hardwareCategory(for: lower) == "📦 Other"
+                case .warehouse: return warehouseCategory(for: lower) == "📦 Other"
+                }
+            }
+            guard !otherItems.isEmpty else { return }
+            Task {
+                let resolved = await AppleIntelligenceService.shared.resolveAisles(for: otherItems)
+                await MainActor.run {
+                    for (item, aisle) in resolved {
+                        aiAisleOverrides[item] = aisle
+                    }
                 }
             }
         }
@@ -1250,6 +1228,10 @@ struct GroceryModeView: View {
     }
 
     private func aisleCategory(for item: String) -> String {
+        // AI override first — covers items like tofu, kimchi, tempeh
+        if let override = aiAisleOverrides[item] {
+            return aisleDisplayLabel(for: override)
+        }
         let lower = item.lowercased()
         switch listType {
         case .grocery: return groceryCategory(for: lower)
@@ -1258,11 +1240,49 @@ struct GroceryModeView: View {
         }
     }
 
+    private func aisleDisplayLabel(for aisle: String) -> String {
+        switch listType {
+        case .grocery:
+            let map: [String: String] = [
+                "Produce": "🥬 Produce", "Meat": "🥩 Meat", "Seafood": "🐟 Seafood",
+                "Dairy & Eggs": "🥛 Dairy & Eggs", "Deli & Prepared": "🧀 Deli & Prepared",
+                "Bakery & Bread": "🍞 Bakery & Bread", "Frozen": "❄️ Frozen",
+                "Canned & Jarred": "🥫 Canned & Jarred", "Pasta Rice & Grains": "🌾 Pasta, Rice & Grains",
+                "Breakfast": "🥣 Breakfast", "Snacks": "🍿 Snacks", "Beverages": "🥤 Beverages",
+                "Beer Wine & Spirits": "🍷 Beer, Wine & Spirits", "Condiments & Sauces": "🫙 Condiments & Sauces",
+                "Oils & Vinegars": "🫒 Oils & Vinegars", "Baking & Spices": "🧂 Baking & Spices",
+                "Supplements": "💊 Supplements", "Body Care": "🧴 Body Care",
+                "Household": "🏠 Household", "Pet": "🐾 Pet"
+            ]
+            return map[aisle] ?? "📦 Other"
+        case .hardware:
+            let map: [String: String] = [
+                "Tools & Equipment": "🔨 Tools & Equipment", "Lumber & Building": "🪵 Lumber & Building",
+                "Paint & Supplies": "🎨 Paint & Supplies", "Plumbing": "🔧 Plumbing",
+                "Electrical": "⚡ Electrical", "Flooring & Tile": "🏠 Flooring & Tile",
+                "Garden & Outdoor": "🌿 Garden & Outdoor", "Hardware & Fasteners": "🔩 Hardware & Fasteners",
+                "Storage & Organization": "📦 Storage & Organization", "Safety & Security": "🔒 Safety & Security"
+            ]
+            return map[aisle] ?? "📦 Other"
+        case .warehouse:
+            let map: [String: String] = [
+                "Meat & Seafood": "🥩 Meat & Seafood", "Dairy & Refrigerated": "🥛 Dairy & Refrigerated",
+                "Frozen Foods": "❄️ Frozen Foods", "Pantry & Canned": "🥫 Pantry & Canned",
+                "Beverages": "🥤 Beverages", "Snacks & Candy": "🍿 Snacks & Candy",
+                "Household & Cleaning": "🏠 Household & Cleaning", "Health & Beauty": "🧴 Health & Beauty",
+                "Vitamins & Supplements": "💊 Vitamins & Supplements", "Electronics & Tech": "💻 Electronics & Tech",
+                "Clothing & Apparel": "👕 Clothing & Apparel", "Sports & Outdoors": "🏋️ Sports & Outdoors",
+                "Pet Supplies": "🐾 Pet Supplies"
+            ]
+            return map[aisle] ?? "📦 Other"
+        }
+    }
+
     private func groceryCategory(for lower: String) -> String {
         let produce = ["apple", "apples", "banana", "bananas", "orange", "oranges", "lemon", "lemons", "lime", "limes", "grape", "grapes", "strawberry", "strawberries", "blueberry", "blueberries", "raspberry", "raspberries", "blackberry", "blackberries", "cranberry", "cranberries", "gooseberry", "gooseberries", "cherry", "cherries", "berry", "berries", "mango", "mangoes", "pineapple", "peach", "peaches", "pear", "pears", "plum", "plums", "watermelon", "cantaloupe", "honeydew", "kiwi", "avocado", "avocados", "tomato", "tomatoes", "cucumber", "cucumbers", "zucchini", "squash", "pepper", "peppers", "jalapen", "onion", "onions", "shallot", "shallots", "garlic", "ginger", "carrot", "carrots", "celery", "broccoli", "cauliflower", "cabbage", "kale", "spinach", "lettuce", "arugula", "romaine", "chard", "beet", "beets", "turnip", "turnips", "parsnip", "parsnips", "potato", "potatoes", "sweet potato", "sweet potatoes", "yam", "yams", "corn", "mushroom", "mushrooms", "asparagus", "artichoke", "artichokes", "brussels", "eggplant", "leek", "leeks", "fennel", "radish", "radishes", "bok choy", "daikon", "scallion", "scallions", "green onion", "green onions", "chive", "chives", "cilantro", "parsley", "basil", "mint", "thyme", "rosemary", "sage", "dill", "oregano", "herb", "herbs", "sprout", "sprouts", "snap pea", "snap peas", "green bean", "green beans", "edamame", "plantain", "plantains", "papaya", "guava", "coconut", "fig", "figs", "date", "dates", "pomegranate", "pomegranates", "persimmon", "persimmons", "lychee", "tarragon", "watercress", "endive", "radicchio", "microgreen", "microgreens"]
         let meat = ["chicken", "beef", "pork", "lamb", "turkey", "veal", "duck", "bison", "venison", "steak", "ground beef", "ground turkey", "ground chicken", "breast", "thigh", "drumstick", "wing", "tenderloin", "loin", "rib", "chop", "roast", "sausage", "bacon", "ham", "prosciutto", "pancetta", "guanciale", "chorizo", "bratwurst", "hot dog", "meatball", "burger", "patty", "brisket", "chuck", "sirloin", "flank", "skirt steak", "ribeye", "filet", "short rib", "salami", "pepperoni", "kielbasa", "andouille"]
         let seafood = ["fish", "salmon", "tuna", "cod", "halibut", "tilapia", "sea bass", "mahi", "snapper", "trout", "sardine", "anchovy", "herring", "mackerel", "shrimp", "prawn", "lobster", "crab", "scallop", "clam", "mussel", "oyster", "squid", "octopus", "calamari", "seafood", "lox", "branzino", "swordfish", "catfish", "pollock", "sole", "flounder", "monkfish", "ahi"]
-        let dairy = ["milk", "oat milk", "almond milk", "soy milk", "cream", "half and half", "heavy cream", "sour cream", "cream cheese", "butter", "ghee", "yogurt", "greek yogurt", "kefir", "cheese", "cheddar", "mozzarella", "parmesan", "parmigiano", "pecorino", "brie", "gouda", "gruyere", "swiss", "provolone", "feta", "ricotta", "cottage cheese", "egg", "whipped cream", "creme fraiche", "dairy", "manchego", "havarti", "colby", "monterey jack", "asiago", "romano", "camembert", "gorgonzola", "burrata"]
+        let dairy = ["milk", "oat milk", "almond milk", "soy milk", "cream", "half and half", "heavy cream", "sour cream", "cream cheese", "butter", "ghee", "yogurt", "greek yogurt", "kefir", "cheese", "cheddar", "mozzarella", "parmesan", "parmigiano", "pecorino", "brie", "gouda", "gruyere", "swiss", "provolone", "feta", "ricotta", "cottage cheese", "egg", "whipped cream", "creme fraiche", "dairy", "manchego", "havarti", "colby", "monterey jack", "pepper jack", "asiago", "romano", "camembert", "gorgonzola", "burrata"]
         let deli = ["deli", "lunch meat", "pastrami", "corned beef", "mortadella", "bologna", "rotisserie", "sushi", "hummus", "tzatziki", "guacamole", "pate", "smoked salmon", "charcuterie", "prepared food", "ready to eat"]
         let bakery = ["bread", "sourdough", "baguette", "ciabatta", "focaccia", "roll", "bun", "croissant", "bagel", "english muffin", "pita", "naan", "flatbread", "tortilla", "wrap", "muffin", "scone", "danish", "brownie", "donut", "doughnut", "pretzel bread", "challah", "rye bread", "brioche", "pumpernickel", "multigrain"]
         let frozen = ["frozen", "ice cream", "gelato", "sorbet", "popsicle", "frozen pizza", "frozen meal", "frozen vegetable", "frozen fruit", "frozen shrimp", "frozen fish", "frozen chicken", "frozen waffle", "frozen burrito", "frozen dumpling", "acai pack"]
@@ -1280,15 +1300,21 @@ struct GroceryModeView: View {
         let household = ["paper towel", "toilet paper", "tissue", "trash bag", "garbage bag", "zip lock", "ziploc", "foil", "aluminum foil", "plastic wrap", "parchment paper", "dish soap", "dishwasher pod", "laundry detergent", "fabric softener", "bleach", "sponge", "cleaning spray", "windex", "lysol", "hand sanitizer", "candle", "batteries", "light bulb", "dryer sheet", "dish tab"]
         let pet = ["dog food", "cat food", "pet food", "dog treat", "cat treat", "kibble", "cat litter", "dog toy", "pet supplement", "flea treatment", "heartworm", "puppy", "kitten food", "wet food pet", "pee pad", "catnip"]
 
+        // Spice compounds must be checked before produce to prevent "garlic", "onion", "pepper" matching produce
+        let spiceOverrides = ["black pepper", "white pepper", "garlic powder", "onion powder", "garlic salt", "onion salt", "chili powder", "red pepper flake", "pepper flake", "cayenne pepper"]
+        if spiceOverrides.contains(where: { lower.contains($0) }) { return "🧂 Baking & Spices" }
+
+        // Frozen and canned must be checked before produce to prevent "tomato", "corn", etc. matching produce
+        if frozen.contains(where: { lower.contains($0) }) { return "❄️ Frozen" }
+        if canned.contains(where: { lower.contains($0) }) { return "🥫 Canned & Jarred" }
+
         if produce.contains(where: { lower.contains($0) }) { return "🥬 Produce" }
         if meat.contains(where: { lower.contains($0) }) { return "🥩 Meat" }
         if seafood.contains(where: { lower.contains($0) }) { return "🐟 Seafood" }
         if dairy.contains(where: { lower.contains($0) }) { return "🥛 Dairy & Eggs" }
         if deli.contains(where: { lower.contains($0) }) { return "🧀 Deli & Prepared" }
         if bakery.contains(where: { lower.contains($0) }) { return "🍞 Bakery & Bread" }
-        if frozen.contains(where: { lower.contains($0) }) { return "❄️ Frozen" }
         if oils.contains(where: { lower.contains($0) }) { return "🫒 Oils & Vinegars" }
-        if canned.contains(where: { lower.contains($0) }) { return "🥫 Canned & Jarred" }
         if pasta.contains(where: { lower.contains($0) }) { return "🌾 Pasta, Rice & Grains" }
         if breakfast.contains(where: { lower.contains($0) }) { return "🥣 Breakfast" }
         if snacks.contains(where: { lower.contains($0) }) { return "🍿 Snacks" }
@@ -1427,27 +1453,6 @@ struct GroceryModeView: View {
         }
     }
 
-    private func processVoiceItems(_ transcript: String) {
-        let firstPass = transcript
-            .components(separatedBy: ",")
-            .flatMap { $0.components(separatedBy: " and ") }
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-
-        var finalItems: [String] = []
-        for chunk in firstPass {
-            finalItems.append(contentsOf: extractItems(from: chunk))
-        }
-
-        for item in finalItems {
-            let trimmed = item.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty, trimmed.count > 1 else { continue }
-            let capitalized = trimmed.prefix(1).uppercased() + trimmed.dropFirst().lowercased()
-            if !extraItems.contains(capitalized) { extraItems.append(capitalized) }
-        }
-        autoSaveToday()
-    }
-
     private func extractItems(from chunk: String) -> [String] {
         let words = chunk.components(separatedBy: " ").filter { !$0.isEmpty }
         let hasNumber = chunk.range(of: #"\d"#, options: .regularExpression) != nil
@@ -1489,12 +1494,7 @@ struct GroceryModeView: View {
             existing.memoryIds = Array(selectedMemoryIds).map { $0.uuidString }
             existing.extraItems = extraItems
         } else {
-            let list = GroceryList(
-                name: todayName,
-                listType: listType.rawValue,
-                memoryIds: Array(selectedMemoryIds),
-                extraItems: extraItems
-            )
+            let list = GroceryList(name: todayName, listType: listType.rawValue, memoryIds: Array(selectedMemoryIds), extraItems: extraItems)
             modelContext.insert(list)
         }
     }
@@ -1508,18 +1508,42 @@ struct GroceryModeView: View {
 
     // MARK: - Helpers
 
+    private func processVoiceItems(_ transcript: String) {
+        let firstPass = transcript
+            .components(separatedBy: ",")
+            .flatMap { $0.components(separatedBy: " and ") }
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        var finalItems: [String] = []
+        for chunk in firstPass {
+            finalItems.append(contentsOf: extractItems(from: chunk))
+        }
+
+        for item in finalItems {
+            let trimmed = item.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, trimmed.count > 1 else { continue }
+            let capitalized = trimmed.prefix(1).uppercased() + trimmed.dropFirst().lowercased()
+            if !extraItems.contains(capitalized) { extraItems.append(capitalized) }
+        }
+        autoSaveToday()
+    }
+
     private func addExtraItem() {
         let trimmed = newItemText.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        extraItems.append(trimmed); newItemText = ""; autoSaveToday()
+        extraItems.append(trimmed)
+        newItemText = ""
+        autoSaveToday()
     }
 
     private func addShoppingExtraItem() {
         let trimmed = shoppingNewItemText.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        extraItems.append(trimmed); shoppingNewItemText = ""; autoSaveToday()
+        extraItems.append(trimmed)
+        shoppingNewItemText = ""
+        autoSaveToday()
     }
-
     private func loadList(_ list: GroceryList) {
         if let type = ListType(rawValue: list.listType) { listType = type }
         selectedMemoryIds = Set(list.memoryUUIDs.filter { id in recipeMemories.contains { $0.id == id } })

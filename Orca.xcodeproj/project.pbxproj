@@ -68,7 +68,9 @@
 		878C03852F740EA90016D38A /* SportsMemoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03842F740EA40016D38A /* SportsMemoryService.swift */; };
 		878C03872F740EBB0016D38A /* SportsEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03862F740EB90016D38A /* SportsEchoView.swift */; };
 		878C03892F7411990016D38A /* ESPNService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03882F74118F0016D38A /* ESPNService.swift */; };
+		879CB27D2FB8F02D00CA1494 /* .env in Resources */ = {isa = PBXBuildFile; fileRef = 879CB27C2FB8F01B00CA1494 /* .env */; };
 		879E5B2E2F8C933D0017738D /* RecipeBuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 879E5B2D2F8C93330017738D /* RecipeBuilderView.swift */; };
+		87A1B2C3D4E5F6A7B8C9D101 /* RecipeInstructionEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A1B2C3D4E5F6A7B8C9D100 /* RecipeInstructionEditorView.swift */; };
 		87BBD7A52F805A4900CB8A33 /* WeatherDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87BBD7A42F805A4200CB8A33 /* WeatherDetailView.swift */; };
 		87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */; };
 		87CD0AE12F52917B00CAAB4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B932F4EB2FB0058324F /* Config.swift */; };
@@ -192,7 +194,9 @@
 		878C03842F740EA40016D38A /* SportsMemoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsMemoryService.swift; sourceTree = "<group>"; };
 		878C03862F740EB90016D38A /* SportsEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsEchoView.swift; sourceTree = "<group>"; };
 		878C03882F74118F0016D38A /* ESPNService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNService.swift; sourceTree = "<group>"; };
+		879CB27C2FB8F01B00CA1494 /* .env */ = {isa = PBXFileReference; lastKnownFileType = text; path = .env; sourceTree = "<group>"; };
 		879E5B2D2F8C93330017738D /* RecipeBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeBuilderView.swift; sourceTree = "<group>"; };
+		87A1B2C3D4E5F6A7B8C9D100 /* RecipeInstructionEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeInstructionEditorView.swift; sourceTree = "<group>"; };
 		87BBD7A42F805A4200CB8A33 /* WeatherDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherDetailView.swift; sourceTree = "<group>"; };
 		87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseManager.swift; sourceTree = "<group>"; };
@@ -234,6 +238,11 @@
 			path = OrcaUITests;
 			sourceTree = "<group>";
 		};
+		8788DA3F2FB2BA57004DD77D /* AI */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AI;
+			sourceTree = "<group>";
+		};
 		87BBD7782F7A121900CB8A33 /* People */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = People;
@@ -271,6 +280,7 @@
 		873C1B522F4EA59D0058324F = {
 			isa = PBXGroup;
 			children = (
+				8788DA3F2FB2BA57004DD77D /* AI */,
 				87BBD7782F7A121900CB8A33 /* People */,
 				873C1B902F4EB2D70058324F /* Resources */,
 				873C1B8F2F4EB2C80058324F /* Components */,
@@ -283,6 +293,7 @@
 				873C1B772F4EA59E0058324F /* OrcaUITests */,
 				87CD0AE82F529B4700CAAB4D /* Frameworks */,
 				873C1B5C2F4EA59D0058324F /* Products */,
+				879CB27C2FB8F01B00CA1494 /* .env */,
 			);
 			sourceTree = "<group>";
 		};
@@ -408,6 +419,7 @@
 			children = (
 				8788DA242FA37EBB004DD77D /* SonarAnimationView.swift */,
 				879E5B2D2F8C93330017738D /* RecipeBuilderView.swift */,
+				87A1B2C3D4E5F6A7B8C9D100 /* RecipeInstructionEditorView.swift */,
 				878C03722F67A67E0016D38A /* RecipeCaptureView.swift */,
 				87CD0AED2F57300500CAAB4D /* PhotoCaptureView.swift */,
 				872F726E2F4FF50B000A4AE3 /* TypeCaptureView.swift */,
@@ -516,6 +528,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				873C1B5D2F4EA59D0058324F /* Orca */,
+				8788DA3F2FB2BA57004DD77D /* AI */,
 				87BBD7782F7A121900CB8A33 /* People */,
 			);
 			name = Orca;
@@ -629,6 +642,7 @@
 				872F724A2F4FCF21000A4AE3 /* InstrumentSans-VariableFont_wdth,wght.ttf in Resources */,
 				872F722A2F4ED482000A4AE3 /* Assets.xcassets in Resources */,
 				872F724D2F4FCF33000A4AE3 /* DMSans-VariableFont_opsz,wght.ttf in Resources */,
+				879CB27D2FB8F02D00CA1494 /* .env in Resources */,
 				872F724E2F4FCF33000A4AE3 /* DMSans-Italic-VariableFont_opsz,wght.ttf in Resources */,
 				872F72482F4FCF15000A4AE3 /* InstrumentSans-Italic-VariableFont_wdth,wght.ttf in Resources */,
 				872F72552F4FCF41000A4AE3 /* DMMono-MediumItalic.ttf in Resources */,
@@ -711,6 +725,7 @@
 				87CD0AE42F52992800CAAB4D /* AuthService.swift in Sources */,
 				8729F53A2F7883F500B58E0B /* TravelDetailBlock.swift in Sources */,
 				879E5B2E2F8C933D0017738D /* RecipeBuilderView.swift in Sources */,
+				87A1B2C3D4E5F6A7B8C9D101 /* RecipeInstructionEditorView.swift in Sources */,
 				872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */,
 				872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */,
 				878C037F2F6F9F160016D38A /* GroceryList.swift in Sources */,
@@ -884,7 +899,7 @@
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -924,7 +939,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.4.1;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca.dev;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -950,7 +965,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -990,7 +1005,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.4.1;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
