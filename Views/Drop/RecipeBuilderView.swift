@@ -26,6 +26,8 @@ struct RecipeBuilderView: View {
     @FocusState private var titleFocused: Bool
     @FocusState private var ingredientFocused: Bool
     @FocusState private var instructionFocused: Bool
+    @FocusState private var focusedIngredientIndex: Int?
+    @FocusState private var focusedInstructionIndex: Int?
 
     var canSave: Bool {
         !recipeTitle.trimmingCharacters(in: .whitespaces).isEmpty && !ingredients.isEmpty
@@ -50,15 +52,17 @@ struct RecipeBuilderView: View {
 
                     // Ingredients section
                     Section {
-                        ForEach(ingredients, id: \.self) { ingredient in
+                        ForEach(ingredients.indices, id: \.self) { index in
                             HStack(spacing: 10) {
                                 Circle()
                                     .fill(Color.oceanTeal)
                                     .frame(width: 6, height: 6)
-                                Text(ingredient)
+                                TextField("Ingredient", text: $ingredients[index])
                                     .font(.custom("DMSans-Regular", size: 15))
                                     .foregroundColor(.deepNavy)
-                                Spacer()
+                                    .focused($focusedIngredientIndex, equals: index)
+                                    .submitLabel(.next)
+                                    .onSubmit { ingredientFocused = true }
                             }
                             .padding(.vertical, 2)
                         }
@@ -105,7 +109,7 @@ struct RecipeBuilderView: View {
                                 .font(.custom("DMSans-Regular", size: 12))
                                 .foregroundColor(.gray)
                         } else {
-                            Text("Swipe left to remove an ingredient.")
+                            Text("Tap to edit · swipe to delete")
                                 .font(.custom("DMSans-Regular", size: 12))
                                 .foregroundColor(.gray)
                         }
@@ -113,18 +117,18 @@ struct RecipeBuilderView: View {
 
                     // Instructions section
                     Section {
-                        ForEach(Array(instructions.enumerated()), id: \.offset) { index, step in
-                            HStack(alignment: .top, spacing: 10) {
+                        ForEach(instructions.indices, id: \.self) { index in
+                            HStack(alignment: .center, spacing: 10) {
                                 Text("\(index + 1).")
                                     .font(.custom("DMMono-Regular", size: 13))
                                     .foregroundColor(.oceanTeal)
                                     .frame(width: 20, alignment: .leading)
-                                    .padding(.top, 2)
-                                Text(step)
+                                TextField("Step \(index + 1)", text: $instructions[index])
                                     .font(.custom("DMSans-Regular", size: 15))
                                     .foregroundColor(.deepNavy)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Spacer()
+                                    .focused($focusedInstructionIndex, equals: index)
+                                    .submitLabel(.next)
+                                    .onSubmit { instructionFocused = true }
                             }
                             .padding(.vertical, 2)
                         }
@@ -132,19 +136,17 @@ struct RecipeBuilderView: View {
                             instructions.remove(atOffsets: indexSet)
                         }
 
-                        HStack(alignment: .top, spacing: 10) {
+                        HStack(alignment: .center, spacing: 10) {
                             Text("\(instructions.count + 1).")
                                 .font(.custom("DMMono-Regular", size: 13))
                                 .foregroundColor(.gray.opacity(0.4))
                                 .frame(width: 20, alignment: .leading)
-                                .padding(.top, 10)
-                            TextField("Add a step...", text: $newInstruction, axis: .vertical)
+                            TextField("Add a step...", text: $newInstruction)
                                 .font(.custom("DMSans-Regular", size: 15))
                                 .foregroundColor(.deepNavy)
                                 .submitLabel(.done)
                                 .focused($instructionFocused)
                                 .onSubmit { addInstruction() }
-                                .lineLimit(1...4)
                             if !newInstruction.isEmpty {
                                 Button { addInstruction() } label: {
                                     Text("Add")
@@ -152,7 +154,6 @@ struct RecipeBuilderView: View {
                                         .foregroundColor(.oceanTeal)
                                 }
                                 .buttonStyle(.plain)
-                                .padding(.top, 8)
                             }
                         }
                         .padding(.vertical, 2)
@@ -171,7 +172,7 @@ struct RecipeBuilderView: View {
                         }
                     } footer: {
                         if !instructions.isEmpty {
-                            Text("Swipe left to remove a step.")
+                            Text("Tap to edit · swipe to delete")
                                 .font(.custom("DMSans-Regular", size: 12))
                                 .foregroundColor(.gray)
                         }
