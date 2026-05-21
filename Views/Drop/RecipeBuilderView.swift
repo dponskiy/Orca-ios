@@ -266,14 +266,19 @@ struct RecipeBuilderView: View {
             echoEmoji: cookingEcho?.emoji ?? "🍳"
         )
 
+        var createdSubTasks: [SubTask] = []
         for (index, ingredient) in ingredients.enumerated() {
             let subTask = SubTask(memoryId: memory.id, text: ingredient, sortOrder: index)
             modelContext.insert(subTask)
+            createdSubTasks.append(subTask)
         }
 
         if let userId = authService.userId {
             Task {
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
+                for subTask in createdSubTasks {
+                    await SupabaseSyncService.shared.pushSubTask(subTask, userId: userId)
+                }
             }
         }
 

@@ -43,9 +43,11 @@ class SupabaseSyncService {
             try await upsertUser(userId: userId)
             try await syncEchos(userId: userId, context: context)
             try await syncMemories(userId: userId, context: context)
+            try await syncSubTasks(userId: userId, context: context)
             try await syncPings(userId: userId, context: context)
             try await syncPersons(userId: userId, context: context)
             try await syncGiftItems(userId: userId, context: context)
+            try await syncWatchlistItems(userId: userId, context: context)
             lastSyncDate = Date()
         } catch {
             syncError = error.localizedDescription
@@ -96,7 +98,6 @@ class SupabaseSyncService {
                 seenPingIds.insert(ping.id)
             }
         }
-        // Deduplicate gift items by personId + name + occasion
         let allGiftItems = try context.fetch(FetchDescriptor<GiftItem>())
         var seenGiftKeys = Set<String>()
         for item in allGiftItems.sorted(by: { $0.createdAt > $1.createdAt }) {
@@ -105,6 +106,16 @@ class SupabaseSyncService {
                 context.delete(item)
             } else {
                 seenGiftKeys.insert(key)
+            }
+        }
+        // Deduplicate watchlist items by id
+        let allWatchlistItems = try context.fetch(FetchDescriptor<WatchlistItem>())
+        var seenWatchlistIds = Set<UUID>()
+        for item in allWatchlistItems {
+            if seenWatchlistIds.contains(item.id) {
+                context.delete(item)
+            } else {
+                seenWatchlistIds.insert(item.id)
             }
         }
         try context.save()
@@ -183,7 +194,6 @@ class SupabaseSyncService {
             UserDefaults.standard.set(true, forKey: "orcaDidSeedDefaults")
         }
 
-        // Merge remote into local
         for remote in remoteEchos {
             guard let remoteId = UUID(uuidString: remote.id) else { continue }
 
@@ -216,7 +226,6 @@ class SupabaseSyncService {
 
         try context.save()
 
-        // Push any local echos not yet in remote
         let mergedEchos = try context.fetch(FetchDescriptor<Echo>())
         let remoteIds = Set(remoteEchos.map { $0.id })
         let newLocalEchos = mergedEchos.filter { !remoteIds.contains($0.id.uuidString) }
@@ -226,7 +235,6 @@ class SupabaseSyncService {
             try await supabase.from("echos").upsert(echoRows, onConflict: "id").execute()
         }
 
-        // Migration: patch any missing default echos for existing users
         try await patchMissingDefaultEchos(context: context, userId: userId)
 
         print("✅ Echos synced")
@@ -327,6 +335,53 @@ class SupabaseSyncService {
         print("✅ Memories synced")
     }
 
+    // MARK: - Sync SubTasks
+
+    private func syncSubTasks(userId: UUID, context: ModelContext) async throws {
+        let localSubTasks = try context.fetch(FetchDescriptor<SubTask>())
+
+        let rows = localSubTasks.reduce(into: [SubTaskRow]()) { result, st in
+            guard !result.contains(where: { $0.id == st.id.uuidString }) else { return }
+            result.append(SubTaskRow(
+                id: st.id.uuidString,
+                user_id: userId.uuidString,
+                memory_id: st.memoryId.uuidString,
+                text: st.text,
+                is_completed: st.isCompleted,
+                sort_order: st.sortOrder,
+                created_at: ISO8601DateFormatter().string(from: st.createdAt)
+            ))
+        }
+
+        if !rows.isEmpty {
+            try await supabase.from("sub_tasks").upsert(rows, onConflict: "id").execute()
+        }
+
+        let localIds = Set(localSubTasks.map { $0.id.uuidString })
+
+        let remoteSubTasks: [SubTaskRow] = try await supabase
+            .from("sub_tasks")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+
+        for remote in remoteSubTasks {
+            guard !localIds.contains(remote.id),
+                  let remoteId = UUID(uuidString: remote.id),
+                  let memoryId = UUID(uuidString: remote.memory_id) else { continue }
+
+            let st = SubTask(memoryId: memoryId, text: remote.text, sortOrder: remote.sort_order)
+            st.id = remoteId
+            st.isCompleted = remote.is_completed
+            if let c = remote.created_at { st.createdAt = ISO8601DateFormatter().date(from: c) ?? Date() }
+            context.insert(st)
+        }
+
+        try context.save()
+        print("✅ SubTasks synced")
+    }
+
     // MARK: - Sync Pings
 
     private func syncPings(userId: UUID, context: ModelContext) async throws {
@@ -404,6 +459,7 @@ class SupabaseSyncService {
 
         print("✅ Pings synced")
     }
+
     // MARK: - Sync Persons
 
     private func syncPersons(userId: UUID, context: ModelContext) async throws {
@@ -433,14 +489,12 @@ class SupabaseSyncService {
         let remotePersons: [PersonRow] = try await supabase
             .from("persons").select().eq("user_id", value: userId.uuidString).execute().value
 
-        // Deduplicate remote by id before inserting
         let localIds = Set(localPersons.map { $0.id.uuidString })
         let localNames = Set(localPersons.map { $0.name.lowercased() })
 
         for remote in remotePersons {
             guard !localIds.contains(remote.id),
                   let remoteId = UUID(uuidString: remote.id) else { continue }
-            // Skip if we already have someone with this name locally — prevents ghost duplicates
             guard !localNames.contains(remote.name.lowercased()) else { continue }
             let p = Person(name: remote.name, relationship: remote.relationship)
             p.id = remoteId
@@ -490,7 +544,6 @@ class SupabaseSyncService {
                   let remoteId = UUID(uuidString: remote.id),
                   let personId = UUID(uuidString: remote.person_id) else { continue }
 
-            // Skip if identical gift already exists locally
             let alreadyExists = localItems.contains {
                 $0.personId == personId &&
                 $0.name.lowercased() == remote.name.lowercased() &&
@@ -510,6 +563,69 @@ class SupabaseSyncService {
         }
         print("✅ Gift items synced")
     }
+
+    // MARK: - Sync Watchlist Items
+
+    private func syncWatchlistItems(userId: UUID, context: ModelContext) async throws {
+        let localItems = try context.fetch(FetchDescriptor<WatchlistItem>())
+        print("🔍 Watchlist sync — local items count: \(localItems.count)")
+
+        let rows = localItems.reduce(into: [WatchlistItemRow]()) { result, item in
+            guard !result.contains(where: { $0.id == item.id.uuidString }) else { return }
+            result.append(WatchlistItemRow(
+                id: item.id.uuidString,
+                user_id: userId.uuidString,
+                title: item.title,
+                item_type: item.itemType,
+                streaming_service: item.streamingService,
+                status: item.status,
+                rating: item.rating,
+                comment: item.comment,
+                created_at: ISO8601DateFormatter().string(from: item.createdAt),
+                completed_at: item.completedAt.map { ISO8601DateFormatter().string(from: $0) },
+                updated_at: ISO8601DateFormatter().string(from: item.updatedAt)
+            ))
+        }
+
+        if !rows.isEmpty {
+            try await supabase.from("watchlist_items").upsert(rows, onConflict: "id").execute()
+        }
+
+        let localIds = Set(localItems.map { $0.id.uuidString })
+
+        let remoteItems: [WatchlistItemRow] = try await supabase
+            .from("watchlist_items")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+            .value
+
+        let localTitles = Set(localItems.map { $0.title.lowercased() })
+
+        for remote in remoteItems {
+            guard !localIds.contains(remote.id),
+                  let remoteId = UUID(uuidString: remote.id) else { continue }
+            // Skip if we already have an item with this title locally
+            guard !localTitles.contains(remote.title.lowercased()) else { continue }
+
+            let item = WatchlistItem(
+                title: remote.title,
+                itemType: remote.item_type,
+                streamingService: remote.streaming_service
+            )
+            item.id = remoteId
+            item.status = remote.status
+            item.rating = remote.rating
+            item.comment = remote.comment
+            if let c = remote.created_at { item.createdAt = ISO8601DateFormatter().date(from: c) ?? Date() }
+            if let u = remote.updated_at { item.updatedAt = ISO8601DateFormatter().date(from: u) ?? Date() }
+            if let ca = remote.completed_at { item.completedAt = ISO8601DateFormatter().date(from: ca) }
+            context.insert(item)
+        }
+
+        print("✅ Watchlist items synced")
+    }
+
     // MARK: - Push Single Memory
 
     func pushMemory(_ memory: Memory, userId: UUID) async {
@@ -589,6 +705,37 @@ class SupabaseSyncService {
         }
     }
 
+    // MARK: - Push Single SubTask
+
+    func pushSubTask(_ subTask: SubTask, userId: UUID) async {
+        let row = SubTaskRow(
+            id: subTask.id.uuidString,
+            user_id: userId.uuidString,
+            memory_id: subTask.memoryId.uuidString,
+            text: subTask.text,
+            is_completed: subTask.isCompleted,
+            sort_order: subTask.sortOrder,
+            created_at: ISO8601DateFormatter().string(from: subTask.createdAt)
+        )
+        do {
+            try await supabase.from("sub_tasks").upsert(row, onConflict: "id").execute()
+            print("✅ SubTask pushed: \(subTask.id)")
+        } catch {
+            print("❌ Failed to push subTask: \(error)")
+        }
+    }
+
+    // MARK: - Delete SubTask
+
+    func deleteSubTask(id: UUID) async {
+        do {
+            try await supabase.from("sub_tasks").delete().eq("id", value: id.uuidString).execute()
+            print("✅ SubTask deleted from Supabase: \(id)")
+        } catch {
+            print("❌ Failed to delete subTask: \(error)")
+        }
+    }
+
     // MARK: - Delete Memory
 
     func deleteMemory(id: UUID) async {
@@ -603,6 +750,7 @@ class SupabaseSyncService {
             print("❌ Failed to delete memory: \(error)")
         }
     }
+
     // MARK: - Delete Person
 
     func deletePerson(id: UUID) async {
@@ -632,6 +780,7 @@ class SupabaseSyncService {
             print("❌ Failed to delete gift item: \(error)")
         }
     }
+
     // MARK: - Delete Echo
 
     func deleteEcho(id: UUID) async {
@@ -644,6 +793,21 @@ class SupabaseSyncService {
             print("✅ Echo deleted from Supabase: \(id)")
         } catch {
             print("❌ Failed to delete echo: \(error)")
+        }
+    }
+
+    // MARK: - Delete Watchlist Item
+
+    func deleteWatchlistItem(id: UUID) async {
+        do {
+            try await supabase
+                .from("watchlist_items")
+                .delete()
+                .eq("id", value: id.uuidString)
+                .execute()
+            print("✅ Watchlist item deleted from Supabase: \(id)")
+        } catch {
+            print("❌ Failed to delete watchlist item: \(error)")
         }
     }
 
@@ -728,6 +892,7 @@ struct PingRow: Codable {
     let last_fired: String?
     let created_at: String
 }
+
 struct PersonRow: Codable {
     let id: String
     let user_id: String
@@ -736,8 +901,8 @@ struct PersonRow: Codable {
     let birthday: String?
     let notes: String?
     let linked_memory_ids: [String]?
-    let occasion_budgets: [String: Double]?   // ← replaces birthday_budget
-    let custom_occasions: [String]?            // ← new
+    let occasion_budgets: [String: Double]?
+    let custom_occasions: [String]?
     let created_at: String?
     let updated_at: String?
 }
@@ -753,5 +918,29 @@ struct GiftItemRow: Codable {
     let year: Int
     let linked_memory_id: String?
     let url: String?
+    let created_at: String?
+}
+
+struct WatchlistItemRow: Codable {
+    let id: String
+    let user_id: String
+    let title: String
+    let item_type: String
+    let streaming_service: String?
+    let status: String
+    let rating: Int?
+    let comment: String?
+    let created_at: String?
+    let completed_at: String?
+    let updated_at: String?
+}
+
+struct SubTaskRow: Codable {
+    let id: String
+    let user_id: String
+    let memory_id: String
+    let text: String
+    let is_completed: Bool
+    let sort_order: Int
     let created_at: String?
 }
