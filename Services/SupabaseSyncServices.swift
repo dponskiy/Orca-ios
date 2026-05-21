@@ -342,8 +342,15 @@ class SupabaseSyncService {
     private func syncSubTasks(userId: UUID, context: ModelContext) async throws {
         let localSubTasks = try context.fetch(FetchDescriptor<SubTask>())
 
+        // Only push SubTasks whose parent Memory exists locally (= was already pushed to Supabase
+        // by syncMemories). This prevents foreign key violations when a memory hasn't synced yet
+        // or a SubTask outlived a deleted memory.
+        let localMemories = try context.fetch(FetchDescriptor<Memory>())
+        let validMemoryIds = Set(localMemories.map { $0.id.uuidString.lowercased() })
+
         let rows = localSubTasks.reduce(into: [SubTaskRow]()) { result, st in
             guard !result.contains(where: { $0.id == st.id.uuidString }) else { return }
+            guard validMemoryIds.contains(st.memoryId.uuidString.lowercased()) else { return }
             result.append(SubTaskRow(
                 id: st.id.uuidString,
                 user_id: userId.uuidString,
