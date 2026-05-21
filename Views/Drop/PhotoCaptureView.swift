@@ -10,6 +10,8 @@ import SwiftData
 import PhotosUI
 import Vision
 import CoreSpotlight
+import Speech
+import AVFoundation
 
 struct PhotoCaptureView: View {
     @Binding var isPresented: Bool
@@ -29,8 +31,15 @@ struct PhotoCaptureView: View {
     @State private var travelResult: TravelParseResult? = nil
     @State private var showTravelPreview = false
     @State private var bannerText: String = ""
+    @State private var photoNote: String = ""
+    @State private var isRecordingNote = false
+    @FocusState private var noteFocused: Bool
 
     private let sonarEngine = SonarEngine()
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private let audioEngine = AVAudioEngine()
+    @State private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    @State private var recognitionTask: SFSpeechRecognitionTask?
 
     private func updateLastMemoryEcho(_ echoId: UUID) {
         let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
@@ -183,9 +192,11 @@ struct PhotoCaptureView: View {
             VStack(spacing: 16) {
                 HStack {
                     Button("Retake") {
+                        stopNoteRecording()
                         selectedImage = nil; selectedItem = nil
                         extractedText = ""; hasExtracted = false
                         travelResult = nil; showTravelPreview = false
+                        photoNote = ""
                     }
                     .font(.custom("DMSans-Regular", size: 16)).foregroundColor(.white.opacity(0.6))
                     Spacer()
@@ -196,16 +207,37 @@ struct PhotoCaptureView: View {
 
                 Image(uiImage: image)
                     .resizable().aspectRatio(contentMode: .fit)
-                    .frame(maxHeight: 300).clipShape(RoundedRectangle(cornerRadius: 12)).padding(.horizontal, 20)
+                    .frame(maxHeight: 260).clipShape(RoundedRectangle(cornerRadius: 12)).padding(.horizontal, 20)
+
+                // Note + mic field
+                HStack(spacing: 10) {
+                    TextField("Add a note or reminder...", text: $photoNote)
+                        .font(.custom("DMSans-Regular", size: 15))
+                        .foregroundColor(.white)
+                        .focused($noteFocused)
+                        .submitLabel(.done)
+                    Button {
+                        if isRecordingNote { stopNoteRecording() } else { startNoteRecording() }
+                    } label: {
+                        Image(systemName: isRecordingNote ? "stop.circle.fill" : "mic.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(isRecordingNote ? .red : .oceanTeal)
+                            .symbolEffect(.pulse, isActive: isRecordingNote)
+                    }
+                }
+                .padding(14)
+                .background(Color.white.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 20)
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
                         Image(systemName: "text.viewfinder").font(.system(size: 13)).foregroundColor(.oceanTeal)
-                        Text("Extracted Text").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal)
+                        Text("Extract text from image").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal)
                         Spacer()
                         if !hasExtracted {
                             Button { extractTextFromImage() } label: {
-                                Text("Extract Text").font(.custom("DMSans-Medium", size: 13))
+                                Text("Extract").font(.custom("DMSans-Medium", size: 13))
                                     .foregroundColor(.white).padding(.horizontal, 12).padding(.vertical, 6)
                                     .background(Color.oceanTeal).clipShape(Capsule())
                             }
@@ -474,10 +506,19 @@ struct PhotoCaptureView: View {
     // MARK: - Save Regular Memory
 
     private func saveMemory() {
-        let textToSave = extractedText.isEmpty ? "📷 Photo" : extractedText
-        sonarResult = sonarEngine.process(text: textToSave, echos: echos)
+        stopNoteRecording()
+        // Combine note + extracted text; note drives SonarEngine (reminders), extracted text is context
+        let note = photoNote.trimmingCharacters(in: .whitespaces)
+        let sonarInput = note.isEmpty ? (extractedText.isEmpty ? "📷 Photo" : extractedText) : note
+        let fullText: String = {
+            if note.isEmpty { return extractedText.isEmpty ? "📷 Photo" : extractedText }
+            if extractedText.isEmpty { return note }
+            return "\(note)\n\n\(extractedText)"
+        }()
+
+        sonarResult = sonarEngine.process(text: sonarInput, echos: echos)
         let echoId = sonarResult?.echoId ?? echos.first?.id ?? UUID()
-        let memory = Memory(text: textToSave, echoId: echoId, captureType: .screenshot)
+        let memory = Memory(text: fullText, echoId: echoId, captureType: .screenshot)
         memory.tags = sonarResult?.tags ?? []
         memory.detectedDate = sonarResult?.detectedDate
         memory.endDate = sonarResult?.endDate
@@ -486,6 +527,13 @@ struct PhotoCaptureView: View {
         memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
         memory.isActionable = sonarResult?.isActionable ?? false
         memory.estimatedMinutes = sonarResult?.estimatedMinutes
+
+        // Save the actual image
+        if let image = selectedImage,
+           let compressed = image.jpegData(compressionQuality: 0.6) {
+            memory.imageData = compressed
+        }
+
         modelContext.insert(memory)
         SpotlightService.shared.indexMemory(memory, echoName: sonarResult?.echoName ?? "Notes", echoEmoji: echos.first { $0.id == memory.echoId }?.emoji ?? "📝")
         NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
@@ -521,6 +569,58 @@ struct PhotoCaptureView: View {
 
         bannerText = textToSave
         withAnimation(.spring(duration: 0.4)) { showBanner = true }
+    }
+
+    // MARK: - Note Voice Recording
+
+    private func startNoteRecording() {
+        SFSpeechRecognizer.requestAuthorization { status in
+            guard status == .authorized else { return }
+            DispatchQueue.main.async {
+                do {
+                    let session = AVAudioSession.sharedInstance()
+                    try session.setCategory(.record, mode: .measurement, options: .duckOthers)
+                    try session.setActive(true, options: .notifyOthersOnDeactivation)
+
+                    recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+                    guard let request = recognitionRequest else { return }
+                    request.shouldReportPartialResults = true
+
+                    let inputNode = audioEngine.inputNode
+                    let format = inputNode.outputFormat(forBus: 0)
+                    inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+                        request.append(buffer)
+                    }
+
+                    audioEngine.prepare()
+                    try audioEngine.start()
+                    isRecordingNote = true
+
+                    recognitionTask = speechRecognizer?.recognitionTask(with: request) { result, error in
+                        if let result = result {
+                            photoNote = result.bestTranscription.formattedString
+                        }
+                        if error != nil || (result?.isFinal == true) {
+                            stopNoteRecording()
+                        }
+                    }
+                } catch {
+                    print("❌ Note recording error: \(error)")
+                }
+            }
+        }
+    }
+
+    private func stopNoteRecording() {
+        guard isRecordingNote else { return }
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionRequest = nil
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        try? AVAudioSession.sharedInstance().setActive(false)
+        isRecordingNote = false
     }
 
     private func undoMemory() {
