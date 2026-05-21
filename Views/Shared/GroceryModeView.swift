@@ -168,7 +168,10 @@ struct GroceryModeView: View {
     private func subTasks(for memory: Memory) -> [SubTask] {
         let descriptor = FetchDescriptor<SubTask>(sortBy: [SortDescriptor(\.sortOrder)])
         let all = (try? modelContext.fetch(descriptor)) ?? []
-        return all.filter { $0.memoryId == memory.id }
+        var seen = Set<UUID>()
+        return all.filter { st in
+            st.memoryId == memory.id && seen.insert(st.id).inserted
+        }
     }
 
     private func visibleSubTasks(for memory: Memory) -> [SubTask] {
@@ -177,50 +180,59 @@ struct GroceryModeView: View {
 
     // MARK: - Share List
 
+    private struct SharedListPayload: Encodable {
+        let owner_id: String
+        let title: String
+        let items: [SharedListItem]
+
+        struct SharedListItem: Encodable {
+            let id: String
+            let text: String
+            let checked: Bool
+            let aisle: String
+        }
+    }
+
     private func createAndShareList() async {
         isCreatingShareLink = true
         defer { isCreatingShareLink = false }
 
-        // Build items array from selected memories + extra items
-        var items: [[String: Any]] = []
+        var payloadItems: [SharedListPayload.SharedListItem] = []
 
         for memory in selectedMemories {
             for subTask in visibleSubTasks(for: memory) {
                 let itemName = subTask.text
                 let aisle = aisleCategory(for: itemName.lowercased())
-                items.append([
-                    "id": subTask.id.uuidString,
-                    "text": itemName,
-                    "checked": checkedItems.contains(subTask.id),
-                    "aisle": aisle
-                ])
+                payloadItems.append(.init(
+                    id: subTask.id.uuidString,
+                    text: itemName,
+                    checked: checkedItems.contains(subTask.id),
+                    aisle: aisle
+                ))
             }
         }
         for (index, extra) in extraItems.enumerated() {
             let aisle = aisleCategory(for: extra.lowercased())
-            items.append([
-                "id": "extra-\(index)",
-                "text": extra,
-                "checked": checkedExtras.contains(extra),
-                "aisle": aisle
-            ])
+            payloadItems.append(.init(
+                id: "extra-\(index)",
+                text: extra,
+                checked: checkedExtras.contains(extra),
+                aisle: aisle
+            ))
         }
 
-        guard !items.isEmpty,
-              let userId = authService.userId,
-              let itemsData = try? JSONSerialization.data(withJSONObject: items),
-              let itemsJSON = String(data: itemsData, encoding: .utf8) else { return }
+        guard !payloadItems.isEmpty, let userId = authService.userId else { return }
 
-        let title = "\(navigationTitle) List"
+        let payload = SharedListPayload(
+            owner_id: userId.uuidString,
+            title: "\(navigationTitle) List",
+            items: payloadItems
+        )
 
         do {
             let result = try await SupabaseManager.shared.client
                 .from("shared_lists")
-                .insert([
-                    "owner_id": userId.uuidString,
-                    "title": title,
-                    "items": itemsJSON
-                ])
+                .insert(payload)
                 .select("id")
                 .single()
                 .execute()
@@ -989,9 +1001,17 @@ struct GroceryModeView: View {
                 Button("Done") { dismiss() }.foregroundColor(.oceanTeal)
             }
             ToolbarItem(placement: .primaryAction) {
-                ShareLink(item: shareText) {
-                    Image(systemName: "square.and.arrow.up").font(.system(size: 15)).foregroundColor(.oceanTeal)
+                Button {
+                    Task { await createAndShareList() }
+                } label: {
+                    if isCreatingShareLink {
+                        ProgressView().tint(.oceanTeal)
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 15)).foregroundColor(.oceanTeal)
+                    }
                 }
+                .disabled(isCreatingShareLink)
             }
         }
         // AI resolves "Other" items when user switches to By Section
@@ -1373,7 +1393,7 @@ struct GroceryModeView: View {
         let snacks = ["chip", "crisp", "cracker", "pretzel", "popcorn", "trail mix", "jerky", "rice cake", "pita chip", "tortilla chip", "nacho", "cookie", "candy", "chocolate bar", "dark chocolate", "gummy", "fruit snack", "nut mix", "snack", "almond", "cashew", "walnut", "pecan", "pistachio", "peanut", "macadamia", "pine nut", "hazelnut", "brazil nut", "sunflower seed", "pumpkin seed", "mixed nuts", "dried mango", "dried cranberry", "raisin", "dried apricot", "prune"]
         let beverages = ["water bottle", "sparkling water", "seltzer", "orange juice", "apple juice", "cranberry juice", "kombucha", "iced tea", "cold brew", "matcha drink", "lemonade", "soda", "energy drink", "sports drink", "coconut water", "smoothie drink", "juice box", "gatorade", "powerade", "coffee", "espresso", "coffee bean", "ground coffee", "instant coffee", "tea bag", "loose leaf tea", "green tea", "black tea", "herbal tea", "chamomile", "chai", "la croix", "pellegrino", "perrier"]
         let alcohol = ["beer", "wine", "red wine", "white wine", "rose", "champagne", "prosecco", "cava", "vodka", "whiskey", "bourbon", "gin", "rum", "tequila", "mezcal", "sake", "hard cider", "hard seltzer", "white claw", "truly", "spirits", "six pack", "ipa", "lager", "stout", "porter"]
-        let condiments = ["ketchup", "mustard", "mayo", "mayonnaise", "hot sauce", "sriracha", "tabasco", "soy sauce", "tamari", "worcestershire", "fish sauce", "oyster sauce", "hoisin", "teriyaki", "salad dressing", "vinaigrette", "ranch", "caesar dressing", "balsamic glaze", "bbq sauce", "buffalo sauce", "salsa", "pesto", "tahini", "miso", "harissa", "gochujang", "chili sauce", "steak sauce", "horseradish", "relish", "aioli", "coconut aminos", "ponzu", "sambal"]
+        let condiments = ["ketchup", "mustard", "mayo", "mayonnaise", "hot sauce", "sriracha", "tabasco", "soy sauce", "tamari", "worcestershire", "fish sauce", "oyster sauce", "hoisin", "teriyaki", "salad dressing", "vinaigrette", "ranch", "caesar dressing", "balsamic glaze", "bbq sauce", "buffalo sauce", "salsa", "pesto", "tahini", "miso", "harissa", "gochujang", "kochujang", "chili paste", "chili sauce", "steak sauce", "horseradish", "relish", "aioli", "coconut aminos", "ponzu", "sambal", "kimchi", "ssamjang", "doenjang", "fermented bean", "bean paste", "doubanjiang", "XO sauce", "black bean sauce", "hoisin sauce", "plum sauce", "sweet soy", "ketjap manis"]
         let oils = ["olive oil", "extra virgin", "vegetable oil", "canola oil", "coconut oil", "avocado oil", "sesame oil", "peanut oil", "grape seed oil", "sunflower oil", "vinegar", "balsamic", "apple cider vinegar", "rice vinegar", "white vinegar", "red wine vinegar", "sherry vinegar", "truffle oil"]
         let baking = ["sugar", "brown sugar", "powdered sugar", "baking powder", "baking soda", "yeast", "vanilla", "vanilla extract", "cocoa", "cocoa powder", "chocolate chip", "salt", "black pepper", "cumin", "paprika", "turmeric", "cinnamon", "nutmeg", "cardamom", "coriander", "cayenne", "red pepper flake", "chili powder", "curry powder", "garam masala", "italian seasoning", "bay leaf", "clove", "allspice", "star anise", "fennel seed", "poppy seed", "cornstarch", "arrowroot", "gelatin", "cream of tartar", "shortening", "lard", "cooking spray", "saffron", "sumac"]
         let supplements = ["vitamin", "supplement", "protein powder", "whey protein", "collagen", "probiotic", "omega", "fish oil", "multivitamin", "magnesium", "zinc", "iron supplement", "b12", "vitamin d", "melatonin", "creatine", "bcaa", "pre workout", "electrolyte", "ashwagandha", "spirulina", "greens powder"]
