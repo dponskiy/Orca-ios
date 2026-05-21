@@ -230,6 +230,14 @@ struct PhotoCaptureView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal, 20)
 
+                HStack(spacing: 5) {
+                    Image(systemName: "lock.fill").font(.system(size: 10))
+                    Text("Photo stored locally on device only")
+                        .font(.custom("DMSans-Regular", size: 12))
+                }
+                .foregroundColor(.white.opacity(0.35))
+                .padding(.horizontal, 24)
+
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
                         Image(systemName: "text.viewfinder").font(.system(size: 13)).foregroundColor(.oceanTeal)
