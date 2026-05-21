@@ -268,7 +268,8 @@ class SupabaseSyncService {
                 location_name: memory.locationName,
                 location_address: memory.locationAddress,
                 latitude: memory.latitude,
-                longitude: memory.longitude
+                longitude: memory.longitude,
+                url: memory.url
             ))
         }
 
@@ -308,6 +309,7 @@ class SupabaseSyncService {
             memory.locationAddress = remote.location_address
             memory.latitude = remote.latitude
             memory.longitude = remote.longitude
+            memory.url = remote.url
 
             if let dateStr = remote.detected_date {
                 memory.detectedDate = ISO8601DateFormatter().date(from: dateStr)
@@ -650,7 +652,8 @@ class SupabaseSyncService {
             location_name: memory.locationName,
             location_address: memory.locationAddress,
             latitude: memory.latitude,
-            longitude: memory.longitude
+            longitude: memory.longitude,
+            url: memory.url
         )
 
         do {
@@ -879,6 +882,7 @@ struct MemoryRow: Codable {
     let location_address: String?
     let latitude: Double?
     let longitude: Double?
+    let url: String?
 }
 
 struct PingRow: Codable {
