@@ -97,6 +97,7 @@ struct QuickLogView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var memories: [Memory]
     @Query private var echos: [Echo]
+    @Query private var pings: [Ping]
 
     @StateObject private var speechManager = SpeechRecognitionManager()
     @State private var inputText = ""
@@ -682,6 +683,12 @@ struct QuickLogView: View {
             .components(separatedBy: "\n")
             .filter { !$0.hasPrefix("Workout ·") && !$0.isEmpty }
         if remaining.isEmpty {
+            let memoryPings = pings.filter { $0.memoryId == memory.id }
+            for ping in memoryPings {
+                NotificationService.shared.cancelPing(pingId: ping.id)
+                modelContext.delete(ping)
+                Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
+            }
             modelContext.delete(memory)
             loggedSets = []
             priorExercises = []

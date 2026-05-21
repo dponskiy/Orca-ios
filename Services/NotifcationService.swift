@@ -181,8 +181,10 @@ class NotificationService {
     }
 
     func cancelPing(pingId: UUID) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [pingId.uuidString])
-        print("🔕 Cancelled notification: \(pingId)")
+        let ids = [pingId.uuidString, "followup-\(pingId.uuidString)"]
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+        print("🔕 Cancelled notification + follow-up: \(pingId)")
     }
 
     func cancelOrphanedNotifications(validPingIds: [UUID]) {

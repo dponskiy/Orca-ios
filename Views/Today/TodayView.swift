@@ -361,6 +361,12 @@ struct TodayView: View {
                             onUndo: {
                                 if let memory = bannerMemory {
                                     let id = memory.id
+                                    let memoryPings = pings.filter { $0.memoryId == id }
+                                    for ping in memoryPings {
+                                        NotificationService.shared.cancelPing(pingId: ping.id)
+                                        modelContext.delete(ping)
+                                        Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
+                                    }
                                     modelContext.delete(memory)
                                     Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
                                 }

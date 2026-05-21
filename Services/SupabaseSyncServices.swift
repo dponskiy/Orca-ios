@@ -739,6 +739,17 @@ class SupabaseSyncService {
         }
     }
 
+    // MARK: - Delete Ping
+
+    func deletePing(id: UUID) async {
+        do {
+            try await supabase.from("pings").delete().eq("id", value: id.uuidString).execute()
+            print("✅ Ping deleted from Supabase: \(id)")
+        } catch {
+            print("❌ Failed to delete ping: \(error)")
+        }
+    }
+
     // MARK: - Delete Memory
 
     func deleteMemory(id: UUID) async {

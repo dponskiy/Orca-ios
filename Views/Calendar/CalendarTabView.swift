@@ -477,6 +477,12 @@ struct CalendarTabView: View {
                                 .swipeActions(edge: .trailing) {
                                     Button(role: .destructive) {
                                         let id = memory.id
+                                        let memoryPings = pings.filter { $0.memoryId == id }
+                                        for ping in memoryPings {
+                                            NotificationService.shared.cancelPing(pingId: ping.id)
+                                            modelContext.delete(ping)
+                                            Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
+                                        }
                                         modelContext.delete(memory)
                                         SpotlightService.shared.removeMemory(id: id)
                                         Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
@@ -496,6 +502,12 @@ struct CalendarTabView: View {
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
                                     let id = memory.id
+                                    let memoryPings = pings.filter { $0.memoryId == id }
+                                    for ping in memoryPings {
+                                        NotificationService.shared.cancelPing(pingId: ping.id)
+                                        modelContext.delete(ping)
+                                        Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
+                                    }
                                     modelContext.delete(memory)
                                     SpotlightService.shared.removeMemory(id: id)
                                     Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
