@@ -556,10 +556,10 @@ struct PhotoCaptureView: View {
             captureType: "photo", echoName: sonarResult?.echoName ?? "Unknown",
             hasPing: sonarResult?.shouldCreatePing ?? false,
             hasDate: sonarResult?.detectedDate != nil, hasURL: memory.url != nil,
-            hasChecklist: memory.hasChecklist, wordCount: textToSave.split(separator: " ").count)
+            hasChecklist: memory.hasChecklist, wordCount: fullText.split(separator: " ").count)
 
-        if let detectedURL = sonarEngine.detectURL(text: textToSave) { memory.url = detectedURL }
-        if let checklistItems = sonarEngine.detectChecklist(text: textToSave) {
+        if let detectedURL = sonarEngine.detectURL(text: fullText) { memory.url = detectedURL }
+        if let checklistItems = sonarEngine.detectChecklist(text: fullText) {
             memory.hasChecklist = true
             for (index, item) in checklistItems.enumerated() {
                 let subTask = SubTask(memoryId: memory.id, text: item, sortOrder: index)
