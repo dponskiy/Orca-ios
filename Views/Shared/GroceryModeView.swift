@@ -9,6 +9,7 @@ import SwiftUI
 import SwiftData
 import Speech
 import AVFoundation
+import Supabase
 
 struct GroceryModeView: View {
     let memories: [Memory]
