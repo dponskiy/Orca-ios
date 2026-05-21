@@ -52,6 +52,16 @@ struct MemoryDetailView: View {
 
                     echoDateHeader
 
+                    // Photo (if this memory has an attached image)
+                    if let data = memory.imageData, let uiImage = UIImage(data: data) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .shadow(color: .black.opacity(0.08), radius: 6, y: 3)
+                            .frame(maxWidth: .infinity)
+                    }
+
                     Text(displayText)
                         .font(.custom("DMSans-Regular", size: 16))
                         .foregroundColor(.deepNavy)
