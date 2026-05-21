@@ -328,6 +328,13 @@ struct GroceryModeView: View {
         NavigationStack {
             if shopping { shoppingView } else { selectionView }
         }
+        // Share sheet must live at the top level so it's available in both selection and shopping modes
+        .sheet(isPresented: $showShareSheet) {
+            if let url = shareURL {
+                ShareSheet(items: [url])
+                    .presentationDetents([.medium])
+            }
+        }
     }
 
     // MARK: - Selection View
@@ -881,12 +888,6 @@ struct GroceryModeView: View {
         .sheet(isPresented: $showRecipeBuilder) { RecipeBuilderView() }
         .sheet(item: $viewingRecipe) { recipe in
             MemoryDetailView(memory: recipe)
-        }
-        .sheet(isPresented: $showShareSheet) {
-            if let url = shareURL {
-                ShareSheet(items: [url])
-                    .presentationDetents([.medium])
-            }
         }
         .alert("Save List", isPresented: $showSaveSheet) {
             TextField("e.g. Weekly Meals, Sunday Shop...", text: $saveListName)

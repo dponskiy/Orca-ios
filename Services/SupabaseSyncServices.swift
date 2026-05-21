@@ -280,7 +280,7 @@ class SupabaseSyncService {
                 .execute()
         }
 
-        let localIds = Set(localMemories.map { $0.id.uuidString })
+        let localIds = Set(localMemories.map { $0.id.uuidString.lowercased() })
 
         let remoteMemories: [MemoryRow] = try await supabase
             .from("memories")
@@ -290,7 +290,7 @@ class SupabaseSyncService {
             .value
 
         for remote in remoteMemories {
-            guard !localIds.contains(remote.id) else { continue }
+            guard !localIds.contains(remote.id.lowercased()) else { continue }
             guard let remoteId = UUID(uuidString: remote.id),
                   let echoId = UUID(uuidString: remote.echo_id) else { continue }
             let existing = localMemories.first { $0.id == remoteId }
@@ -359,7 +359,8 @@ class SupabaseSyncService {
             try await supabase.from("sub_tasks").upsert(rows, onConflict: "id").execute()
         }
 
-        let localIds = Set(localSubTasks.map { $0.id.uuidString })
+        // Lowercase both sides — Supabase returns UUIDs lowercase, Swift uuidString is uppercase
+        let localIds = Set(localSubTasks.map { $0.id.uuidString.lowercased() })
 
         let remoteSubTasks: [SubTaskRow] = try await supabase
             .from("sub_tasks")
@@ -369,7 +370,7 @@ class SupabaseSyncService {
             .value
 
         for remote in remoteSubTasks {
-            guard !localIds.contains(remote.id),
+            guard !localIds.contains(remote.id.lowercased()),
                   let remoteId = UUID(uuidString: remote.id),
                   let memoryId = UUID(uuidString: remote.memory_id) else { continue }
 
@@ -425,7 +426,7 @@ class SupabaseSyncService {
                 .execute()
         }
 
-        let localIds = Set(localPings.map { $0.id.uuidString })
+        let localIds = Set(localPings.map { $0.id.uuidString.lowercased() })
 
         let remotePings: [PingRow] = try await supabase
             .from("pings")
@@ -435,7 +436,7 @@ class SupabaseSyncService {
             .value
 
         for remote in remotePings {
-            guard !localIds.contains(remote.id) else { continue }
+            guard !localIds.contains(remote.id.lowercased()) else { continue }
             guard let remoteId = UUID(uuidString: remote.id),
                   let memoryId = UUID(uuidString: remote.memory_id),
                   let fireDate = ISO8601DateFormatter().date(from: remote.fire_date) else { continue }
@@ -491,11 +492,11 @@ class SupabaseSyncService {
         let remotePersons: [PersonRow] = try await supabase
             .from("persons").select().eq("user_id", value: userId.uuidString).execute().value
 
-        let localIds = Set(localPersons.map { $0.id.uuidString })
+        let localIds = Set(localPersons.map { $0.id.uuidString.lowercased() })
         let localNames = Set(localPersons.map { $0.name.lowercased() })
 
         for remote in remotePersons {
-            guard !localIds.contains(remote.id),
+            guard !localIds.contains(remote.id.lowercased()),
                   let remoteId = UUID(uuidString: remote.id) else { continue }
             guard !localNames.contains(remote.name.lowercased()) else { continue }
             let p = Person(name: remote.name, relationship: remote.relationship)
@@ -540,9 +541,9 @@ class SupabaseSyncService {
         let remoteItems: [GiftItemRow] = try await supabase
             .from("gift_items").select().eq("user_id", value: userId.uuidString).execute().value
 
-        let localIds = Set(localItems.map { $0.id.uuidString })
+        let localIds = Set(localItems.map { $0.id.uuidString.lowercased() })
         for remote in remoteItems {
-            guard !localIds.contains(remote.id),
+            guard !localIds.contains(remote.id.lowercased()),
                   let remoteId = UUID(uuidString: remote.id),
                   let personId = UUID(uuidString: remote.person_id) else { continue }
 
@@ -593,7 +594,7 @@ class SupabaseSyncService {
             try await supabase.from("watchlist_items").upsert(rows, onConflict: "id").execute()
         }
 
-        let localIds = Set(localItems.map { $0.id.uuidString })
+        let localIds = Set(localItems.map { $0.id.uuidString.lowercased() })
 
         let remoteItems: [WatchlistItemRow] = try await supabase
             .from("watchlist_items")
@@ -605,7 +606,7 @@ class SupabaseSyncService {
         let localTitles = Set(localItems.map { $0.title.lowercased() })
 
         for remote in remoteItems {
-            guard !localIds.contains(remote.id),
+            guard !localIds.contains(remote.id.lowercased()),
                   let remoteId = UUID(uuidString: remote.id) else { continue }
             // Skip if we already have an item with this title locally
             guard !localTitles.contains(remote.title.lowercased()) else { continue }
