@@ -65,6 +65,10 @@ struct GroceryModeView: View {
     @State private var showURLInputSheet = false
     @State private var showRecipeBuilder = false
     @State private var viewingRecipe: Memory? = nil
+    @State private var isCreatingShareLink = false
+    @State private var shareURL: URL? = nil
+    @State private var showShareSheet = false
+    @Environment(AuthService.self) private var authService
     @State private var showRecipePreview = false
     @State private var recipeURLInput = ""
     @State private var isFetchingRecipe = false
@@ -168,6 +172,68 @@ struct GroceryModeView: View {
 
     private func visibleSubTasks(for memory: Memory) -> [SubTask] {
         subTasks(for: memory).filter { !hiddenIngredients.contains($0.id) }
+    }
+
+    // MARK: - Share List
+
+    private func createAndShareList() async {
+        isCreatingShareLink = true
+        defer { isCreatingShareLink = false }
+
+        // Build items array from selected memories + extra items
+        var items: [[String: Any]] = []
+
+        for memory in selectedMemories {
+            for subTask in visibleSubTasks(for: memory) {
+                let itemName = subTask.text
+                let aisle = aisleCategory(for: itemName.lowercased())
+                items.append([
+                    "id": subTask.id.uuidString,
+                    "text": itemName,
+                    "checked": checkedItems.contains(subTask.id),
+                    "aisle": aisle
+                ])
+            }
+        }
+        for (index, extra) in extraItems.enumerated() {
+            let aisle = aisleCategory(for: extra.lowercased())
+            items.append([
+                "id": "extra-\(index)",
+                "text": extra,
+                "checked": checkedExtras.contains(extra),
+                "aisle": aisle
+            ])
+        }
+
+        guard !items.isEmpty,
+              let userId = authService.userId,
+              let itemsData = try? JSONSerialization.data(withJSONObject: items),
+              let itemsJSON = String(data: itemsData, encoding: .utf8) else { return }
+
+        let title = "\(navigationTitle) List"
+
+        do {
+            let result = try await SupabaseManager.shared.client
+                .from("shared_lists")
+                .insert([
+                    "owner_id": userId.uuidString,
+                    "title": title,
+                    "items": itemsJSON
+                ])
+                .select("id")
+                .single()
+                .execute()
+
+            struct IDRow: Decodable { let id: String }
+            let row = try JSONDecoder().decode(IDRow.self, from: result.data)
+            let urlString = "https://orca-web-three.vercel.app?id=\(row.id)"
+            if let url = URL(string: urlString) {
+                shareURL = url
+                showShareSheet = true
+            }
+        } catch {
+            print("❌ Failed to create shared list: \(error)")
+        }
     }
 
     private var selectedMemories: [Memory] {
@@ -615,9 +681,17 @@ struct GroceryModeView: View {
             }
             if canStartShopping {
                 ToolbarItem(placement: .primaryAction) {
-                    ShareLink(item: shareText) {
-                        Image(systemName: "square.and.arrow.up").font(.system(size: 15)).foregroundColor(.oceanTeal)
+                    Button {
+                        Task { await createAndShareList() }
+                    } label: {
+                        if isCreatingShareLink {
+                            ProgressView().tint(.oceanTeal)
+                        } else {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 15)).foregroundColor(.oceanTeal)
+                        }
                     }
+                    .disabled(isCreatingShareLink)
                 }
             }
         }
@@ -794,6 +868,12 @@ struct GroceryModeView: View {
         .sheet(isPresented: $showRecipeBuilder) { RecipeBuilderView() }
         .sheet(item: $viewingRecipe) { recipe in
             MemoryDetailView(memory: recipe)
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = shareURL {
+                ShareSheet(items: [url])
+                    .presentationDetents([.medium])
+            }
         }
         .alert("Save List", isPresented: $showSaveSheet) {
             TextField("e.g. Weekly Meals, Sunday Shop...", text: $saveListName)
@@ -1613,4 +1693,16 @@ struct GroceryModeView: View {
         fetchedRecipe = nil
         recipeURLInput = ""
     }
+}
+
+// MARK: - Share Sheet
+
+import UIKit
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
