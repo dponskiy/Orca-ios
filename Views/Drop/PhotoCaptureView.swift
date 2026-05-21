@@ -567,7 +567,7 @@ struct PhotoCaptureView: View {
             }
         }
 
-        bannerText = textToSave
+        bannerText = fullText
         withAnimation(.spring(duration: 0.4)) { showBanner = true }
     }
 
