@@ -202,7 +202,8 @@ class SonarEngine {
                   "timesheet", "time sheet", "time entry", "log hours", "billable hours",
                   "punch in", "punch out", "clock in", "clock out", "overtime",
                   "payroll", "paystub", "pay stub", "direct deposit", "w2", "w-2",
-                  "standup meeting", "scrum", "agile", "deliverable", "milestone", "stakeholder",
+                  "standup meeting", "scrum", "agile", "deliverable", "milestone", "stakeholder", "powerpoint", "ppt", "keynote", "google slides", "deck", "slide deck",  "presentation slides", "slides", "presentation deck", "spreadsheet", "excel", "google docs", "power point",
+                  "google sheets", "word doc", "notion", "figma", "canva",
                   "action item", "sync", "async", "bandwidth", "capacity"], 13),
         
         ("Pets", ["vet", "dog", "cat", "puppy", "kitten", "pet food", "grooming", "walk", "collar", "leash", "litter", "treats", "adoption", "vaccine", "flea", "heartworm", "tick", "microchip", "spay", "neuter", "boarding", "pet sitter", "aquarium", "fish", "bird", "hamster", "rabbit",
@@ -239,7 +240,13 @@ class SonarEngine {
                    "renew", "registration", "license", "permit", "inspection",
                    "pay bill", "autopay", "due date", "overdue", "late fee",
                    "grocery run", "shopping list", "stock up", "reorder",
-                   "fix", "repair", "replace", "install", "set up", "update"], 17),
+                   "fix", "repair", "replace", "install", "set up", "update",
+                   // Action phrases for reminders
+                   "remind me", "remember to", "don't forget to", "dont forget to",
+                   "make sure to", "make sure i", "need to remember",
+                   // Cleaning / chore verbs missing from original list
+                   "wash", "wipe", "scrub", "rinse", "refill", "restock",
+                   "charge", "empty", "take out", "put away", "clean out"], 17),
         
         ("Games", ["xbox", "playstation", "nintendo", "switch", "steam", "gaming", "controller", "multiplayer", "level", "quest", "raid", "download", "dlc", "console", "pc gaming", "esports", "twitch", "speedrun", "achievements", "trophy", "walkthrough", "patch", "update", "early access", "game pass", "ps5", "ps4", "xbox series",
                    "rpg", "fps", "mmorpg", "battle royale", "open world", "sandbox",
@@ -394,10 +401,10 @@ class SonarEngine {
     ]
     
     private let diningContextWords = [
-        "eat", "ate", "food", "dish", "order", "menu", "lunch", "dinner", "brunch",
+        "eat", "ate", "food", "dish", "menu", "lunch", "dinner", "brunch",
         "breakfast", "taste", "flavor", "delicious", "portions", "service", "waiter",
         "try", "tried", "trying", "dining", "restaurant", "reservations", "takeout",
-        "delivery", "cuisine", "spot", "place", "eats"
+        "delivery", "cuisine", "spot", "eats"
     ]
     
     private let restaurantCommonWords = Set([
@@ -585,12 +592,45 @@ class SonarEngine {
                 scores.append(("Work", 2.0, 13))
             }
         }
+        // Prevent productivity tools from landing in wrong echo
+        let productivityTools = ["powerpoint", "excel", "google slides", "google sheets",
+                                 "google docs", "keynote", "notion", "figma", "canva",
+                                 "word doc", "airtable", "spreadsheet", "slide deck", "ppt"]
+        let hasProductivityTool = productivityTools.contains { text.contains($0) }
+        if hasProductivityTool {
+            if let idx = scores.firstIndex(where: { $0.name == "Work" }) {
+                scores[idx].score += 2.0
+            } else {
+                scores.append(("Work", 2.0, 13))
+            }
+            // Suppress dining specifically since it's the false positive
+            if let idx = scores.firstIndex(where: { $0.name == "Dining" }) {
+                scores[idx].score = max(0, scores[idx].score - 3.0)
+            }
+        }
         // Prevent Sports from winning when clothing/chores context is present
         let clothingChoreWords = ["shirt", "dress shirt", "iron", "ironing", "pants", "suit", "jacket", "outfit", "wear", "laundry", "wash", "dry clean"]
         let hasClothingContext = clothingChoreWords.contains { text.contains($0) }
         if hasClothingContext {
             if let idx = scores.firstIndex(where: { $0.name == "Sports" }) {
                 scores[idx].score = max(0, scores[idx].score - 3.0)
+            }
+        }
+        // Prevent Dining from winning on chore/cleaning reminders
+        // e.g. "wash water bottle", "wipe down counter", "clean the fridge"
+        let choreActionWords = ["wash", "wipe", "scrub", "rinse", "clean", "mop", "vacuum",
+                                "sweep", "dust", "declutter", "organize", "refill", "empty",
+                                "take out", "put away", "remind me", "remember to"]
+        let hasChoreContext = choreActionWords.contains { text.contains($0) }
+        if hasChoreContext {
+            if let idx = scores.firstIndex(where: { $0.name == "Dining" }) {
+                scores[idx].score = max(0, scores[idx].score - 3.0)
+            }
+            // Boost To-Do if it already has some score, or add it
+            if let idx = scores.firstIndex(where: { $0.name == "To-Do" }) {
+                scores[idx].score += 1.5
+            } else {
+                scores.append(("To-Do", 1.5, 17))
             }
         }
         // Prevent Health from winning when clear cooking context is present
@@ -646,7 +686,7 @@ class SonarEngine {
         for echo in echos where !echo.learnedKeywords.isEmpty {
             let matchCount = echo.learnedKeywords.filter { text.contains($0) }.count
             if matchCount > 0 {
-                let boost = Double(matchCount) * 0.4
+                let boost = Double(matchCount) * 0.1
                 if let idx = scores.firstIndex(where: { $0.name == echo.name }) {
                     scores[idx].score += boost
                 } else {
