@@ -10,7 +10,6 @@ import SwiftData
 import Speech
 import AVFoundation
 import Supabase
-import UIKit
 
 struct GroceryModeView: View {
     let memories: [Memory]
@@ -70,9 +69,6 @@ struct GroceryModeView: View {
     @State private var isCreatingShareLink = false
     @State private var shareURL: URL? = nil
     @State private var showShareSheet = false
-    @State private var showOrderSheet = false
-    @State private var orderItems: [String] = []
-    @State private var showCopiedToast = false
     @Environment(AuthService.self) private var authService
     @State private var showRecipePreview = false
     @State private var recipeURLInput = ""
@@ -259,41 +255,50 @@ struct GroceryModeView: View {
 
     // MARK: - Pantry Staples
 
-    /// Terms that are almost universally already in people's pantry.
-    /// Pepper is handled separately to avoid auto-checking bell peppers.
+    /// Items almost everyone already has at home.
+    /// Pepper spices are listed explicitly to avoid matching produce (bell pepper etc.)
     private let pantryStapleTerms: [String] = [
-        // Salt
-        "kosher salt", "sea salt", "table salt", "fine salt", "coarse salt", "flaky salt",
-        // Pepper (spice only — "bell pepper", "red pepper" produce handled below)
+        // Pepper — spice only (NOT bell pepper / jalapeño / red pepper produce)
         "black pepper", "white pepper", "ground pepper", "cracked pepper",
-        "peppercorn", "pepper flake", "cayenne pepper",
-        // Oils
-        "vegetable oil", "canola oil", "sunflower oil", "cooking spray", "neutral oil",
-        // Sweeteners (basic)
-        "granulated sugar", "white sugar", "caster sugar",
+        "peppercorn", "pepper flake", "cayenne pepper", "freshly ground pepper",
+        // Oils — all common cooking oils
+        "olive oil", "extra virgin olive oil", "vegetable oil", "canola oil",
+        "sunflower oil", "cooking spray", "neutral oil", "avocado oil",
+        "sesame oil", "coconut oil",
+        // Basic sweeteners
+        "granulated sugar", "white sugar", "caster sugar", "brown sugar",
+        "powdered sugar", "confectioners sugar",
         // Flour / Baking
         "all-purpose flour", "all purpose flour", "plain flour",
         "baking powder", "baking soda", "bicarbonate of soda",
-        // Extracts
+        // Extracts & basics
         "vanilla extract", "pure vanilla",
+        // Common pantry acids
+        "white vinegar", "apple cider vinegar",
+        // Dry staples most people stock
+        "dried oregano", "dried thyme", "dried basil", "dried rosemary",
+        "garlic powder", "onion powder", "paprika", "cumin", "turmeric",
+        "red pepper flakes", "chili flakes", "italian seasoning",
     ]
 
-    /// Water phrases that confirm the item IS water, not watermelon / water chestnut etc.
+    /// Water phrases confirming the item is water, not watermelon / water chestnut etc.
     private let waterPhrases: [String] = [
         "cold water", "warm water", "hot water", "boiling water",
         "ice water", "room temperature water", "lukewarm water",
         "cups of water", "cup of water", "tablespoons of water",
         "tablespoon of water", "liters of water", "ml of water",
+        "ounces of water", "oz water",
     ]
 
     private func isPantryStaple(_ text: String) -> Bool {
         let lower = text.lowercased()
-        // Match explicit pantry terms
         if pantryStapleTerms.contains(where: { lower.contains($0) }) { return true }
-        // "salt" as a standalone word (not "assault", but that won't appear in recipes)
+        // Salt — catches "kosher salt", "sea salt", "1 tsp salt", etc.
+        // Safe in a recipe context; "assault" won't appear as an ingredient.
         if lower.contains("salt") { return true }
-        // Water: only match specific water phrases or standalone "water"
-        if lower == "water" || lower.hasPrefix("water ") || lower.hasPrefix("water,") { return true }
+        // Water — only match as a standalone ingredient, not inside other words
+        if lower == "water" || lower.hasPrefix("water ") || lower.hasPrefix("water,")
+            || lower.hasSuffix(" water") { return true }
         if waterPhrases.contains(where: { lower.contains($0) }) { return true }
         return false
     }
@@ -305,68 +310,9 @@ struct GroceryModeView: View {
                     if isPantryStaple(subTask.text) { checkedItems.insert(subTask.id) }
                 }
             }
-            for item in extraItems {
-                if isPantryStaple(item) { checkedExtras.insert(item) }
+            for item in extraItems where isPantryStaple(item) {
+                checkedExtras.insert(item)
             }
-        }
-    }
-
-    // MARK: - Order Online
-
-    private var orderableItems: [String] {
-        var items: [String] = []
-        for memory in selectedMemories {
-            for subTask in visibleSubTasks(for: memory) {
-                guard !checkedItems.contains(subTask.id) else { continue }
-                items.append(subTask.text)
-            }
-        }
-        for item in extraItems where !checkedExtras.contains(item) {
-            items.append(item)
-        }
-        return items
-    }
-
-    private func openOrderSheet() {
-        // Pre-filter pantry staples out, user can add back by tapping
-        orderItems = orderableItems.filter { !isPantryStaple($0) }
-        showOrderSheet = true
-    }
-
-    private func openService(_ service: String) {
-        // Always copy list to clipboard first
-        let listText = orderItems.map { "• \($0)" }.joined(separator: "\n")
-        UIPasteboard.general.string = listText
-        showCopiedToast = true
-
-        // Build a short search query from the first few items (strip quantities)
-        let shortItems = orderItems.prefix(3).map { item -> String in
-            // Strip leading quantities like "2 cups", "1 tablespoon", etc.
-            let words = item.components(separatedBy: " ")
-            let stripped = words.drop(while: { word in
-                let isNumber = Double(word.replacingOccurrences(of: "/", with: ".")) != nil
-                let isUnit = ["cup", "cups", "tbsp", "tsp", "tablespoon", "tablespoons",
-                              "teaspoon", "teaspoons", "oz", "lb", "lbs", "g", "kg",
-                              "ml", "liter", "liters", "pound", "pounds", "ounce", "ounces",
-                              "clove", "cloves", "bunch", "bunches", "can", "cans",
-                              "package", "packages", "pinch", "dash"].contains(word.lowercased())
-                return isNumber || isUnit
-            }).joined(separator: " ")
-            return stripped.isEmpty ? item : stripped
-        }.joined(separator: " ")
-
-        let encoded = shortItems.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-
-        let urlStr: String
-        switch service {
-        case "instacart": urlStr = "https://www.instacart.com/store/search_v3/term/\(encoded)"
-        case "amazon":    urlStr = "https://www.amazon.com/s?k=\(encoded)&i=amazonfresh"
-        case "walmart":   urlStr = "https://www.walmart.com/search?q=\(encoded)&cat_id=976759"
-        default: return
-        }
-
-        if let url = URL(string: urlStr) {
-            UIApplication.shared.open(url)
         }
     }
 
@@ -452,46 +398,6 @@ struct GroceryModeView: View {
                     .presentationDetents([.medium])
             }
         }
-        // Order Online sheet
-        .sheet(isPresented: $showOrderSheet) {
-            OrderOnlineSheet(
-                items: $orderItems,
-                onOrderService: { service in
-                    showOrderSheet = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        openService(service)
-                    }
-                },
-                onCopyList: {
-                    let listText = orderItems.map { "• \($0)" }.joined(separator: "\n")
-                    UIPasteboard.general.string = listText
-                    showOrderSheet = false
-                    showCopiedToast = true
-                }
-            )
-            .presentationDetents([.medium, .large])
-        }
-        // "Copied!" toast
-        .overlay(alignment: .top) {
-            if showCopiedToast {
-                HStack(spacing: 8) {
-                    Image(systemName: "doc.on.clipboard.fill").font(.system(size: 13))
-                    Text("List copied to clipboard").font(.custom("DMSans-Medium", size: 14))
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 18).padding(.vertical, 10)
-                .background(Color.deepNavy.opacity(0.9))
-                .clipShape(Capsule())
-                .padding(.top, 12)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .onAppear {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                        withAnimation { showCopiedToast = false }
-                    }
-                }
-            }
-        }
-        .animation(.spring(duration: 0.4), value: showCopiedToast)
     }
 
     // MARK: - Selection View
@@ -1141,30 +1047,22 @@ struct GroceryModeView: View {
                     }
                     .frame(height: 6)
 
-                    HStack(spacing: 10) {
-                        // Auto-check pantry staples
-                        Button { checkPantryStaples() } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: "checkmark.circle").font(.system(size: 13))
-                                Text("Pantry").font(.custom("DMSans-Medium", size: 13))
+                    // Auto-check pantry staples
+                    Button { checkPantryStaples() } label: {
+                        VStack(spacing: 2) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill").font(.system(size: 14))
+                                Text("Check Pantry Items").font(.custom("DMSans-Medium", size: 14))
                             }
-                            .foregroundColor(.oceanTeal)
-                            .frame(maxWidth: .infinity).padding(.vertical, 10)
-                            .background(Color.oceanTeal.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            Text("auto-checks salt, oils, water, spices & more")
+                                .font(.custom("DMSans-Regular", size: 11))
+                                .opacity(0.75)
                         }
-
-                        // Order online
-                        Button { openOrderSheet() } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: "cart.badge.plus").font(.system(size: 13))
-                                Text("Order Online").font(.custom("DMSans-Medium", size: 13))
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity).padding(.vertical, 10)
-                            .background(Color.oceanTeal)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
+                        .foregroundColor(.oceanTeal)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(Color.oceanTeal.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.oceanTeal.opacity(0.25), lineWidth: 1))
                     }
 
                     Button {
@@ -1913,162 +1811,3 @@ struct ShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-// MARK: - Order Online Sheet
-
-struct OrderOnlineSheet: View {
-    @Binding var items: [String]
-    let onOrderService: (String) -> Void
-    let onCopyList: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Handle
-            Capsule().fill(Color.gray.opacity(0.3)).frame(width: 36, height: 4).padding(.top, 12)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Order Online")
-                    .font(.custom("DMSans-Medium", size: 20)).foregroundColor(.deepNavy)
-                Text("\(items.count) items · pantry staples removed · tap an item to remove it")
-                    .font(.custom("DMSans-Regular", size: 13)).foregroundColor(.gray)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 12)
-
-            Divider()
-
-            if items.isEmpty {
-                VStack(spacing: 8) {
-                    Text("🎉").font(.system(size: 40))
-                    Text("Nothing left to order!")
-                        .font(.custom("DMSans-Medium", size: 16)).foregroundColor(.deepNavy)
-                    Text("Everything on your list is already checked off or a pantry staple.")
-                        .font(.custom("DMSans-Regular", size: 13)).foregroundColor(.gray)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(40)
-                Spacer()
-            } else {
-                // Scrollable item chips
-                ScrollView {
-                    FlowLayout(spacing: 8) {
-                        ForEach(items, id: \.self) { item in
-                            Button {
-                                withAnimation(.spring(duration: 0.2)) {
-                                    items.removeAll { $0 == item }
-                                }
-                            } label: {
-                                HStack(spacing: 5) {
-                                    Text(item)
-                                        .font(.custom("DMSans-Regular", size: 14))
-                                        .foregroundColor(.deepNavy)
-                                        .lineLimit(1)
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 10, weight: .semibold))
-                                        .foregroundColor(.gray)
-                                }
-                                .padding(.horizontal, 12).padding(.vertical, 7)
-                                .background(Color.mist)
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(Color.gray.opacity(0.2), lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 12)
-                }
-            }
-
-            Divider()
-
-            // Service buttons
-            VStack(spacing: 10) {
-                HStack(spacing: 10) {
-                    ServiceButton(name: "Instacart", icon: "cart.fill", color: Color(red: 0.18, green: 0.60, blue: 0.24)) {
-                        onOrderService("instacart")
-                    }
-                    ServiceButton(name: "Amazon Fresh", icon: "leaf.fill", color: Color(red: 0.95, green: 0.60, blue: 0.07)) {
-                        onOrderService("amazon")
-                    }
-                    ServiceButton(name: "Walmart", icon: "storefront.fill", color: Color(red: 0.0, green: 0.44, blue: 0.87)) {
-                        onOrderService("walmart")
-                    }
-                }
-
-                Button { onCopyList() } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "doc.on.clipboard").font(.system(size: 14))
-                        Text("Copy List").font(.custom("DMSans-Medium", size: 15))
-                    }
-                    .foregroundColor(.oceanTeal)
-                    .frame(maxWidth: .infinity).padding(.vertical, 13)
-                    .background(Color.oceanTeal.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
-                }
-            }
-            .padding(.horizontal, 20).padding(.vertical, 16)
-        }
-        .background(Color.pearl)
-    }
-}
-
-struct ServiceButton: View {
-    let name: String
-    let icon: String
-    let color: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                    .foregroundColor(color)
-                    .frame(width: 44, height: 44)
-                    .background(color.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                Text(name)
-                    .font(.custom("DMSans-Medium", size: 11))
-                    .foregroundColor(.deepNavy)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Flow Layout (wrapping chip layout)
-
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 0
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > width && x > 0 { x = 0; y += rowHeight + spacing; rowHeight = 0 }
-            rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-        }
-        return CGSize(width: width, height: y + rowHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX && x > bounds.minX { x = bounds.minX; y += rowHeight + spacing; rowHeight = 0 }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            rowHeight = max(rowHeight, size.height)
-            x += size.width + spacing
-        }
-    }
-}
