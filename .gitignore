@@ -19,3 +19,4 @@ DerivedData/
 
 # Swift Package Manager
 .build/
+.claude/worktrees/
