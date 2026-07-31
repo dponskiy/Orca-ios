@@ -46,6 +46,7 @@ struct ConfirmBannerView: View {
     @FocusState private var textFieldFocused: Bool
     @State private var addedToWatchlist = false
     @State private var showTipOverlay = false
+    @State private var addedToCalendar = false
 
     @Query private var persons: [Person]
 
@@ -93,10 +94,9 @@ struct ConfirmBannerView: View {
     }
 
     var body: some View {
-        // VStack so tip overlay sits ABOVE banner — both visible at same time
         VStack(spacing: 8) {
 
-            // MARK: - Tip overlay — above banner, user can see banner below
+            // MARK: - Tip overlay
             if showTipOverlay {
                 BannerTipOverlay {
                     withAnimation(.spring(duration: 0.3)) {
@@ -124,7 +124,7 @@ struct ConfirmBannerView: View {
                     let echoEmoji = echos.first { $0.id == selectedEchoId }?.emoji
                         ?? echos.first { $0.name == sonarResult?.echoName }?.emoji ?? "📝"
 
-                    // MARK: - Top row: memory text + Undo/Done
+                    // MARK: - Top row
                     HStack(alignment: .top, spacing: 10) {
                         VStack(alignment: .leading, spacing: 3) {
                             if isEditingText {
@@ -210,31 +210,26 @@ struct ConfirmBannerView: View {
                         .fixedSize()
                     }
 
-                    // MARK: - Chips hint row + Show tips button
+                    // MARK: - Chips hint row
                     HStack {
                         Text("Wrong echo? Tap to change")
                             .font(.custom("DMSans-Regular", size: 11))
                             .foregroundColor(.gray)
-
                         Spacer()
-
                         Button {
                             isPaused = true
-                            withAnimation(.spring(duration: 0.3)) {
-                                showTipOverlay = true
-                            }
+                            withAnimation(.spring(duration: 0.3)) { showTipOverlay = true }
                         } label: {
                             HStack(spacing: 3) {
-                                Image(systemName: "questionmark.circle")
-                                    .font(.system(size: 11))
-                                Text("Show tips")
-                                    .font(.custom("DMSans-Regular", size: 11))
+                                Image(systemName: "questionmark.circle").font(.system(size: 11))
+                                Text("Show tips").font(.custom("DMSans-Regular", size: 11))
                             }
                             .foregroundColor(.gray.opacity(0.5))
                         }
                         .buttonStyle(.plain)
                     }
 
+                    // MARK: - Chip scroll view
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 7) {
                             if let result = sonarResult {
@@ -277,6 +272,40 @@ struct ConfirmBannerView: View {
                                     }
                                     .padding(.horizontal, 10).padding(.vertical, 6)
                                     .background(Color.mist).clipShape(Capsule())
+                                }
+
+                                // Add to Calendar chip — only for date-bearing memories
+                                if let date = result.detectedDate {
+                                    Button {
+                                        guard !addedToCalendar else { return }
+                                        Task {
+                                            let granted = CalendarService.shared.isAuthorized
+                                                ? true
+                                                : await CalendarService.shared.requestAccess()
+                                            if granted {
+                                                CalendarService.shared.addEvent(
+                                                    title: editedText.isEmpty ? transcription : editedText,
+                                                    startDate: date,
+                                                    endDate: result.endDate
+                                                )
+                                                await MainActor.run {
+                                                    withAnimation(.spring(duration: 0.2)) { addedToCalendar = true }
+                                                }
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: addedToCalendar ? "calendar.badge.checkmark" : "calendar.badge.plus")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(addedToCalendar ? .white : .deepNavy)
+                                            Text(addedToCalendar ? "Added ✓" : "Add to Calendar")
+                                                .font(.custom("DMSans-Medium", size: 13))
+                                                .foregroundColor(addedToCalendar ? .white : .deepNavy)
+                                        }
+                                        .padding(.horizontal, 10).padding(.vertical, 6)
+                                        .background(addedToCalendar ? Color.oceanTeal : Color.mist)
+                                        .clipShape(Capsule())
+                                    }
                                 }
 
                                 // Ping chip
@@ -358,8 +387,13 @@ struct ConfirmBannerView: View {
                                         isPaused = true
                                         let itemType = currentEchoName.contains("book") ? "book" : currentEchoName.contains("movie") ? "movie" : "show"
                                         let service = SonarEngine.detectStreamingService(from: transcription)
-                                        onAddToWatchlist?(editedText, itemType, service)
-                                        withAnimation(.spring(duration: 0.2)) { addedToWatchlist = true }
+                                        Task {
+                                            let title = await AppleIntelligenceService.shared.extractMediaTitle(from: editedText)
+                                            await MainActor.run {
+                                                onAddToWatchlist?(title ?? editedText, itemType, service)
+                                                withAnimation(.spring(duration: 0.2)) { addedToWatchlist = true }
+                                            }
+                                        }
                                     } label: {
                                         HStack(spacing: 4) {
                                             Image(systemName: addedToWatchlist ? "checkmark.circle.fill" : "plus.circle")
@@ -373,10 +407,11 @@ struct ConfirmBannerView: View {
                                         .background(addedToWatchlist ? Color.coral : Color.mist)
                                         .clipShape(Capsule())
                                     }
-                                }
-                            }
-                        }
-                    }
+                                } // end if isWatchable
+
+                            } // end if let result
+                        } // end HStack
+                    } // end ScrollView
 
                     // MARK: - Duration quick-pick row
                     if showDurationRow {
@@ -385,7 +420,6 @@ struct ConfirmBannerView: View {
                             Text("How long?")
                                 .font(.custom("DMSans-Regular", size: 12))
                                 .foregroundColor(.gray)
-
                             HStack(spacing: 7) {
                                 ForEach([15, 30, 60, 120], id: \.self) { mins in
                                     Button {
@@ -402,11 +436,8 @@ struct ConfirmBannerView: View {
                                             .clipShape(Capsule())
                                     }
                                 }
-
                                 Button {
-                                    withAnimation(.spring(duration: 0.2)) {
-                                        selectedDuration = -1
-                                    }
+                                    withAnimation(.spring(duration: 0.2)) { selectedDuration = -1 }
                                 } label: {
                                     Text("Skip")
                                         .font(.custom("DMSans-Medium", size: 13))
@@ -535,13 +566,16 @@ struct ConfirmBannerView: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                }
+
+                } // end VStack(spacing: 10)
                 .padding(16)
-            }
+
+            } // end main banner VStack
             .background(.white)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .shadow(color: .black.opacity(0.12), radius: 20, y: -4)
-        }
+
+        } // end outer VStack
         .padding(.horizontal, 12)
         .padding(.bottom, 32)
         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -549,6 +583,9 @@ struct ConfirmBannerView: View {
             editedText = transcription
             isTask = sonarResult?.isActionable ?? false
             selectedEchoId = echos.first { $0.name == sonarResult?.echoName }?.id
+            if let date = sonarResult?.detectedDate {
+                addedToCalendar = CalendarService.shared.isAlreadyAdded(title: transcription, date: date)
+            }
             if !hasSeenBannerTip {
                 isPaused = true
                 withAnimation(.spring(duration: 0.4).delay(0.3)) {
@@ -676,7 +713,6 @@ private struct BannerTipOverlay: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Handle
             Capsule()
                 .fill(Color.white.opacity(0.4))
                 .frame(width: 36, height: 4)

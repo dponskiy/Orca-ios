@@ -33,7 +33,7 @@ struct BrowseAllView: View {
     }
 
     var activeEchos: [Echo] {
-        echos.filter { echo in memories.contains { $0.echoId == echo.id } }
+        echos.filter { echo in !echo.isSystemEcho && memories.contains { $0.echoId == echo.id } }
     }
 
     var filteredMemories: [Memory] {
@@ -277,10 +277,11 @@ struct BrowseAllView: View {
                 for ping in memoryPings {
                     NotificationService.shared.cancelPing(pingId: ping.id)
                     modelContext.delete(ping)
+                    Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
                 }
                 modelContext.delete(memory)
                 SpotlightService.shared.removeMemory(id: id)
-                Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+                SupabaseSyncService.shared.scheduleDelete(id: id)
             } label: { Label("Delete", systemImage: "trash") }
             Button { editingMemory = memory } label: { Label("Edit", systemImage: "pencil") }
                 .tint(.oceanTeal)

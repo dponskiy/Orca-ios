@@ -18,6 +18,7 @@ struct WorkoutEchoView: View {
     let memories: [Memory]
     @State private var showQuickLog = false
     @Binding var detailMemory: Memory?
+    @State private var summaries: [UUID: String] = [:]
 
     // MARK: - Computed Data
 
@@ -82,7 +83,6 @@ struct WorkoutEchoView: View {
                     .foregroundColor(.gray)
                 Spacer()
 
-                // Today's Workout button — only shows if workout exists today
                 if let today = todaysWorkout {
                     Button {
                         detailMemory = today
@@ -105,8 +105,9 @@ struct WorkoutEchoView: View {
                     showQuickLog = true
                 } label: {
                     HStack(spacing: 5) {
-                        Image(systemName: "plus").font(.system(size: 12, weight: .medium))
-                        Text("Quick Log")
+                        Image(systemName: todaysWorkout != nil ? "arrow.right.circle.fill" : "plus")
+                            .font(.system(size: 12, weight: .medium))
+                        Text(todaysWorkout != nil ? "Continue Workout" : "Start Workout")
                             .font(.custom("DMSans-Medium", size: 13))
                     }
                     .foregroundColor(todaysWorkout != nil ? .oceanTeal : .white)
@@ -121,13 +122,10 @@ struct WorkoutEchoView: View {
             .padding(.horizontal, 20)
             .padding(.top, 4)
 
-            // This Week card
             weekStripCard
 
-            // Personal Records card
             if !allTimePRs.isEmpty { prCard }
 
-            // Recent Sessions card
             if !recentSessions.isEmpty { recentSessionsCard }
 
             Text("Tap a day or session to see your full breakdown")
@@ -287,6 +285,17 @@ struct WorkoutEchoView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08), lineWidth: 0.5))
         .padding(.horizontal, 20)
+        // Fetch AI summaries for all recent sessions in the background
+        .task {
+            for (memory, _) in recentSessions {
+                guard summaries[memory.id] == nil else { continue }
+                let text = memory.text
+                let id = memory.id
+                if let summary = await AppleIntelligenceService.shared.summarizeWorkout(from: text) {
+                    await MainActor.run { summaries[id] = summary }
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -294,6 +303,13 @@ struct WorkoutEchoView: View {
         let isCardio = result.exercises.allSatisfy { $0.isCardio }
         let isLift = !isCardio && result.exercises.contains { !$0.isCardio }
         let icon: String = isCardio ? "figure.run" : "figure.strengthtraining.traditional"
+
+        // Use AI summary if available, fall back to deterministic title
+        let title: String = summaries[memory.id] ?? {
+            if let type = result.sessionType { return type }
+            let names = result.exercises.map { $0.name }.prefix(2).joined(separator: " + ")
+            return names.isEmpty ? "Workout session" : names
+        }()
 
         HStack(spacing: 12) {
             ZStack {
@@ -306,35 +322,34 @@ struct WorkoutEchoView: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                let title: String = {
-                    if let type = result.sessionType { return type }
-                    let names = result.exercises.map { $0.name }.prefix(2).joined(separator: " + ")
-                    return names.isEmpty ? "Workout session" : names
-                }()
                 Text(title)
                     .font(.custom("DMSans-Medium", size: 14))
                     .foregroundColor(.deepNavy)
+                    .lineLimit(1)
 
                 HStack(spacing: 6) {
                     Text(relativeDate(memory.createdAt))
                         .font(.custom("DMMono-Regular", size: 12))
                         .foregroundColor(.gray)
 
-                    if isLift {
-                        let liftExercises = result.exercises.filter { !$0.isCardio }
-                        Text("· \(liftExercises.count) exercises")
-                            .font(.custom("DMMono-Regular", size: 12))
-                            .foregroundColor(.gray)
-                    } else if let cardio = result.exercises.first(where: { $0.isCardio }) {
-                        if let dur = cardio.durationMinutes {
-                            Text("· \(Int(dur)):00")
+                    // Only show the extra detail line when AI summary is not yet loaded
+                    if summaries[memory.id] == nil {
+                        if isLift {
+                            let liftExercises = result.exercises.filter { !$0.isCardio }
+                            Text("· \(liftExercises.count) exercises")
                                 .font(.custom("DMMono-Regular", size: 12))
                                 .foregroundColor(.gray)
-                        }
-                        if let pace = cardio.pace {
-                            Text("· \(pace)")
-                                .font(.custom("DMMono-Regular", size: 12))
-                                .foregroundColor(.gray)
+                        } else if let cardio = result.exercises.first(where: { $0.isCardio }) {
+                            if let dur = cardio.durationMinutes {
+                                Text("· \(Int(dur)) min")
+                                    .font(.custom("DMMono-Regular", size: 12))
+                                    .foregroundColor(.gray)
+                            }
+                            if let pace = cardio.pace {
+                                Text("· \(pace)")
+                                    .font(.custom("DMMono-Regular", size: 12))
+                                    .foregroundColor(.gray)
+                            }
                         }
                     }
                 }

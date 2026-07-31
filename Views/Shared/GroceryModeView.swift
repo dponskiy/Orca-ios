@@ -15,7 +15,17 @@ struct GroceryModeView: View {
     let memories: [Memory]
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("savedListsExpanded") private var savedListsExpanded = true
+    @AppStorage("listTypeExpanded") private var listTypeExpanded = true
+    @State private var shoppingTab: ShoppingTab = .myLists
+    @State private var selectedDiscoverCategory = "Chicken"
+    @State private var fetchingDiscoverRecipe: String? = nil
+    @State private var mealsByCategory: [String: [MealDBService.MealSummary]] = [:]
+    @State private var loadingMealCategory: String? = nil
     @Query(sort: \GroceryList.createdAt, order: .reverse) private var savedLists: [GroceryList]
+    @Query(sort: \SubTask.sortOrder) private var allSubTasks: [SubTask]
+
+    enum ShoppingTab { case myLists, saved, discover }
 
     enum ListType: String, CaseIterable {
         case grocery = "grocery"
@@ -49,6 +59,7 @@ struct GroceryModeView: View {
     @State private var selectedMemoryIds: Set<UUID> = []
     @State private var checkedItems: Set<UUID> = []
     @State private var checkedExtras: Set<String> = []
+    @State private var lastKnownFingerprint: String = ""
     @State private var extraItems: [String] = []
     @State private var hiddenIngredients: Set<UUID> = []
     @State private var newItemText: String = ""
@@ -65,6 +76,7 @@ struct GroceryModeView: View {
     @State private var showAddRecipeOptions = false
     @State private var showURLInputSheet = false
     @State private var showRecipeBuilder = false
+    @State private var showPhotoCapture = false
     @State private var viewingRecipe: Memory? = nil
     @State private var isCreatingShareLink = false
     @State private var shareURL: URL? = nil
@@ -166,10 +178,8 @@ struct GroceryModeView: View {
     }
 
     private func subTasks(for memory: Memory) -> [SubTask] {
-        let descriptor = FetchDescriptor<SubTask>(sortBy: [SortDescriptor(\.sortOrder)])
-        let all = (try? modelContext.fetch(descriptor)) ?? []
         var seen = Set<UUID>()
-        return all.filter { st in
+        return allSubTasks.filter { st in
             st.memoryId == memory.id && seen.insert(st.id).inserted
         }
     }
@@ -314,6 +324,7 @@ struct GroceryModeView: View {
                 checkedExtras.insert(item)
             }
         }
+        persistChecks()
     }
 
     private var totalItems: Int {
@@ -398,177 +409,567 @@ struct GroceryModeView: View {
                     .presentationDetents([.medium])
             }
         }
+        // Clear checks when recipes are toggled — adding/removing extra items during shopping is fine
+        .onChange(of: selectedMemoryIds) { _, _ in
+            let fp = listFingerprint
+            guard fp != lastKnownFingerprint else { return }
+            lastKnownFingerprint = fp
+            clearChecksAndPersist()
+        }
+        // Keep fingerprint current when extras change so restore-on-reopen still works
+        .onChange(of: extraItems) { _, _ in
+            persistChecks()
+            lastKnownFingerprint = listFingerprint
+        }
+    }
+
+    // MARK: - List Type + Saved Lists (above the List, outside insetGrouped)
+
+    @ViewBuilder private var listControlsStrip: some View {
+        VStack(spacing: 0) {
+            // List type row — collapsible
+            collapseHeader(
+                label: isCustomActive ? "Custom list" : listType.label,
+                icon: isCustomActive ? "list.bullet" : listType.icon,
+                isExpanded: $listTypeExpanded
+            )
+
+            if listTypeExpanded {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(ListType.allCases, id: \.self) { type in
+                            Button {
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    listType = type
+                                    activeCustomListId = nil
+                                    selectedMemoryIds = []
+                                    extraItems = []
+                                    groupByAisle = false
+                                    restoreToday()
+                                }
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: type.icon).font(.system(size: 12))
+                                    Text(type.label).font(.custom("DMSans-Medium", size: 13))
+                                }
+                                .foregroundColor(!isCustomActive && listType == type ? .white : .deepNavy.opacity(0.8))
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(!isCustomActive && listType == type ? Color.oceanTeal : Color.mist)
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if !customLists.isEmpty {
+                            Rectangle().fill(Color.gray.opacity(0.2)).frame(width: 1, height: 20)
+                        }
+
+                        ForEach(customLists) { list in
+                            Button {
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    activeCustomListId = list.id
+                                    extraItems = list.extraItems
+                                    selectedMemoryIds = []
+                                    groupByAisle = false
+                                }
+                            } label: {
+                                Text(list.name)
+                                    .font(.custom("DMSans-Medium", size: 13))
+                                    .foregroundColor(activeCustomListId == list.id ? .white : .deepNavy.opacity(0.8))
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .background(activeCustomListId == list.id ? Color.oceanTeal : Color.mist)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Button {
+                            newCustomListName = ""
+                            showNewCustomListAlert = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "plus").font(.system(size: 11, weight: .bold))
+                                Text("New").font(.custom("DMSans-Medium", size: 13))
+                            }
+                            .foregroundColor(.oceanTeal)
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(Color.oceanTeal.opacity(0.08))
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(Color.oceanTeal.opacity(0.25), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 16).padding(.bottom, 12)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            // Saved lists row — collapsible, only when lists exist
+            if !savedListsForType.isEmpty {
+                Divider().padding(.leading, 16)
+                collapseHeader(
+                    label: "Saved lists",
+                    badge: "\(savedListsForType.count)",
+                    isExpanded: $savedListsExpanded
+                )
+                if savedListsExpanded {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(savedListsForType) { list in savedListCard(list) }
+                        }
+                        .padding(.horizontal, 16).padding(.bottom, 10)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+
+            Divider()
+        }
+        .background(Color.white)
+        .animation(.easeOut(duration: 0.2), value: listTypeExpanded)
+        .animation(.easeOut(duration: 0.2), value: savedListsExpanded)
+    }
+
+    private func collapseHeader(label: String, icon: String? = nil, badge: String? = nil, isExpanded: Binding<Bool>) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.2)) { isExpanded.wrappedValue.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                if let icon {
+                    Image(systemName: icon).font(.system(size: 11)).foregroundColor(.gray)
+                }
+                Text(label)
+                    .font(.custom("DMSans-Medium", size: 12))
+                    .foregroundColor(.gray)
+                if let badge {
+                    Text(badge)
+                        .font(.custom("DMMono-Regular", size: 11))
+                        .foregroundColor(.gray.opacity(0.6))
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(Color.gray.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+                Spacer()
+                Image(systemName: isExpanded.wrappedValue ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.gray.opacity(0.5))
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func recipeShareURL(for memory: Memory) -> URL? {
+        // URL-sourced recipe — small link
+        if let sourceURL = memory.url, !sourceURL.isEmpty,
+           let encoded = sourceURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            return URL(string: "orca://recipe?url=\(encoded)")
+        }
+        // OCR/manual recipe — encode inline as base64 JSON
+        let lines = memory.text.components(separatedBy: "\n")
+        let titleLine = lines.first.map {
+            $0.hasPrefix("🍽") ? String($0.dropFirst(2)).trimmingCharacters(in: .whitespaces) : $0
+        } ?? "Recipe"
+        let ingredients = subTasks(for: memory).map { $0.text }
+        var instructions: [String] = []
+        if let instrRange = memory.text.range(of: "\nInstructions:\n") {
+            let block = String(memory.text[instrRange.upperBound...])
+            instructions = block.components(separatedBy: "\n").compactMap { line -> String? in
+                let s = line.trimmingCharacters(in: .whitespaces)
+                guard !s.isEmpty else { return nil }
+                if let dot = s.firstIndex(of: "."), s[s.startIndex].isNumber {
+                    return String(s[s.index(after: dot)...]).trimmingCharacters(in: .whitespaces)
+                }
+                return s
+            }
+        }
+        var prep: String? = nil; var cook: String? = nil; var serves: String? = nil
+        if lines.count > 1 {
+            for part in lines[1].components(separatedBy: " · ") {
+                let p = part.trimmingCharacters(in: .whitespaces)
+                if p.hasPrefix("Prep:") { prep = String(p.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
+                else if p.hasPrefix("Cook:") { cook = String(p.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
+                else if p.hasPrefix("Serves:") { serves = String(p.dropFirst(7)).trimmingCharacters(in: .whitespaces) }
+            }
+        }
+        let payload = SharedRecipePayload(title: titleLine, ingredients: ingredients, instructions: instructions,
+                                          prepTime: prep, cookTime: cook, servings: serves)
+        guard let base64 = payload.toBase64(),
+              let encoded = base64.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        return URL(string: "orca://recipe?data=\(encoded)")
+    }
+
+    private func savedListCard(_ list: GroceryList) -> some View {
+        let listName = list.name
+        let listMemoryCount = list.memoryIds.count
+        let listExtraCount = list.extraItems.count
+        let isTodayList = listName == "Today's list"
+
+        return HStack(spacing: 0) {
+            Button { loadList(list) } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bookmark.fill").font(.system(size: 11)).foregroundColor(.oceanTeal)
+                        Text(listName).font(.custom("DMSans-Medium", size: 13)).foregroundColor(.deepNavy).lineLimit(1)
+                    }
+                    let extras = "\(listExtraCount) \(listExtraCount == 1 ? "item" : "items")"
+                    let recipes = listMemoryCount == 0 ? "" : " · \(listMemoryCount) recipes"
+                    Text(extras + recipes).font(.custom("DMMono-Regular", size: 11)).foregroundColor(.gray)
+                }
+                .padding(.leading, 14).padding(.trailing, 8).padding(.vertical, 10)
+            }
+            if !isTodayList {
+                Button { modelContext.delete(list) } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 15)).foregroundColor(.gray.opacity(0.5))
+                }
+                .padding(.trailing, 10)
+            } else {
+                Spacer().frame(width: 10)
+            }
+        }
+        .background(isTodayList ? Color.oceanTeal.opacity(0.12) : Color.oceanTeal.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(
+            isTodayList ? Color.oceanTeal.opacity(0.4) : Color.oceanTeal.opacity(0.2), lineWidth: 1))
+    }
+
+    // MARK: - Shopping Tab Picker
+
+    @ViewBuilder private var shoppingTabPicker: some View {
+        HStack(spacing: 0) {
+            shoppingTabButton(label: "My List", icon: "list.bullet", tab: .myLists)
+            shoppingTabButton(label: "Saved", icon: "bookmark", tab: .saved)
+            shoppingTabButton(label: "Discover", icon: "sparkles", tab: .discover)
+        }
+        .padding(3)
+        .background(Color.mist)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(Color.white)
+        .overlay(Divider(), alignment: .bottom)
+    }
+
+    private func shoppingTabButton(label: String, icon: String, tab: ShoppingTab) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.2)) { shoppingTab = tab }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.system(size: 11))
+                Text(label).font(.custom("DMSans-Medium", size: 13))
+            }
+            .foregroundColor(shoppingTab == tab ? .white : .deepNavy)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(shoppingTab == tab ? Color.oceanTeal : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 11))
+        }
+    }
+
+    // MARK: - Saved Tab Content
+
+    @ViewBuilder private var savedTabContent: some View {
+        let lists = savedLists.filter { $0.listType == listType.rawValue || $0.listType == "custom" }
+        if lists.isEmpty {
+            VStack(spacing: 12) {
+                Spacer()
+                Image(systemName: "bookmark").font(.system(size: 40)).foregroundColor(.gray.opacity(0.3))
+                Text("No saved lists yet")
+                    .font(.custom("DMSans-Medium", size: 17)).foregroundColor(.deepNavy)
+                Text("Build a list and tap Save to keep it here.")
+                    .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                Spacer()
+            }
+            .padding(.horizontal, 32)
+        } else {
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    ForEach(lists) { list in
+                        savedListGridCard(list)
+                    }
+                }
+                .padding(16)
+            }
+        }
+    }
+
+    private func savedListGridCard(_ list: GroceryList) -> some View {
+        let isTodayList = list.name == "Today's list"
+        return Button {
+            loadList(list)
+            withAnimation(.easeOut(duration: 0.2)) { shoppingTab = .myLists }
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: isTodayList ? "sun.max.fill" : "bookmark.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(isTodayList ? .coral : .oceanTeal)
+                    Spacer()
+                    if !isTodayList {
+                        Button {
+                            modelContext.delete(list)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(.gray.opacity(0.4))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Text(list.name)
+                    .font(.custom("DMSans-Medium", size: 14))
+                    .foregroundColor(.deepNavy)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer()
+
+                HStack(spacing: 4) {
+                    if list.memoryIds.count > 0 {
+                        Text("\(list.memoryIds.count) recipe\(list.memoryIds.count == 1 ? "" : "s")")
+                            .font(.custom("DMMono-Regular", size: 11))
+                            .foregroundColor(.gray)
+                    }
+                    if list.memoryIds.count > 0 && list.extraItems.count > 0 {
+                        Text("·").font(.custom("DMMono-Regular", size: 11)).foregroundColor(.gray)
+                    }
+                    if list.extraItems.count > 0 {
+                        Text("\(list.extraItems.count) item\(list.extraItems.count == 1 ? "" : "s")")
+                            .font(.custom("DMMono-Regular", size: 11))
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
+            .background(isTodayList ? Color.coral.opacity(0.07) : Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(
+                isTodayList ? Color.coral.opacity(0.25) : Color.gray.opacity(0.12), lineWidth: 1))
+            .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Discover Tab Content
+
+    @ViewBuilder private var discoverTabContent: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                // Popular sites strip
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("BROWSE BY SITE")
+                        .font(.custom("DMSans-Medium", size: 11))
+                        .foregroundColor(.gray)
+                        .tracking(0.5)
+                        .padding(.horizontal, 16)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(popularSites, id: \.name) { site in
+                                Button {
+                                    if let url = URL(string: site.url) {
+                                        UIApplication.shared.open(url)
+                                    }
+                                } label: {
+                                    VStack(spacing: 5) {
+                                        Text(site.emoji).font(.system(size: 22))
+                                        Text(site.name)
+                                            .font(.custom("DMSans-Medium", size: 11))
+                                            .foregroundColor(.deepNavy)
+                                            .multilineTextAlignment(.center)
+                                            .lineLimit(2)
+                                    }
+                                    .frame(width: 72, height: 68)
+                                    .background(Color.white)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 16).padding(.vertical, 4)
+                    }
+                }
+                .padding(.top, 12).padding(.bottom, 8)
+
+                Divider().padding(.horizontal, 16).padding(.bottom, 4)
+
+                // Category chips
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(mealCategories, id: \.name) { cat in
+                            Button {
+                                withAnimation(.easeOut(duration: 0.15)) { selectedDiscoverCategory = cat.name }
+                                fetchMealsIfNeeded(for: cat)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(cat.emoji).font(.system(size: 13))
+                                    Text(cat.name).font(.custom("DMSans-Medium", size: 13))
+                                }
+                                .foregroundColor(selectedDiscoverCategory == cat.name ? .white : .deepNavy)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(selectedDiscoverCategory == cat.name ? Color.oceanTeal : Color.mist)
+                                .clipShape(Capsule())
+                                .fixedSize()
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                }
+
+                // Meal rows for selected category
+                if loadingMealCategory == selectedDiscoverCategory {
+                    ProgressView().tint(.oceanTeal).padding(.vertical, 32)
+                } else {
+                    let meals = mealsByCategory[selectedDiscoverCategory] ?? []
+                    VStack(spacing: 0) {
+                        ForEach(meals) { meal in
+                            mealRow(meal)
+                                .padding(.horizontal, 16).padding(.vertical, 10)
+                            Divider().padding(.leading, 16)
+                        }
+                    }
+                }
+
+                // Tip
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle").font(.system(size: 12)).foregroundColor(.gray.opacity(0.5))
+                    Text("Tap a recipe to import its ingredients straight to your list")
+                        .font(.custom("DMSans-Regular", size: 12))
+                        .foregroundColor(.gray.opacity(0.5))
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+        }
+        .background(Color.pearl)
+        .task {
+            if let first = mealCategories.first {
+                fetchMealsIfNeeded(for: first)
+            }
+        }
+    }
+
+    private func mealRow(_ meal: MealDBService.MealSummary) -> some View {
+        Button {
+            guard fetchingDiscoverRecipe == nil else { return }
+            fetchingDiscoverRecipe = meal.idMeal
+            Task {
+                do {
+                    let recipe = try await MealDBService.shared.fetchRecipe(id: meal.idMeal)
+                    await MainActor.run {
+                        fetchingDiscoverRecipe = nil
+                        fetchedRecipe = recipe
+                        showRecipePreview = true
+                    }
+                } catch {
+                    await MainActor.run { fetchingDiscoverRecipe = nil }
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                AsyncImage(url: URL(string: meal.strMealThumb)) { phase in
+                    if case .success(let img) = phase {
+                        img.resizable().aspectRatio(contentMode: .fill)
+                    } else {
+                        Color.mist
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                Text(meal.strMeal)
+                    .font(.custom("DMSans-Medium", size: 14))
+                    .foregroundColor(.deepNavy)
+                    .lineLimit(2)
+
+                Spacer()
+
+                if fetchingDiscoverRecipe == meal.idMeal {
+                    ProgressView().scaleEffect(0.75).tint(.oceanTeal)
+                } else {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 18))
+                        .foregroundColor(fetchingDiscoverRecipe == nil ? .oceanTeal : .gray.opacity(0.3))
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .disabled(fetchingDiscoverRecipe != nil)
+    }
+
+    private func fetchMealsIfNeeded(for category: MealCategory) {
+        guard mealsByCategory[category.name] == nil, loadingMealCategory != category.name else { return }
+        loadingMealCategory = category.name
+        let param = category.mealDBParam
+        Task {
+            do {
+                let meals: [MealDBService.MealSummary]
+                if param.query == "c" {
+                    meals = try await MealDBService.shared.fetchMeals(category: param.value)
+                } else {
+                    meals = try await MealDBService.shared.fetchMeals(area: param.value)
+                }
+                await MainActor.run {
+                    mealsByCategory[category.name] = meals
+                    if loadingMealCategory == category.name { loadingMealCategory = nil }
+                }
+            } catch {
+                await MainActor.run {
+                    if loadingMealCategory == category.name { loadingMealCategory = nil }
+                }
+            }
+        }
     }
 
     // MARK: - Selection View
 
     private var selectionView: some View {
         VStack(spacing: 0) {
+            shoppingTabPicker
+
+            if shoppingTab == .discover {
+                discoverTabContent
+                    .frame(maxHeight: .infinity)
+            } else if shoppingTab == .saved {
+                savedTabContent
+                    .frame(maxHeight: .infinity)
+            } else {
             List {
-                Section {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(ListType.allCases, id: \.self) { type in
-                                Button {
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        listType = type
-                                        activeCustomListId = nil
-                                        selectedMemoryIds = []
-                                        extraItems = []
-                                        groupByAisle = false
-                                        restoreToday()
-                                    }
-                                } label: {
-                                    HStack(spacing: 5) {
-                                        Image(systemName: type.icon).font(.system(size: 12))
-                                        Text(type.label).font(.custom("DMSans-Medium", size: 13))
-                                    }
-                                    .foregroundColor(!isCustomActive && listType == type ? .white : .deepNavy)
-                                    .padding(.horizontal, 12).padding(.vertical, 7)
-                                    .background(!isCustomActive && listType == type ? Color.oceanTeal : Color.mist)
-                                    .clipShape(Capsule())
-                                    .fixedSize()
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(customLists) { list in
-                                let listName = list.name
-                                let listId = list.id
-                                Button {
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        activeCustomListId = listId
-                                        extraItems = list.extraItems
-                                        selectedMemoryIds = []
-                                        groupByAisle = false
-                                    }
-                                } label: {
-                                    Text(listName)
-                                        .font(.custom("DMSans-Medium", size: 13))
-                                        .foregroundColor(activeCustomListId == listId ? .white : .deepNavy)
-                                        .padding(.horizontal, 12).padding(.vertical, 7)
-                                        .background(activeCustomListId == listId ? Color.oceanTeal : Color.mist)
-                                        .clipShape(Capsule())
-                                        .fixedSize()
-                                }
-                                .buttonStyle(.plain)
-                            }
-
-                            Button {
-                                newCustomListName = ""
-                                showNewCustomListAlert = true
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
-                                    Text("New list").font(.custom("DMSans-Medium", size: 13))
-                                }
-                                .foregroundColor(.oceanTeal)
-                                .padding(.horizontal, 12).padding(.vertical, 7)
-                                .background(Color.oceanTeal.opacity(0.1))
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
-                                .fixedSize()
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-
-                } header: {
-                    Text("List type")
-                        .font(.custom("DMSans-Medium", size: 11))
-                        .foregroundColor(.gray)
-                        .textCase(nil)
-                }
-
-                if !savedListsForType.isEmpty {
-                    Section {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 10) {
-                                ForEach(savedListsForType) { list in
-                                    let listName = list.name
-                                    let listMemoryCount = list.memoryIds.count
-                                    let listExtraCount = list.extraItems.count
-                                    let isTodayList = list.name == "Today's list"
-
-                                    HStack(spacing: 0) {
-                                        Button { loadList(list) } label: {
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                HStack(spacing: 6) {
-                                                    Image(systemName: "bookmark.fill")
-                                                        .font(.system(size: 11)).foregroundColor(.oceanTeal)
-                                                    Text(listName)
-                                                        .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.deepNavy).lineLimit(1)
-                                                }
-                                                Text("\(listExtraCount) \(listExtraCount == 1 ? "item" : "items")\(listMemoryCount == 0 ? "" : " · \(listMemoryCount) recipes")")
-                                                    .font(.custom("DMMono-Regular", size: 11)).foregroundColor(.gray)
-                                            }
-                                            .padding(.leading, 14).padding(.trailing, 8).padding(.vertical, 10)
-                                        }
-                                        if !isTodayList {
-                                            Button { modelContext.delete(list) } label: {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .font(.system(size: 15)).foregroundColor(.gray.opacity(0.5))
-                                            }
-                                            .padding(.trailing, 10)
-                                        } else {
-                                            Spacer().frame(width: 10)
-                                        }
-                                    }
-                                    .background(isTodayList ? Color.oceanTeal.opacity(0.12) : Color.oceanTeal.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(isTodayList ? Color.oceanTeal.opacity(0.4) : Color.oceanTeal.opacity(0.2), lineWidth: 1))
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                    } header: {
-                        Text("Saved lists")
-                            .font(.custom("DMSans-Medium", size: 11))
-                            .foregroundColor(.gray)
-                            .textCase(nil)
-                    }
-                }
-
                 if !isCustomActive && listType.hasRecipes {
                     if recipeMemories.isEmpty {
                         Section {
-                            Button {
-                                showAddRecipeOptions = true
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "fork.knife")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.oceanTeal)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Add your first recipe")
-                                            .font(.custom("DMSans-Medium", size: 14))
-                                            .foregroundColor(.oceanTeal)
-                                        Text("Paste a URL or build one manually")
-                                            .font(.custom("DMSans-Regular", size: 12))
-                                            .foregroundColor(.gray)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.gray.opacity(0.4))
+                            VStack(alignment: .leading, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Label("Paste any recipe URL — ingredients auto-import", systemImage: "link")
+                                        .font(.custom("DMSans-Regular", size: 13)).foregroundColor(.gray)
+                                    Label("Toggle recipes on/off to build your list", systemImage: "checkmark.circle")
+                                        .font(.custom("DMSans-Regular", size: 13)).foregroundColor(.gray)
+                                    Label("Hit Shop and check off items by aisle", systemImage: "cart")
+                                        .font(.custom("DMSans-Regular", size: 13)).foregroundColor(.gray)
                                 }
-                                .padding(.vertical, 4)
+
+                                Button { showAddRecipeOptions = true } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "plus").font(.system(size: 13, weight: .semibold))
+                                        Text("Add Recipe")
+                                            .font(.custom("DMSans-Medium", size: 14))
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(Color.oceanTeal)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.vertical, 8)
+                            .listRowBackground(Color.oceanTeal.opacity(0.04))
                         } header: {
-                            Text("From recipes")
+                            Text("Recipes")
                                 .font(.custom("DMSans-Medium", size: 11))
                                 .foregroundColor(.gray)
                                 .textCase(nil)
@@ -591,6 +992,17 @@ struct GroceryModeView: View {
                                     }
                                     .buttonStyle(.plain)
                                     Spacer()
+                                    if let shareURL = recipeShareURL(for: memory) {
+                                        ShareLink(
+                                            item: shareURL,
+                                            subject: Text("Recipe on Orca"),
+                                            message: Text("Open in Orca to add this recipe!")
+                                        ) {
+                                            Image(systemName: "square.and.arrow.up")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.oceanTeal.opacity(0.7))
+                                        }
+                                    }
                                     Toggle("", isOn: Binding(
                                         get: { isSelected },
                                         set: { on in
@@ -603,22 +1015,33 @@ struct GroceryModeView: View {
                                 }
                                 .padding(.vertical, 4)
                                 .listRowBackground(isSelected ? Color.oceanTeal.opacity(0.06) : Color.white)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        let id = memory.id
+                                        selectedMemoryIds.remove(id)
+                                        modelContext.delete(memory)
+                                        SupabaseSyncService.shared.scheduleDelete(id: id)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
                             }
                         } header: {
                             HStack {
-                                Text("From recipes")
+                                Text("Recipes")
                                     .font(.custom("DMSans-Medium", size: 11))
                                     .foregroundColor(.gray)
                                     .textCase(nil)
                                 Spacer()
-                                Button {
-                                    showAddRecipeOptions = true
-                                } label: {
+                                Button { showAddRecipeOptions = true } label: {
                                     HStack(spacing: 4) {
-                                        Image(systemName: "plus").font(.system(size: 11, weight: .semibold))
-                                        Text("Add recipe").font(.custom("DMSans-Medium", size: 11))
+                                        Image(systemName: "plus").font(.system(size: 11, weight: .bold))
+                                        Text("Add").font(.custom("DMSans-Medium", size: 11))
                                     }
-                                    .foregroundColor(.oceanTeal)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 10).padding(.vertical, 4)
+                                    .background(Color.oceanTeal)
+                                    .clipShape(Capsule())
                                 }
                                 .textCase(nil)
                             }
@@ -690,21 +1113,13 @@ struct GroceryModeView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .listSectionSpacing(4)
             .onAppear { restoreToday() }
 
             VStack(spacing: 0) {
                 Divider()
-                VStack(spacing: 10) {
-                    HStack {
-                        Text(selectionSummary).font(.custom("DMSans-Medium", size: 14)).foregroundColor(.deepNavy)
-                        Spacer()
-                        if totalItems > 0 {
-                            Text("\(totalItems) items").font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
-                        }
-                    }
-
+                VStack(spacing: 12) {
                     if isCustomActive, let customList = activeCustomList {
-                        let customName = customList.name
                         Button(role: .destructive) {
                             modelContext.delete(customList)
                             activeCustomListId = nil
@@ -713,14 +1128,14 @@ struct GroceryModeView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "trash").font(.system(size: 13))
-                                Text("Delete \"\(customName)\"")
+                                Text("Delete \"\(customList.name)\"")
                                     .font(.custom("DMSans-Medium", size: 14))
                             }
                             .foregroundColor(.red)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.red.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(.vertical, 12)
+                            .background(Color.red.opacity(0.07))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
                         }
                     }
 
@@ -728,42 +1143,104 @@ struct GroceryModeView: View {
                         if canStartShopping && !isCustomActive {
                             Button { saveListName = ""; showSaveSheet = true } label: {
                                 HStack(spacing: 6) {
-                                    Image(systemName: "bookmark.fill").font(.system(size: 13))
-                                    Text("Save").font(.custom("DMSans-Medium", size: 14))
+                                    Image(systemName: "bookmark").font(.system(size: 14, weight: .medium))
+                                    Text("Save").font(.custom("DMSans-Medium", size: 15))
                                 }
                                 .foregroundColor(.oceanTeal)
-                                .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 15)
                                 .background(Color.oceanTeal.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
                             }
                         }
+
                         Button {
                             withAnimation(.spring(duration: 0.3)) { shopping = true }
                         } label: {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 8) {
                                 Image(systemName: isCustomActive ? "list.bullet" : listType == .grocery ? "cart.fill" : listType == .hardware ? "hammer.fill" : "shippingbox.fill")
-                                    .font(.system(size: 14))
-                                Text("Start shopping").font(.custom("DMSans-Medium", size: 15))
+                                    .font(.system(size: 15))
+                                Text(canStartShopping ? "Start Shopping" : "Add items to start")
+                                    .font(.custom("DMSans-Medium", size: 16))
+                                if canStartShopping && totalItems > 0 {
+                                    Text("· \(totalItems)")
+                                        .font(.custom("DMMono-Regular", size: 13))
+                                        .opacity(0.75)
+                                }
                             }
-                            .foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 12)
-                            .background(canStartShopping ? Color.oceanTeal : Color.gray.opacity(0.4))
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(canStartShopping ? Color.oceanTeal : Color.gray.opacity(0.35))
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
                         }
                         .disabled(!canStartShopping)
                     }
                 }
-                .padding(.horizontal, 20).padding(.vertical, 16).background(Color.white)
+                .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 24)
+                .background(Color.white)
             }
+            } // end else myLists
         }
-        .navigationTitle("🛒 \(navigationTitle)")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Done") { dismiss() }.foregroundColor(.gray)
             }
+            ToolbarItem(placement: .principal) {
+                Menu {
+                    ForEach(ListType.allCases, id: \.self) { type in
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                listType = type
+                                activeCustomListId = nil
+                                selectedMemoryIds = []
+                                extraItems = []
+                                groupByAisle = false
+                                restoreToday()
+                            }
+                        } label: {
+                            Label(type.label, systemImage: type.icon)
+                        }
+                    }
+                    if !customLists.isEmpty {
+                        Divider()
+                        ForEach(customLists) { list in
+                            Button {
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    activeCustomListId = list.id
+                                    extraItems = list.extraItems
+                                    selectedMemoryIds = []
+                                    groupByAisle = false
+                                    shoppingTab = .myLists
+                                }
+                            } label: {
+                                Label(list.name, systemImage: "list.bullet")
+                            }
+                        }
+                    }
+                    Divider()
+                    Button {
+                        newCustomListName = ""
+                        showNewCustomListAlert = true
+                    } label: {
+                        Label("New List…", systemImage: "plus")
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("🛒 \(navigationTitle)")
+                            .font(.custom("DMSans-Medium", size: 17))
+                            .foregroundColor(.deepNavy)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
             if canStartShopping {
                 ToolbarItem(placement: .primaryAction) {
+                    // Share list
                     Button {
                         Task { await createAndShareList() }
                     } label: {
@@ -784,10 +1261,11 @@ struct GroceryModeView: View {
                 recipeFetchError = nil
                 showURLInputSheet = true
             }
+            Button("Take a photo or use screenshots") { showPhotoCapture = true }
             Button("Build manually") { showRecipeBuilder = true }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Import ingredients automatically from a URL or build your own.")
+            Text("Import ingredients automatically from a URL, photo, or build your own.")
         }
         .sheet(isPresented: $showURLInputSheet) {
             NavigationStack {
@@ -949,6 +1427,13 @@ struct GroceryModeView: View {
             }
         }
         .sheet(isPresented: $showRecipeBuilder) { RecipeBuilderView() }
+        .fullScreenCover(isPresented: $showPhotoCapture) {
+            PhotoCaptureView(isPresented: $showPhotoCapture) { memory in
+                selectedMemoryIds.insert(memory.id)
+                autoSaveToday()
+            }
+            .environment(authService)
+        }
         .sheet(item: $viewingRecipe) { recipe in
             MemoryDetailView(memory: recipe)
         }
@@ -994,26 +1479,11 @@ struct GroceryModeView: View {
 
         return VStack(spacing: 0) {
             if !isCustomActive && total > 0 {
-                HStack(spacing: 0) {
-                    Button { withAnimation { groupByAisle = false } } label: {
-                        Text(listType == .grocery ? "By recipe" : "By item")
-                            .font(.custom("DMSans-Medium", size: 13))
-                            .foregroundColor(groupByAisle ? .gray : .white)
-                            .frame(maxWidth: .infinity).padding(.vertical, 7)
-                            .background(groupByAisle ? Color.clear : Color.oceanTeal)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                    Button { withAnimation { groupByAisle = true } } label: {
-                        Text("By section")
-                            .font(.custom("DMSans-Medium", size: 13))
-                            .foregroundColor(groupByAisle ? .white : .gray)
-                            .frame(maxWidth: .infinity).padding(.vertical, 7)
-                            .background(groupByAisle ? Color.oceanTeal : Color.clear)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
+                Picker("View", selection: $groupByAisle) {
+                    Text(listType == .grocery ? "By recipe" : "By item").tag(false)
+                    Text("By section").tag(true)
                 }
-                .background(Color.mist)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .pickerStyle(.segmented)
                 .padding(.horizontal, 20).padding(.vertical, 10)
                 .background(Color.white)
             }
@@ -1039,37 +1509,72 @@ struct GroceryModeView: View {
                     }
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4).fill(Color.mist).frame(height: 6)
-                            RoundedRectangle(cornerRadius: 4).fill(Color.oceanTeal)
-                                .frame(width: geo.size.width * progress, height: 6)
-                                .animation(.spring(duration: 0.3), value: progress)
+                            RoundedRectangle(cornerRadius: 5).fill(Color.mist).frame(height: 8)
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(checked == total && total > 0
+                                    ? LinearGradient(colors: [.seafoam, .green.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
+                                    : LinearGradient(colors: [.oceanTeal, .seafoam], startPoint: .leading, endPoint: .trailing)
+                                )
+                                .frame(width: geo.size.width * progress, height: 8)
+                                .animation(.spring(duration: 0.4), value: progress)
                         }
                     }
-                    .frame(height: 6)
+                    .frame(height: 8)
 
-                    // Auto-check pantry staples
-                    Button { checkPantryStaples() } label: {
-                        VStack(spacing: 2) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "checkmark.circle.fill").font(.system(size: 14))
-                                Text("Check Pantry Items").font(.custom("DMSans-Medium", size: 14))
+                    HStack(spacing: 10) {
+                        // Auto-check pantry staples
+                        Button { checkPantryStaples() } label: {
+                            VStack(spacing: 2) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "checkmark.circle.fill").font(.system(size: 13))
+                                    Text("Pantry Items").font(.custom("DMSans-Medium", size: 13))
+                                }
+                                Text("salt, oils, spices & more")
+                                    .font(.custom("DMSans-Regular", size: 10))
+                                    .opacity(0.75)
                             }
-                            Text("auto-checks salt, oils, water, spices & more")
-                                .font(.custom("DMSans-Regular", size: 11))
-                                .opacity(0.75)
+                            .foregroundColor(.oceanTeal)
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Color.oceanTeal.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.oceanTeal.opacity(0.25), lineWidth: 1))
                         }
-                        .foregroundColor(.oceanTeal)
-                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                        .background(Color.oceanTeal.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.oceanTeal.opacity(0.25), lineWidth: 1))
+
+                        // Check all / Uncheck all
+                        let allChecked = checked == total && total > 0
+                        Button {
+                            if allChecked {
+                                checkedItems = []
+                                checkedExtras = []
+                            } else {
+                                checkedItems = Set(selectedMemories.flatMap { visibleSubTasks(for: $0) }.map { $0.id })
+                                checkedExtras = Set(extraItems)
+                            }
+                            persistChecks()
+                        } label: {
+                            VStack(spacing: 2) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: allChecked ? "circle" : "checkmark.circle.fill").font(.system(size: 13))
+                                    Text(allChecked ? "Uncheck All" : "Check All").font(.custom("DMSans-Medium", size: 13))
+                                }
+                                Text(allChecked ? "clear all checks" : "mark everything done")
+                                    .font(.custom("DMSans-Regular", size: 10))
+                                    .opacity(0.75)
+                            }
+                            .foregroundColor(.deepNavy)
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(Color.black.opacity(0.04))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.08), lineWidth: 1))
+                        }
                     }
 
                     Button {
                         withAnimation(.spring(duration: 0.3)) {
-                            shopping = false; checkedItems = []; checkedExtras = []
+                            shopping = false
                             hiddenIngredients = []; groupByAisle = false
                         }
+                        clearChecksAndPersist()
                     } label: {
                         Text("Back to list").font(.custom("DMSans-Medium", size: 15)).foregroundColor(.oceanTeal)
                     }
@@ -1217,9 +1722,12 @@ struct GroceryModeView: View {
             ForEach(extraItems.sorted { !checkedExtras.contains($0) && checkedExtras.contains($1) }, id: \.self) { item in
                 let isChecked = checkedExtras.contains(item)
                 Button {
+                    let generator = UIImpactFeedbackGenerator(style: .light)
+                    generator.impactOccurred()
                     withAnimation(.spring(duration: 0.2)) {
                         if isChecked { checkedExtras.remove(item) } else { checkedExtras.insert(item) }
                     }
+                    persistChecks()
                 } label: {
                     HStack(spacing: 12) {
                         ZStack {
@@ -1296,9 +1804,12 @@ struct GroceryModeView: View {
     private func recipeIngredientRow(subTask: SubTask) -> some View {
         let isChecked = checkedItems.contains(subTask.id)
         return Button {
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
             withAnimation(.spring(duration: 0.2)) {
                 if isChecked { checkedItems.remove(subTask.id) } else { checkedItems.insert(subTask.id) }
             }
+            persistChecks()
         } label: {
             HStack(spacing: 12) {
                 ZStack {
@@ -1329,6 +1840,8 @@ struct GroceryModeView: View {
     private func aisleItemRow(item: AisleItem) -> some View {
         let isChecked = item.isExtra ? checkedExtras.contains(item.text) : checkedItems.contains(item.subtaskId ?? UUID())
         return Button {
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
             withAnimation(.spring(duration: 0.2)) {
                 if item.isExtra {
                     if isChecked { checkedExtras.remove(item.text) } else { checkedExtras.insert(item.text) }
@@ -1336,6 +1849,7 @@ struct GroceryModeView: View {
                     if isChecked { checkedItems.remove(id) } else { checkedItems.insert(id) }
                 }
             }
+            persistChecks()
         } label: {
             HStack(spacing: 12) {
                 let color: Color = item.isExtra ? itemAccentColor : .oceanTeal
@@ -1463,30 +1977,56 @@ struct GroceryModeView: View {
     }
 
     private func groceryCategory(for lower: String) -> String {
-        let produce = ["apple", "apples", "banana", "bananas", "orange", "oranges", "lemon", "lemons", "lime", "limes", "grape", "grapes", "strawberry", "strawberries", "blueberry", "blueberries", "raspberry", "raspberries", "blackberry", "blackberries", "cranberry", "cranberries", "gooseberry", "gooseberries", "cherry", "cherries", "berry", "berries", "mango", "mangoes", "pineapple", "peach", "peaches", "pear", "pears", "plum", "plums", "watermelon", "cantaloupe", "honeydew", "kiwi", "avocado", "avocados", "tomato", "tomatoes", "cucumber", "cucumbers", "zucchini", "squash", "pepper", "peppers", "jalapen", "onion", "onions", "shallot", "shallots", "garlic", "ginger", "carrot", "carrots", "celery", "broccoli", "cauliflower", "cabbage", "kale", "spinach", "lettuce", "arugula", "romaine", "chard", "beet", "beets", "turnip", "turnips", "parsnip", "parsnips", "potato", "potatoes", "sweet potato", "sweet potatoes", "yam", "yams", "corn", "mushroom", "mushrooms", "asparagus", "artichoke", "artichokes", "brussels", "eggplant", "leek", "leeks", "fennel", "radish", "radishes", "bok choy", "daikon", "scallion", "scallions", "green onion", "green onions", "chive", "chives", "cilantro", "parsley", "basil", "mint", "thyme", "rosemary", "sage", "dill", "oregano", "herb", "herbs", "sprout", "sprouts", "snap pea", "snap peas", "green bean", "green beans", "edamame", "plantain", "plantains", "papaya", "guava", "coconut", "fig", "figs", "date", "dates", "pomegranate", "pomegranates", "persimmon", "persimmons", "lychee", "tarragon", "watercress", "endive", "radicchio", "microgreen", "microgreens"]
-        let meat = ["chicken", "beef", "pork", "lamb", "turkey", "veal", "duck", "bison", "venison", "steak", "ground beef", "ground turkey", "ground chicken", "breast", "thigh", "drumstick", "wing", "tenderloin", "loin", "rib", "chop", "roast", "sausage", "bacon", "ham", "prosciutto", "pancetta", "guanciale", "chorizo", "bratwurst", "hot dog", "meatball", "burger", "patty", "brisket", "chuck", "sirloin", "flank", "skirt steak", "ribeye", "filet", "short rib", "salami", "pepperoni", "kielbasa", "andouille"]
+        let produce = ["apple", "apples", "banana", "bananas", "orange", "oranges", "lemon", "lemons", "lime", "limes", "grape", "grapes", "strawberry", "strawberries", "blueberry", "blueberries", "raspberry", "raspberries", "blackberry", "blackberries", "cranberry", "cranberries", "gooseberry", "gooseberries", "cherry", "cherries", "berry", "berries", "mango", "mangoes", "pineapple", "peach", "peaches", "pear", "pears", "plum", "plums", "watermelon", "cantaloupe", "honeydew", "kiwi", "avocado", "avocados", "tomato", "tomatoes", "cucumber", "cucumbers", "zucchini", "squash", "pepper", "peppers", "jalapen", "jalapeño", "jalapeños", "jalapeno", "jalapenos", "poblano", "serrano", "habanero", "chile", "chiles", "onion", "onions", "shallot", "shallots", "garlic", "ginger", "carrot", "carrots", "celery", "broccoli", "cauliflower", "cabbage", "kale", "spinach", "lettuce", "arugula", "romaine", "chard", "beet", "beets", "turnip", "turnips", "parsnip", "parsnips", "potato", "potatoes", "sweet potato", "sweet potatoes", "yam", "yams", "corn", "mushroom", "mushrooms", "asparagus", "artichoke", "artichokes", "brussels", "eggplant", "leek", "leeks", "fennel", "radish", "radishes", "bok choy", "daikon", "scallion", "scallions", "green onion", "green onions", "chive", "chives", "cilantro", "parsley", "basil", "mint", "thyme", "rosemary", "sage", "dill", "oregano", "herb", "herbs", "sprout", "sprouts", "snap pea", "snap peas", "green bean", "green beans", "edamame", "plantain", "plantains", "papaya", "guava", "coconut", "fig", "figs", "date", "dates", "pomegranate", "pomegranates", "persimmon", "persimmons", "lychee", "tarragon", "watercress", "endive", "radicchio", "microgreen", "microgreens", "tofu", "tempeh", "silken tofu", "firm tofu", "extra firm tofu"]
+        let meat = ["chicken", "beef", "pork", "lamb", "turkey", "veal", "duck", "bison", "venison", "steak", "ground beef", "ground turkey", "ground chicken", "breast", "thigh", "drumstick", "wing", "tenderloin", "loin", "rib", "pork chop", "lamb chop", "veal chop", "roast", "sausage", "bacon", "ham", "prosciutto", "pancetta", "guanciale", "chorizo", "bratwurst", "hot dog", "meatball", "meatloaf", "burger", "patty", "brisket", "chuck", "sirloin", "flank", "skirt steak", "ribeye", "filet", "short rib", "salami", "pepperoni", "kielbasa", "andouille"]
         let seafood = ["fish", "salmon", "tuna", "cod", "halibut", "tilapia", "sea bass", "mahi", "snapper", "trout", "sardine", "anchovy", "herring", "mackerel", "shrimp", "prawn", "lobster", "crab", "scallop", "clam", "mussel", "oyster", "squid", "octopus", "calamari", "seafood", "lox", "branzino", "swordfish", "catfish", "pollock", "sole", "flounder", "monkfish", "ahi"]
         let dairy = ["milk", "oat milk", "almond milk", "soy milk", "cream", "half and half", "heavy cream", "sour cream", "cream cheese", "butter", "ghee", "yogurt", "greek yogurt", "kefir", "cheese", "cheddar", "mozzarella", "parmesan", "parmigiano", "pecorino", "brie", "gouda", "gruyere", "swiss", "provolone", "feta", "ricotta", "cottage cheese", "egg", "whipped cream", "creme fraiche", "dairy", "manchego", "havarti", "colby", "monterey jack", "pepper jack", "asiago", "romano", "camembert", "gorgonzola", "burrata"]
         let deli = ["deli", "lunch meat", "pastrami", "corned beef", "mortadella", "bologna", "rotisserie", "sushi", "hummus", "tzatziki", "guacamole", "pate", "smoked salmon", "charcuterie", "prepared food", "ready to eat"]
         let bakery = ["bread", "sourdough", "baguette", "ciabatta", "focaccia", "roll", "bun", "croissant", "bagel", "english muffin", "pita", "naan", "flatbread", "tortilla", "wrap", "muffin", "scone", "danish", "brownie", "donut", "doughnut", "pretzel bread", "challah", "rye bread", "brioche", "pumpernickel", "multigrain"]
         let frozen = ["frozen", "ice cream", "gelato", "sorbet", "popsicle", "frozen pizza", "frozen meal", "frozen vegetable", "frozen fruit", "frozen shrimp", "frozen fish", "frozen chicken", "frozen waffle", "frozen burrito", "frozen dumpling", "acai pack"]
-        let canned = ["canned", "can of", "tomato sauce", "tomato paste", "crushed tomato", "diced tomato", "whole tomato", "pasta sauce", "marinara", "arrabiata", "chickpea", "lentil", "black bean", "kidney bean", "pinto bean", "white bean", "cannellini", "garbanzo", "chicken broth", "beef broth", "vegetable broth", "stock", "coconut milk can", "artichoke heart", "roasted pepper", "canned olive", "pickle", "capers", "pumpkin puree", "applesauce", "soup can", "sardine can", "tuna can", "anchovy can"]
-        let pasta = ["pasta", "spaghetti", "penne", "rigatoni", "fettuccine", "linguine", "tagliatelle", "farfalle", "fusilli", "rotini", "orzo", "lasagna", "macaroni", "gnocchi", "ramen noodle", "rice noodle", "udon", "soba", "vermicelli", "white rice", "brown rice", "basmati", "jasmine rice", "arborio", "wild rice", "quinoa", "farro", "barley", "couscous", "bulgur", "millet", "polenta", "grits", "oat", "oatmeal", "rolled oat", "steel cut", "all purpose flour", "bread flour", "whole wheat flour", "almond flour", "cornmeal", "panko", "breadcrumb", "buckwheat", "amaranth", "teff", "spelt"]
+        let canned = ["canned", "can of", "jar", "tomato sauce", "tomato paste", "crushed tomato", "diced tomato", "whole tomato", "pasta sauce", "marinara", "arrabiata", "chickpea", "lentil", "black bean", "kidney bean", "pinto bean", "white bean", "cannellini", "garbanzo", "butter bean", "butter beans", "navy bean", "great northern bean", "chicken broth", "beef broth", "vegetable broth", "stock", "coconut milk can", "artichoke heart", "roasted pepper", "roasted red pepper", "canned olive", "pickle", "capers", "pumpkin puree", "applesauce", "soup can", "sardine can", "tuna can", "anchovy can"]
+        let pasta = ["pasta", "spaghetti", "penne", "rigatoni", "fettuccine", "linguine", "tagliatelle", "farfalle", "fusilli", "rotini", "orzo", "lasagna", "macaroni", "gnocchi", "ramen noodle", "rice noodle", "udon", "soba", "vermicelli", "white rice", "brown rice", "basmati", "jasmine rice", "arborio", "wild rice", "quinoa", "farro", "barley", "couscous", "bulgur", "millet", "polenta", "grits", "oat", "oatmeal", "rolled oat", "steel cut", "panko", "breadcrumb", "buckwheat", "amaranth", "teff", "spelt"]
         let breakfast = ["cereal", "granola", "muesli", "instant oatmeal", "pancake mix", "waffle mix", "maple syrup", "honey", "jam", "jelly", "peanut butter", "almond butter", "nutella", "protein bar", "granola bar", "pop tart"]
         let snacks = ["chip", "crisp", "cracker", "pretzel", "popcorn", "trail mix", "jerky", "rice cake", "pita chip", "tortilla chip", "nacho", "cookie", "candy", "chocolate bar", "dark chocolate", "gummy", "fruit snack", "nut mix", "snack", "almond", "cashew", "walnut", "pecan", "pistachio", "peanut", "macadamia", "pine nut", "hazelnut", "brazil nut", "sunflower seed", "pumpkin seed", "mixed nuts", "dried mango", "dried cranberry", "raisin", "dried apricot", "prune"]
         let beverages = ["water bottle", "sparkling water", "seltzer", "orange juice", "apple juice", "cranberry juice", "kombucha", "iced tea", "cold brew", "matcha drink", "lemonade", "soda", "energy drink", "sports drink", "coconut water", "smoothie drink", "juice box", "gatorade", "powerade", "coffee", "espresso", "coffee bean", "ground coffee", "instant coffee", "tea bag", "loose leaf tea", "green tea", "black tea", "herbal tea", "chamomile", "chai", "la croix", "pellegrino", "perrier"]
         let alcohol = ["beer", "wine", "red wine", "white wine", "rose", "champagne", "prosecco", "cava", "vodka", "whiskey", "bourbon", "gin", "rum", "tequila", "mezcal", "sake", "hard cider", "hard seltzer", "white claw", "truly", "spirits", "six pack", "ipa", "lager", "stout", "porter"]
         let condiments = ["ketchup", "mustard", "mayo", "mayonnaise", "hot sauce", "sriracha", "tabasco", "soy sauce", "tamari", "worcestershire", "fish sauce", "oyster sauce", "hoisin", "teriyaki", "salad dressing", "vinaigrette", "ranch", "caesar dressing", "balsamic glaze", "bbq sauce", "buffalo sauce", "salsa", "pesto", "tahini", "miso", "harissa", "gochujang", "kochujang", "chili paste", "chili sauce", "steak sauce", "horseradish", "relish", "aioli", "coconut aminos", "ponzu", "sambal", "kimchi", "ssamjang", "doenjang", "fermented bean", "bean paste", "doubanjiang", "XO sauce", "black bean sauce", "hoisin sauce", "plum sauce", "sweet soy", "ketjap manis"]
         let oils = ["olive oil", "extra virgin", "vegetable oil", "canola oil", "coconut oil", "avocado oil", "sesame oil", "peanut oil", "grape seed oil", "sunflower oil", "vinegar", "balsamic", "apple cider vinegar", "rice vinegar", "white vinegar", "red wine vinegar", "sherry vinegar", "truffle oil"]
-        let baking = ["sugar", "brown sugar", "powdered sugar", "baking powder", "baking soda", "yeast", "vanilla", "vanilla extract", "cocoa", "cocoa powder", "chocolate chip", "salt", "black pepper", "cumin", "paprika", "turmeric", "cinnamon", "nutmeg", "cardamom", "coriander", "cayenne", "red pepper flake", "chili powder", "curry powder", "garam masala", "italian seasoning", "bay leaf", "clove", "allspice", "star anise", "fennel seed", "poppy seed", "cornstarch", "arrowroot", "gelatin", "cream of tartar", "shortening", "lard", "cooking spray", "saffron", "sumac"]
+        let baking = ["sugar", "brown sugar", "powdered sugar", "baking powder", "baking soda", "yeast", "vanilla", "vanilla extract", "cocoa", "cocoa powder", "chocolate chip", "salt", "black pepper", "cumin", "paprika", "turmeric", "cinnamon", "nutmeg", "cardamom", "coriander", "cayenne", "red pepper flake", "chili powder", "curry powder", "garam masala", "italian seasoning", "bay leaf", "clove", "allspice", "star anise", "fennel seed", "poppy seed", "sesame seed", "sesame seeds", "toasted sesame", "flax seed", "flaxseed", "chia seed", "chia seeds", "hemp seed", "hemp seeds", "cornstarch", "arrowroot", "gelatin", "cream of tartar", "shortening", "lard", "cooking spray", "saffron", "sumac"]
         let supplements = ["vitamin", "supplement", "protein powder", "whey protein", "collagen", "probiotic", "omega", "fish oil", "multivitamin", "magnesium", "zinc", "iron supplement", "b12", "vitamin d", "melatonin", "creatine", "bcaa", "pre workout", "electrolyte", "ashwagandha", "spirulina", "greens powder"]
         let bodycare = ["shampoo", "conditioner", "body wash", "hand soap", "face wash", "toothpaste", "toothbrush", "floss", "mouthwash", "deodorant", "lotion", "moisturizer", "sunscreen", "razor", "shaving cream", "hair mask", "dry shampoo", "chapstick", "lip balm", "cotton swab", "cotton ball", "bandage", "ibuprofen", "tylenol", "advil", "allergy", "cold medicine"]
         let household = ["paper towel", "toilet paper", "tissue", "trash bag", "garbage bag", "zip lock", "ziploc", "foil", "aluminum foil", "plastic wrap", "parchment paper", "dish soap", "dishwasher pod", "laundry detergent", "fabric softener", "bleach", "sponge", "cleaning spray", "windex", "lysol", "hand sanitizer", "candle", "batteries", "light bulb", "dryer sheet", "dish tab"]
         let pet = ["dog food", "cat food", "pet food", "dog treat", "cat treat", "kibble", "cat litter", "dog toy", "pet supplement", "flea treatment", "heartworm", "puppy", "kitten food", "wet food pet", "pee pad", "catnip"]
 
+        // Flour must be checked before pasta/grains to prevent "all purpose flour" matching grains
+        let flourOverrides = ["all purpose flour", "all-purpose flour", "bread flour", "whole wheat flour", "almond flour", "coconut flour", "cake flour", "self rising flour", "cornmeal", "corn meal", "corn starch", "cornstarch", "rice flour", "oat flour", "rye flour", "spelt flour", "plain flour"]
+        if flourOverrides.contains(where: { lower.contains($0) }) { return "🧂 Baking & Spices" }
+
         // Spice compounds must be checked before produce to prevent "garlic", "onion", "pepper" matching produce
-        let spiceOverrides = ["black pepper", "white pepper", "garlic powder", "onion powder", "garlic salt", "onion salt", "chili powder", "red pepper flake", "pepper flake", "cayenne pepper"]
+        let spiceOverrides = ["black pepper", "white pepper", "garlic powder", "onion powder", "garlic salt", "onion salt", "chili powder", "red pepper flake", "pepper flake", "cayenne pepper", "crushed red pepper", "crushed pepper"]
         if spiceOverrides.contains(where: { lower.contains($0) }) { return "🧂 Baking & Spices" }
+
+        // "1 tsp pepper" = spice; "1 pepper" or "2 red peppers" = produce.
+        // If a measurement unit is present alongside "pepper"/"garlic"/"ginger"/"onion", treat as spice.
+        let measurementUnits = ["tsp", "teaspoon", "tbsp", "tablespoon", "cup", " oz ", "ounce", " g ", "gram", "ml", "pinch", "dash", "lb ", "pound"]
+        let hasMeasurement = measurementUnits.contains(where: { lower.contains($0) })
+        if hasMeasurement {
+            let spiceProduceWords = ["pepper", "garlic", "ginger", "onion"]
+            if spiceProduceWords.contains(where: { lower.contains($0) }) { return "🧂 Baking & Spices" }
+        }
+
+        // Cheese compounds must be checked before produce to prevent "pepper" matching produce
+        let dairyOverrides = ["pepper jack", "monterey jack", "string cheese"]
+        if dairyOverrides.contains(where: { lower.contains($0) }) { return "🥛 Dairy & Eggs" }
+
+        // Canned compounds must be checked before produce to prevent "corn" matching produce
+        let cannedOverrides = ["creamed corn", "cream corn"]
+        if cannedOverrides.contains(where: { lower.contains($0) }) { return "🥫 Canned & Jarred" }
+
+        // Vinegar/oil must be checked before meat — "champagne" contains substring "ham"
+        // and generic "oil" (neutral oil, grapeseed oil, etc.) won't match specific oil names
+        if lower.contains("vinegar") { return "🫒 Oils & Vinegars" }
+        if lower.hasSuffix("oil") && !lower.contains("fish oil") && !lower.contains("cod liver") { return "🫒 Oils & Vinegars" }
 
         // Frozen and canned must be checked before produce to prevent "tomato", "corn", etc. matching produce
         if frozen.contains(where: { lower.contains($0) }) { return "❄️ Frozen" }
@@ -1666,6 +2206,39 @@ struct GroceryModeView: View {
 
     // MARK: - Auto Save / Restore
 
+    // MARK: - Check Persistence
+
+    private let kCheckedItemsKey    = "groceryCheckedItems"
+    private let kCheckedExtrasKey   = "groceryCheckedExtras"
+    private let kListFingerprintKey = "groceryListFingerprint"
+
+    private var listFingerprint: String {
+        let memIds = selectedMemoryIds.map { $0.uuidString }.sorted().joined(separator: ",")
+        let extras = extraItems.sorted().joined(separator: ",")
+        return "\(memIds)|\(extras)"
+    }
+
+    private func persistChecks() {
+        UserDefaults.standard.set(Array(checkedItems).map { $0.uuidString }, forKey: kCheckedItemsKey)
+        UserDefaults.standard.set(Array(checkedExtras), forKey: kCheckedExtrasKey)
+        UserDefaults.standard.set(listFingerprint, forKey: kListFingerprintKey)
+    }
+
+    private func restoreChecksIfListUnchanged() {
+        let fp = listFingerprint
+        lastKnownFingerprint = fp
+        guard fp == (UserDefaults.standard.string(forKey: kListFingerprintKey) ?? "") else { return }
+        let savedIds = UserDefaults.standard.stringArray(forKey: kCheckedItemsKey) ?? []
+        checkedItems  = Set(savedIds.compactMap { UUID(uuidString: $0) })
+        checkedExtras = Set(UserDefaults.standard.stringArray(forKey: kCheckedExtrasKey) ?? [])
+    }
+
+    private func clearChecksAndPersist() {
+        checkedItems  = []
+        checkedExtras = []
+        persistChecks()
+    }
+
     private func autoSaveToday() {
         if isCustomActive {
             if let customList = activeCustomList {
@@ -1688,6 +2261,7 @@ struct GroceryModeView: View {
         guard let today = savedLists.first(where: { $0.name == "Today's list" && $0.listType == listType.rawValue }) else { return }
         selectedMemoryIds = Set(today.memoryUUIDs.filter { id in recipeMemories.contains { $0.id == id } })
         extraItems = today.extraItems
+        restoreChecksIfListUnchanged()
     }
 
     // MARK: - Helpers
@@ -1797,6 +2371,45 @@ struct GroceryModeView: View {
         fetchedRecipe = nil
         recipeURLInput = ""
     }
+
+    // MARK: - Discover Data
+
+    private struct MealCategory {
+        let name: String
+        let emoji: String
+        let mealDBParam: (query: String, value: String)
+    }
+
+    private struct PopularSite {
+        let name: String
+        let emoji: String
+        let url: String
+    }
+
+    private let popularSites: [PopularSite] = [
+        PopularSite(name: "Half Baked Harvest", emoji: "🌾", url: "https://www.halfbakedharvest.com"),
+        PopularSite(name: "Bon Appétit",      emoji: "🍷", url: "https://www.bonappetit.com/recipes"),
+        PopularSite(name: "Simply Recipes",   emoji: "🥘", url: "https://www.simplyrecipes.com"),
+        PopularSite(name: "Serious Eats",     emoji: "🍳", url: "https://www.seriouseats.com"),
+        PopularSite(name: "Budget Bytes",     emoji: "💰", url: "https://www.budgetbytes.com"),
+        PopularSite(name: "Cookie + Kate",    emoji: "🌿", url: "https://cookieandkate.com"),
+        PopularSite(name: "Minimalist Baker", emoji: "🌱", url: "https://minimalistbaker.com"),
+        PopularSite(name: "Sally's Baking",   emoji: "🎂", url: "https://sallysbakingaddiction.com"),
+        PopularSite(name: "NYT Cooking",      emoji: "📰", url: "https://cooking.nytimes.com"),
+    ]
+
+    private let mealCategories: [MealCategory] = [
+        MealCategory(name: "Chicken",     emoji: "🍗", mealDBParam: (query: "c", value: "Chicken")),
+        MealCategory(name: "Beef",        emoji: "🥩", mealDBParam: (query: "c", value: "Beef")),
+        MealCategory(name: "Pasta",       emoji: "🍝", mealDBParam: (query: "c", value: "Pasta")),
+        MealCategory(name: "Seafood",     emoji: "🦐", mealDBParam: (query: "c", value: "Seafood")),
+        MealCategory(name: "Vegetarian",  emoji: "🥦", mealDBParam: (query: "c", value: "Vegetarian")),
+        MealCategory(name: "Breakfast",   emoji: "🍳", mealDBParam: (query: "c", value: "Breakfast")),
+        MealCategory(name: "Dessert",     emoji: "🍰", mealDBParam: (query: "c", value: "Dessert")),
+        MealCategory(name: "Mexican",     emoji: "🌮", mealDBParam: (query: "a", value: "Mexican")),
+        MealCategory(name: "Italian",     emoji: "🇮🇹", mealDBParam: (query: "a", value: "Italian")),
+        MealCategory(name: "Vegan",        emoji: "🌱", mealDBParam: (query: "c", value: "Vegan")),
+    ]
 }
 
 // MARK: - Share Sheet

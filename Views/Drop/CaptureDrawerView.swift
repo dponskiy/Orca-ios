@@ -8,7 +8,7 @@
 import SwiftUI
 
 enum CaptureMode {
-    case voice, screenshot, typed, recipe
+    case voice, screenshot, typed, recipe, cards
 }
 
 struct CaptureDrawerView: View {
@@ -27,7 +27,7 @@ struct CaptureDrawerView: View {
                 .foregroundColor(.deepNavy)
                 .padding(.top, 16)
             
-            HStack(spacing: 24) {
+            HStack(spacing: 32) {
                 captureOption(icon: "mic.fill", label: "Voice", mode: .voice)
                 captureOption(icon: "camera.fill", label: "Screenshot", mode: .screenshot)
                 captureOption(icon: "keyboard", label: "Type", mode: .typed)
@@ -65,6 +65,8 @@ struct CaptureDrawerView: View {
                 Text(label)
                     .font(.custom("DMSans-Regular", size: 13))
                     .foregroundColor(.deepNavy)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
         }
     }

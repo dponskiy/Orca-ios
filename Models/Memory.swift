@@ -37,6 +37,7 @@ class Memory {
     var latitude: Double?
     var longitude: Double?
     var estimatedMinutes: Int? // duration in minutes, nil = not detected
+    var thoughtTabId: UUID?   // set only for Thoughts echo entries
 
     enum CaptureType: String, Codable {
         case voice, screenshot, typed

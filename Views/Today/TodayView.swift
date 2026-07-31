@@ -8,12 +8,16 @@
 import SwiftUI
 import SwiftData
 import WeatherKit
+import Combine
 import CoreLocation
 
 struct TodayView: View {
     @Query(sort: \Memory.createdAt, order: .reverse) private var allMemories: [Memory]
     @Query private var pings: [Ping]
     @Query private var echos: [Echo]
+    @Query(sort: \SubTask.sortOrder) private var allSubTasks: [SubTask]
+    @Query private var allSharedSpaces: [SharedSpace]
+    @Query private var allSharedEvents: [SharedEvent]
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthService.self) private var authService
 
@@ -30,7 +34,14 @@ struct TodayView: View {
     @State private var bannerSonarResult: SonarResult?
     @State private var bannerMemory: Memory?
     @State private var showWeatherDetail = false
+    @State private var showSharedSpaces = false
+    @State private var showCalendar = false
     @FocusState private var quickAddFocused: Bool
+
+    // Undo-delete
+    @State private var pendingDeleteIds: Set<UUID> = []
+    @State private var undoToastMemory: Memory?
+    @State private var undoToastTask: Task<Void, Never>? = nil
 
     @StateObject private var weatherService = WeatherService.shared
     @StateObject private var locationService = LocationService.shared
@@ -105,10 +116,18 @@ struct TodayView: View {
 
     // MARK: - Computed Data
 
+    // O(n) ping lookup — built once, shared by all computed properties below
+    private var pingsByMemory: [UUID: [Ping]] {
+        var map: [UUID: [Ping]] = [:]
+        for ping in pings { map[ping.memoryId, default: []].append(ping) }
+        return map
+    }
+
     var todayTasks: [Memory] {
-        allMemories.filter { memory in
-            guard memory.isActionable else { return false }
-            let memoryPings = pings.filter { $0.memoryId == memory.id }
+        let pingMap = pingsByMemory
+        return allMemories.filter { memory in
+            guard memory.isActionable, !pendingDeleteIds.contains(memory.id) else { return false }
+            let memoryPings = pingMap[memory.id] ?? []
             let isRecurring = memoryPings.contains { $0.recurrence != .none }
             if isRecurring {
                 if isCompletedOn(memory, date: selectedDate) { return false }
@@ -144,13 +163,15 @@ struct TodayView: View {
 
     var overdueTasks: [Memory] {
         guard calendar.isDateInToday(selectedDate) else { return [] }
+        let pingMap = pingsByMemory
+        let todayIds = Set(todayTasks.map { $0.id })
         return allMemories.filter { memory in
-            guard memory.isActionable && !memory.isCompleted else { return false }
+            guard memory.isActionable && !memory.isCompleted,
+                  !pendingDeleteIds.contains(memory.id) else { return false }
             guard let detectedDate = memory.detectedDate else { return false }
-            let memoryPings = pings.filter { $0.memoryId == memory.id }
-            let isRecurring = memoryPings.contains { $0.recurrence != .none }
-            if isRecurring { return false }
-            if todayTasks.contains(where: { $0.id == memory.id }) { return false }
+            let memoryPings = pingMap[memory.id] ?? []
+            if memoryPings.contains(where: { $0.recurrence != .none }) { return false }
+            if todayIds.contains(memory.id) { return false }
             if let endDate = memory.endDate,
                selectedDate >= calendar.startOfDay(for: detectedDate) &&
                selectedDate <= calendar.startOfDay(for: endDate) { return false }
@@ -161,13 +182,11 @@ struct TodayView: View {
     }
 
     var completedTasks: [Memory] {
-        allMemories.filter { memory in
+        let pingMap = pingsByMemory
+        return allMemories.filter { memory in
             guard memory.isActionable else { return false }
-            let memoryPings = pings.filter { $0.memoryId == memory.id }
-            let isRecurring = memoryPings.contains { $0.recurrence != .none }
-            if isRecurring {
-                return isCompletedOn(memory, date: selectedDate)
-            }
+            let isRecurring = (pingMap[memory.id] ?? []).contains { $0.recurrence != .none }
+            if isRecurring { return isCompletedOn(memory, date: selectedDate) }
             return memory.isCompleted &&
                    memory.completedAt != nil &&
                    calendar.isDate(memory.completedAt!, inSameDayAs: selectedDate)
@@ -221,15 +240,27 @@ struct TodayView: View {
         }
     }
 
-    var allIncompleteTasks: [Memory] {
-        allMemories.filter { memory in
-            guard memory.isActionable else { return false }
-            let memoryPings = pings.filter { $0.memoryId == memory.id }
-            let isRecurring = memoryPings.contains { $0.recurrence != .none }
-            if isRecurring {
-                if isCompletedOn(memory, date: Date()) { return false }
-                return true
+    var todaySharedEvents: [SharedEvent] {
+        let userId = authService.userId?.uuidString ?? ""
+        let mySpaceIds = Set(allSharedSpaces.filter {
+            $0.createdByUserId == userId || $0.invitedUserId == userId
+        }.map { $0.id })
+        return allSharedEvents.filter { event in
+            guard mySpaceIds.contains(event.spaceId), let start = event.date else { return false }
+            if let end = event.endDate {
+                return selectedDate >= calendar.startOfDay(for: start) &&
+                       selectedDate <= calendar.startOfDay(for: end)
             }
+            return calendar.isDate(start, inSameDayAs: selectedDate)
+        }.sorted { ($0.date ?? $0.createdAt) < ($1.date ?? $1.createdAt) }
+    }
+
+    var allIncompleteTasks: [Memory] {
+        let pingMap = pingsByMemory
+        return allMemories.filter { memory in
+            guard memory.isActionable, !pendingDeleteIds.contains(memory.id) else { return false }
+            let isRecurring = (pingMap[memory.id] ?? []).contains { $0.recurrence != .none }
+            if isRecurring { return !isCompletedOn(memory, date: Date()) }
             return !memory.isCompleted
         }
         .sorted { ($0.detectedDate ?? $0.createdAt) < ($1.detectedDate ?? $1.createdAt) }
@@ -272,10 +303,8 @@ struct TodayView: View {
     // MARK: - Helpers
 
     private func hasPingToday(_ memory: Memory) -> Bool {
-        pings.contains { ping in
-            ping.memoryId == memory.id &&
-            ping.isActive &&
-            calendar.isDate(ping.fireDate, inSameDayAs: selectedDate)
+        (pingsByMemory[memory.id] ?? []).contains { ping in
+            ping.isActive && calendar.isDate(ping.fireDate, inSameDayAs: selectedDate)
         }
     }
 
@@ -311,14 +340,18 @@ struct TodayView: View {
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
 
+                            calendarButton
+
                             if !overdueTasks.isEmpty { overdueSection }
                             if !todayTasks.isEmpty { todoSection }
                             if !todayPings.isEmpty { pingsSection }
                             if !todayEvents.isEmpty { eventsSection }
+                            if !todaySharedEvents.isEmpty { sharedEventsSection }
                             if !completedTasks.isEmpty { completedSection }
                             if !droppedToday.isEmpty { droppedSection }
 
                             if todayTasks.isEmpty && todayPings.isEmpty && todayEvents.isEmpty &&
+                               todaySharedEvents.isEmpty &&
                                droppedToday.isEmpty && completedTasks.isEmpty && overdueTasks.isEmpty {
                                 emptyState
                                     .listRowBackground(Color.pearl)
@@ -328,7 +361,7 @@ struct TodayView: View {
                             allTasksView
                         }
 
-                        Color.clear.frame(height: 100)
+                        Color.clear.frame(height: 80)
                             .listRowBackground(Color.pearl)
                             .listRowSeparator(.hidden)
                     }
@@ -368,7 +401,7 @@ struct TodayView: View {
                                         Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
                                     }
                                     modelContext.delete(memory)
-                                    Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+                                    SupabaseSyncService.shared.scheduleDelete(id: id)
                                 }
                                 showBanner = false
                                 quickAddText = ""
@@ -386,6 +419,38 @@ struct TodayView: View {
                         )
                     }
                 }
+
+                // Undo-delete toast
+                if undoToastMemory != nil {
+                    VStack {
+                        Spacer()
+                        HStack(spacing: 12) {
+                            Image(systemName: "trash").font(.system(size: 13)).foregroundColor(.white.opacity(0.7))
+                            Text("Task deleted")
+                                .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.white)
+                            Spacer()
+                            Button {
+                                withAnimation(.spring(duration: 0.3)) { undoDelete() }
+                            } label: {
+                                Text("Undo")
+                                    .font(.custom("DMSans-Medium", size: 14))
+                                    .foregroundColor(.oceanTeal)
+                                    .padding(.horizontal, 12).padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.15))
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        .padding(.horizontal, 20).padding(.vertical, 14)
+                        .background(Color(red: 0.1, green: 0.15, blue: 0.25))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 80)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(10)
+                    .animation(.spring(duration: 0.4), value: undoToastMemory != nil)
+                }
             }
             .background(Color.pearl)
             .onAppear {
@@ -395,9 +460,8 @@ struct TodayView: View {
                 }
                 locationService.requestLocation()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .resetToToday)) { _ in
-                selectedDate = Date()
-                taskMode = .today
+            .onReceive(NotificationCenter.default.publisher(for: .resetToToday).receive(on: RunLoop.main)) { _ in
+                withAnimation { selectedDate = Date(); taskMode = .today }
             }
             .onChange(of: locationService.location) { _, location in
                 if let location = location {
@@ -407,6 +471,8 @@ struct TodayView: View {
             .sheet(item: $editingMemory) { memory in MemoryEditView(memory: memory) }
             .sheet(item: $detailMemory) { memory in MemoryDetailView(memory: memory) }
             .sheet(isPresented: $showWeatherDetail) { WeatherDetailView() }
+            .sheet(isPresented: $showSharedSpaces) { SharedSpacesHubView() }
+            .sheet(isPresented: $showCalendar) { CalendarTabView() }
             .sheet(item: $snoozeMemory) { memory in
                 SnoozeSheet(memory: memory) { snoozeMemory = nil }
             }
@@ -680,6 +746,30 @@ struct TodayView: View {
 
     // MARK: - Stats Bar
 
+    private var calendarButton: some View {
+        Button { showCalendar = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 14))
+                Text("Calendar")
+                    .font(.custom("DMSans-Medium", size: 14))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .opacity(0.4)
+            }
+            .foregroundColor(.oceanTeal)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.oceanTeal.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Color.pearl)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 8, trailing: 20))
+    }
+
     private var statsBar: some View {
         let total = todayTasks.count + completedTasks.count + overdueTasks.count
         let done = completedTasks.count
@@ -802,12 +892,10 @@ struct TodayView: View {
         }
     }
 
-    // MARK: - Fetch SubTasks
+    // MARK: - Fetch SubTasks (uses @Query allSubTasks — no DB hit per row)
 
     private func fetchSubTasks(for memory: Memory) -> [SubTask] {
-        let descriptor = FetchDescriptor<SubTask>(sortBy: [SortDescriptor(\.sortOrder)])
-        let all = (try? modelContext.fetch(descriptor)) ?? []
-        return all.filter { $0.memoryId == memory.id }
+        allSubTasks.filter { $0.memoryId == memory.id }
     }
 
     // MARK: - Pings Section
@@ -950,6 +1038,63 @@ struct TodayView: View {
         }
     }
 
+    // MARK: - Shared Events Section
+
+    private var sharedEventsSection: some View {
+        Group {
+            HStack(spacing: 6) {
+                Image(systemName: "person.2.fill").font(.system(size: 11)).foregroundColor(.oceanTeal)
+                Text("SHARED")
+                    .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal).tracking(1)
+            }
+            .listRowBackground(Color.pearl)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 4, trailing: 20))
+
+            ForEach(todaySharedEvents) { event in
+                let space = allSharedSpaces.first { $0.id == event.spaceId }
+                let partnerName = space.flatMap { $0.spaceName.isEmpty ? nil : $0.spaceName } ?? "Shared Space"
+
+                Button { showSharedSpaces = true } label: {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle().fill(Color.oceanTeal.opacity(0.1)).frame(width: 32, height: 32)
+                            Image(systemName: "person.2.fill").font(.system(size: 12)).foregroundColor(.oceanTeal)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(event.title)
+                                .font(.custom("DMSans-Regular", size: 15))
+                                .foregroundColor(.deepNavy)
+                                .lineLimit(1)
+                            HStack(spacing: 6) {
+                                if let date = event.date {
+                                    Text(date, format: .dateTime.hour().minute())
+                                        .font(.custom("DMMono-Regular", size: 12))
+                                        .foregroundColor(.gray)
+                                }
+                                Text("with \(partnerName)")
+                                    .font(.custom("DMSans-Regular", size: 12))
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 11))
+                            .foregroundColor(.gray.opacity(0.4))
+                    }
+                    .padding(12)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.pearl)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
+            }
+        }
+    }
+
     // MARK: - Completed Section
 
     private var completedSection: some View {
@@ -1039,14 +1184,7 @@ struct TodayView: View {
         .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button(role: .destructive) {
-                let id = memory.id
-                let memoryPings = pings.filter { $0.memoryId == memory.id }
-                for ping in memoryPings {
-                    NotificationService.shared.cancelPing(pingId: ping.id)
-                    modelContext.delete(ping)
-                }
-                modelContext.delete(memory)
-                Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+                scheduleDelete(memory: memory)
             } label: { Label("Delete", systemImage: "trash") }
                 .tint(.red)
 
@@ -1062,19 +1200,58 @@ struct TodayView: View {
         }
     }
 
+    // MARK: - Undo Delete
+
+    private func scheduleDelete(memory: Memory) {
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        pendingDeleteIds.insert(memory.id)
+        undoToastMemory = memory
+        undoToastTask?.cancel()
+        undoToastTask = Task {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { commitDelete(memory: memory) }
+        }
+    }
+
+    private func commitDelete(memory: Memory) {
+        pendingDeleteIds.remove(memory.id)
+        undoToastMemory = nil
+        let id = memory.id
+        let memoryPings = pings.filter { $0.memoryId == memory.id }
+        for ping in memoryPings {
+            NotificationService.shared.cancelPing(pingId: ping.id)
+            modelContext.delete(ping)
+            Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
+        }
+        modelContext.delete(memory)
+        SpotlightService.shared.removeMemory(id: id)
+        SupabaseSyncService.shared.scheduleDelete(id: id)
+    }
+
+    private func undoDelete() {
+        undoToastTask?.cancel()
+        undoToastTask = nil
+        if let memory = undoToastMemory {
+            pendingDeleteIds.remove(memory.id)
+        }
+        undoToastMemory = nil
+    }
+
     private func taskRowHeader(memory: Memory, isOverdue: Bool, subTasks: [SubTask], isExpanded: Bool) -> some View {
         let memoryText = memory.text
         let memoryEchoId = memory.echoId
         let detectedDate = memory.detectedDate
         let estimatedMinutes = memory.estimatedMinutes
         let memoryId = memory.id
-        let memoryPings = pings.filter { $0.memoryId == memory.id }
+        let memoryPings = pingsByMemory[memory.id] ?? []
         let isRecurring = memoryPings.contains { $0.recurrence != .none }
         let displayDate: Date? = isRecurring ? selectedDate : detectedDate
         let hasPing = hasPingToday(memory)
 
         return HStack(spacing: 12) {
             Button {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 withAnimation(.spring(duration: 0.3)) {
                     if isRecurring {
                         setCompleted(memory, date: selectedDate)
@@ -1087,6 +1264,9 @@ struct TodayView: View {
                             NotificationService.shared.cancelPing(pingId: ping.id)
                         }
                     }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NotificationService.shared.updateBadge(memories: allMemories, pings: pings)
                 }
             } label: {
                 Circle()
@@ -1169,7 +1349,7 @@ struct TodayView: View {
                         subTask.isCompleted.toggle()
                         let allDone = subTasks.allSatisfy { $0.isCompleted }
                         if allDone {
-                            let memoryPings = pings.filter { $0.memoryId == memory.id }
+                            let memoryPings = pingsByMemory[memory.id] ?? []
                             let isRecurring = memoryPings.contains { $0.recurrence != .none }
                             if isRecurring {
                                 setCompleted(memory, date: selectedDate)
@@ -1217,7 +1397,7 @@ struct TodayView: View {
 
     private func completedRow(memory: Memory) -> some View {
         let memoryText = memory.text
-        let memoryPings = pings.filter { $0.memoryId == memory.id }
+        let memoryPings = pingsByMemory[memory.id] ?? []
         let isRecurring = memoryPings.contains { $0.recurrence != .none }
 
         return HStack(spacing: 12) {

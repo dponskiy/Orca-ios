@@ -21,19 +21,62 @@ struct MemoryDetailView: View {
     @State private var addressCopied = false
     @State private var showReminders = true
     @State private var showInstructionEditor = false
+    @State private var addedToCalendar = false
+    @State private var showQuickLog = false
 
     var memorySubTasks: [SubTask] {
         subTasks.filter { $0.memoryId == memory.id }.sorted { $0.sortOrder < $1.sortOrder }
     }
 
     var echo: Echo? { echos.first { $0.id == memory.echoId } }
-    var isSportsEcho: Bool { echo?.name.lowercased() == "sports" }
     var isTravelEcho: Bool { echo?.name.lowercased() == "travel" }
     var isFinanceEcho: Bool { echo?.name.lowercased().contains("finance") == true }
     var isWorkoutEcho: Bool { echo?.name.lowercased().contains("workout") == true }
 
     private var isCooking: Bool {
         echo?.name.lowercased().contains("cook") == true
+    }
+
+    /// Builds a shareable `orca://` deep link for any cooking recipe — URL-sourced or OCR/manual.
+    private var recipeShareURL: URL? {
+        // Prefer the original source URL (smaller link)
+        if let sourceURL = memory.url, !sourceURL.isEmpty,
+           let encoded = sourceURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            return URL(string: "orca://recipe?url=\(encoded)")
+        }
+        // Inline payload for OCR/manual recipes
+        let lines = memory.text.components(separatedBy: "\n")
+        let titleLine = lines.first.map { $0.hasPrefix("🍽") ? String($0.dropFirst(2)).trimmingCharacters(in: .whitespaces) : $0 } ?? "Recipe"
+        let ingredients = memorySubTasks.map { $0.text }
+        var instructions: [String] = []
+        if let instrRange = memory.text.range(of: "\nInstructions:\n") {
+            let instrBlock = String(memory.text[instrRange.upperBound...])
+            instructions = instrBlock.components(separatedBy: "\n").compactMap { line -> String? in
+                let s = line.trimmingCharacters(in: .whitespaces)
+                guard !s.isEmpty else { return nil }
+                // Strip leading "N. " numbering
+                if let dot = s.firstIndex(of: "."), s[s.startIndex].isNumber {
+                    return String(s[s.index(after: dot)...]).trimmingCharacters(in: .whitespaces)
+                }
+                return s
+            }
+        }
+        // Extract meta from second line if present
+        var prep: String? = nil; var cook: String? = nil; var serves: String? = nil
+        if lines.count > 1 {
+            let meta = lines[1]
+            for part in meta.components(separatedBy: " · ") {
+                let p = part.trimmingCharacters(in: .whitespaces)
+                if p.hasPrefix("Prep:") { prep = String(p.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
+                else if p.hasPrefix("Cook:") { cook = String(p.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
+                else if p.hasPrefix("Serves:") { serves = String(p.dropFirst(7)).trimmingCharacters(in: .whitespaces) }
+            }
+        }
+        let payload = SharedRecipePayload(title: titleLine, ingredients: ingredients, instructions: instructions,
+                                          prepTime: prep, cookTime: cook, servings: serves)
+        guard let base64 = payload.toBase64(),
+              let encoded = base64.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        return URL(string: "orca://recipe?data=\(encoded)")
     }
 
     private var displayText: String {
@@ -72,14 +115,34 @@ struct MemoryDetailView: View {
                         linkButton(link)
                     }
 
+                    if let date = memory.detectedDate {
+                        calendarButton(date: date)
+                    }
+
                     if !isTravelEcho, let name = memory.locationName, let lat = memory.latitude, let lng = memory.longitude {
                         locationBlock(name: name, lat: lat, lng: lng)
                     }
 
                     if isTravelEcho  { TravelDetailBlock(memory: memory) }
-                    if isSportsEcho  { SportsDetailBlock(memory: memory) }
                     if isFinanceEcho { FinanceDetailBlock(memory: memory) }
                     if isWorkoutEcho { WorkoutDetailBlock(memory: memory) }
+
+                    if isWorkoutEcho && Calendar.current.isDateInToday(memory.createdAt) {
+                        Button { showQuickLog = true } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.right.circle.fill")
+                                    .font(.system(size: 16))
+                                Text("Continue Workout")
+                                    .font(.custom("DMSans-Medium", size: 15))
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.oceanTeal)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                    }
 
                     if !memorySubTasks.isEmpty { checklistSection }
 
@@ -100,15 +163,34 @@ struct MemoryDetailView: View {
                     Button("Done") { dismiss() }.foregroundColor(.oceanTeal)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button { editingMemory = memory } label: {
-                        Image(systemName: "pencil").foregroundColor(.oceanTeal)
+                    HStack(spacing: 16) {
+                        if isCooking, let shareURL = recipeShareURL {
+                            ShareLink(
+                                item: shareURL,
+                                subject: Text("Recipe on Orca"),
+                                message: Text("Open in Orca to add this recipe!")
+                            ) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .foregroundColor(.oceanTeal)
+                            }
+                        }
+                        Button { editingMemory = memory } label: {
+                            Image(systemName: "pencil").foregroundColor(.oceanTeal)
+                        }
                     }
+                }
+            }
+            .onAppear {
+                if let date = memory.detectedDate {
+                    let title = memory.text.components(separatedBy: "\n").first ?? memory.text
+                    addedToCalendar = CalendarService.shared.isAlreadyAdded(title: title, date: date)
                 }
             }
             .sheet(item: $editingMemory) { MemoryEditView(memory: $0) }
             .sheet(isPresented: $showInstructionEditor) {
                 RecipeInstructionEditorView(memory: memory)
             }
+            .sheet(isPresented: $showQuickLog) { QuickLogView() }
         }
     }
 
@@ -156,6 +238,41 @@ struct MemoryDetailView: View {
             .foregroundColor(.oceanTeal)
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(Color.oceanTeal.opacity(0.1)).clipShape(Capsule())
+        }
+    }
+
+    // MARK: - Calendar Button
+
+    private func calendarButton(date: Date) -> some View {
+        let title = memory.text.components(separatedBy: "\n").first ?? memory.text
+        return Button {
+            guard !addedToCalendar else { return }
+            Task {
+                let granted = CalendarService.shared.isAuthorized
+                    ? true
+                    : await CalendarService.shared.requestAccess()
+                if granted {
+                    CalendarService.shared.addEvent(
+                        title: title,
+                        startDate: date,
+                        endDate: memory.endDate
+                    )
+                    await MainActor.run {
+                        withAnimation(.spring(duration: 0.2)) { addedToCalendar = true }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: addedToCalendar ? "calendar.badge.checkmark" : "calendar.badge.plus")
+                    .font(.system(size: 13))
+                Text(addedToCalendar ? "Added to Calendar ✓" : "Add to Apple Calendar")
+                    .font(.custom("DMSans-Medium", size: 13))
+            }
+            .foregroundColor(addedToCalendar ? .white : .oceanTeal)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(addedToCalendar ? Color.oceanTeal : Color.oceanTeal.opacity(0.1))
+            .clipShape(Capsule())
         }
     }
 

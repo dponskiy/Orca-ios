@@ -22,6 +22,7 @@ struct RecipeCaptureView: View {
     @State private var errorMessage: String? = nil
     @State private var savedMemory: Memory? = nil
     @State private var showRecipeBuilder = false
+    @State private var showPhotoCapture = false
     @FocusState private var urlFocused: Bool
 
     var body: some View {
@@ -125,6 +126,17 @@ struct RecipeCaptureView: View {
                         .foregroundColor(.oceanTeal)
                 }
 
+                Button {
+                    showPhotoCapture = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "camera.fill").font(.system(size: 13))
+                        Text("Take a photo or use screenshots")
+                            .font(.custom("DMSans-Medium", size: 14))
+                    }
+                    .foregroundColor(.oceanTeal)
+                }
+
                 Spacer()
             }
             .background(Color.white)
@@ -156,6 +168,10 @@ struct RecipeCaptureView: View {
                     onComplete?(message)
                 })
                 .environment(authService)
+            }
+            .fullScreenCover(isPresented: $showPhotoCapture) {
+                PhotoCaptureView(isPresented: $showPhotoCapture)
+                    .environment(authService)
             }
         }
     }

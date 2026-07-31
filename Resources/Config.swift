@@ -15,6 +15,12 @@ enum Config {
     // Mixpanel
     static let mixpanelToken = "47abe570a284d9500c848fce71569951"
 
+    // TMDB
+    static let tmdbReadToken = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI2NzgyYjliMTgwMTk4YmQ4ZjZkMDhjYmI4ZmY5MmZmYSIsIm5iZiI6MTc3ODI1MTM4MS41ODMwMDAyLCJzdWIiOiI2OWZkZjY3NTBlMDNjMDFiMjZhYTlhYTIiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.JwMxXNf8B-UC-GioVLnHpZGhQx9Vlx9tylpy5UDcaaE"
+
+    // Rebrickable (free key at rebrickable.com/api/)
+    static let rebrickableApiKey = "055d3136d0609c700bfbdc2bba30096b"
+
     // App
     static let privacyURL = "https://orcadrop.app/privacy"
     static let termsURL = "https://orcadrop.app/terms"

@@ -12,7 +12,6 @@ struct EchoDetailView: View {
     let echo: Echo
     @Query private var memories: [Memory]
     @Query private var pings: [Ping]
-    @State private var showSportsInUpcoming: Bool = UserDefaults.standard.showSportsInUpcoming
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthService.self) private var authService
 
@@ -20,13 +19,11 @@ struct EchoDetailView: View {
         case editMemory(Memory)
         case detailMemory(Memory)
         case groceryMode
-        case recipeBuilder
         var id: String {
             switch self {
             case .editMemory(let m): return "edit-\(m.id)"
             case .detailMemory(let m): return "detail-\(m.id)"
             case .groceryMode: return "grocery"
-            case .recipeBuilder: return "builder"
             }
         }
     }
@@ -57,66 +54,33 @@ struct EchoDetailView: View {
                     }
 
                     if echo.name == "Cooking" {
-                        HStack(spacing: 8) {
-                            Button {
-                                activeSheet = .groceryMode
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "cart.fill").font(.system(size: 13))
-                                    Text("Grocery Mode").font(.custom("DMSans-Medium", size: 13))
+                        Button {
+                            activeSheet = .groceryMode
+                        } label: {
+                            HStack(spacing: 14) {
+                                ZStack {
+                                    Circle().fill(Color.oceanTeal).frame(width: 40, height: 40)
+                                    Image(systemName: "cart.fill").font(.system(size: 16)).foregroundColor(.white)
                                 }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.horizontal, 12).padding(.vertical, 7)
-                                .background(Color.oceanTeal).clipShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-
-                            Button {
-                                activeSheet = .recipeBuilder
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "plus").font(.system(size: 13))
-                                    Text("Build Recipe").font(.custom("DMSans-Medium", size: 13))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Shopping Mode")
+                                        .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy)
+                                    Text("Add recipes from URLs · shop by aisle")
+                                        .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
                                 }
-                                .foregroundColor(.oceanTeal)
-                                .frame(maxWidth: .infinity)
-                                .padding(.horizontal, 12).padding(.vertical, 7)
-                                .background(Color.oceanTeal.opacity(0.1))
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1))
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .medium)).foregroundColor(.gray.opacity(0.4))
                             }
-                            .buttonStyle(.plain)
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .background(Color.oceanTeal.opacity(0.07))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.oceanTeal.opacity(0.2), lineWidth: 1))
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
-            }
-
-            // Sports echo view
-            if echo.name == "Sports" && !filteredMemories.isEmpty {
-                Section {
-                    SportsEchoView(memories: filteredMemories)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
-                Section {
-                    Toggle(isOn: $showSportsInUpcoming) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Show in Upcoming")
-                                .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy)
-                            Text("Surface game reminders in your Home tab")
-                                .font(.custom("DMSans-Regular", size: 13)).foregroundColor(.gray)
-                        }
-                    }
-                    .tint(.oceanTeal)
-                    .onChange(of: showSportsInUpcoming) { _, newValue in
-                        UserDefaults.standard.showSportsInUpcoming = newValue
-                    }
-                    .padding(.vertical, 4)
-                }
             }
 
             // Finance echo view
@@ -228,10 +192,11 @@ struct EchoDetailView: View {
                             for ping in memoryPings {
                                 NotificationService.shared.cancelPing(pingId: ping.id)
                                 modelContext.delete(ping)
+                                Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
                             }
                             modelContext.delete(memory)
                             SpotlightService.shared.removeMemory(id: id)
-                            Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+                            SupabaseSyncService.shared.scheduleDelete(id: id)
                         } label: { Label("Delete", systemImage: "trash") }
                         .tint(.red)
                         Button { activeSheet = .editMemory(memory) } label: {
@@ -263,9 +228,6 @@ struct EchoDetailView: View {
                 MemoryDetailView(memory: memory)
             case .groceryMode:
                 GroceryModeView(memories: filteredMemories)
-            case .recipeBuilder:
-                RecipeBuilderView()
-                    .environment(authService)
             }
         }
     }

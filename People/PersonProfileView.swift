@@ -14,9 +14,13 @@ struct PersonProfileView: View {
     @Query private var allGiftItems: [GiftItem]
     @Environment(\.modelContext) private var modelContext
 
+    @Query private var allSharedSpaces: [SharedSpace]
+    @Environment(AuthService.self) private var authService
+
     @State private var showAddGift = false
     @State private var showEditPerson = false
     @State private var showAddEvent = false
+    @State private var showInvitePartner = false
     @State private var showSetDate = false
     @State private var showSetBudget = false
     @State private var newEventName = ""
@@ -31,7 +35,20 @@ struct PersonProfileView: View {
     private var giftItems: [GiftItem] {
         allGiftItems
             .filter { $0.personId == person.id && $0.occasion == selectedOccasion && $0.year == currentYear }
-            .sorted { !$0.isPurchased && $1.isPurchased }
+            .sorted {
+                if $0.isStarred != $1.isStarred { return $0.isStarred }
+                if $0.isPurchased != $1.isPurchased { return !$0.isPurchased }
+                return $0.createdAt < $1.createdAt
+            }
+    }
+
+    private var pastGiftsByYear: [(year: Int, items: [GiftItem])] {
+        let past = allGiftItems
+            .filter { $0.personId == person.id && $0.year < currentYear }
+        let grouped = Dictionary(grouping: past) { $0.year }
+        return grouped.keys.sorted(by: >).map { year in
+            (year: year, items: grouped[year]!.sorted { $0.createdAt < $1.createdAt })
+        }
     }
 
     private var totalSpent: Double {
@@ -106,7 +123,9 @@ struct PersonProfileView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 profileHeader
+                sharedSpaceSection
                 giftPlanningCard
+                if !pastGiftsByYear.isEmpty { giftHistoryCard }
                 if !linkedMemories.isEmpty { memoriesCard }
                 Spacer().frame(height: 40)
             }
@@ -131,6 +150,9 @@ struct PersonProfileView: View {
             AddPersonView(person: person)
         }
         .sheet(item: $detailMemory) { MemoryDetailView(memory: $0) }
+        .sheet(isPresented: $showInvitePartner) {
+            InvitePartnerView()
+        }
         .sheet(isPresented: $showAddEvent) { addEventSheet }
         .sheet(isPresented: $showSetDate) { setDateSheet }
         .sheet(isPresented: $showSetBudget) { setBudgetSheet }
@@ -174,6 +196,86 @@ struct PersonProfileView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 4)
+    }
+
+    // MARK: - Shared Space Section
+
+    private var sharedSpaceSection: some View {
+        let userId = authService.userId?.uuidString ?? ""
+        let space = allSharedSpaces.first {
+            $0.createdByUserId == userId &&
+            $0.invitedUserEmail.lowercased() == (person.email?.lowercased() ?? "___")
+            || $0.invitedUserId == userId
+        }
+
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("SHARED SPACE")
+                .font(.custom("DMSans-Medium", size: 11))
+                .foregroundColor(.gray)
+                .tracking(0.5)
+
+            if let space = space {
+                NavigationLink(destination: SharedSpaceView(space: space)) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.oceanTeal.opacity(0.1))
+                                .frame(width: 40, height: 40)
+                            Image(systemName: "person.2.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(.oceanTeal)
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Shared with \(person.name.components(separatedBy: " ").first ?? person.name)")
+                                .font(.custom("DMSans-Medium", size: 15))
+                                .foregroundColor(.deepNavy)
+                            Text(space.status == .pending ? "Invite pending" : "Active · tap to open")
+                                .font(.custom("DMSans-Regular", size: 13))
+                                .foregroundColor(.gray)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13))
+                            .foregroundColor(.gray.opacity(0.4))
+                    }
+                    .padding(14)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08), lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button { showInvitePartner = true } label: {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.mist)
+                                .frame(width: 40, height: 40)
+                            Image(systemName: "person.badge.plus")
+                                .font(.system(size: 16))
+                                .foregroundColor(.oceanTeal)
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Start a shared space")
+                                .font(.custom("DMSans-Medium", size: 15))
+                                .foregroundColor(.deepNavy)
+                            Text("Events, checklists & notes — together")
+                                .font(.custom("DMSans-Regular", size: 13))
+                                .foregroundColor(.gray)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13))
+                            .foregroundColor(.gray.opacity(0.4))
+                    }
+                    .padding(14)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08), lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     // MARK: - Gift Planning Card
@@ -375,6 +477,19 @@ struct PersonProfileView: View {
                 }
                 .buttonStyle(.plain)
 
+                // Product image thumbnail
+                if let imgStr = item.imageURL, let imgURL = URL(string: imgStr) {
+                    AsyncImage(url: imgURL) { phase in
+                        if case .success(let img) = phase {
+                            img.resizable().aspectRatio(contentMode: .fill)
+                                .frame(width: 48, height: 48)
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        } else { EmptyView() }
+                    }
+                    .frame(width: 48, height: 48)
+                }
+
                 // Name + meta
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.name)
@@ -407,16 +522,24 @@ struct PersonProfileView: View {
 
                 Spacer()
 
-                // Status badge
-                Text(item.isPurchased ? "purchased" : "idea")
-                    .font(.custom("DMSans-Medium", size: 11))
-                    .foregroundColor(item.isPurchased ? .oceanTeal : .gray)
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(item.isPurchased ? Color.oceanTeal.opacity(0.1) : Color.mist)
-                    .clipShape(Capsule())
+                // Star + status
+                VStack(alignment: .trailing, spacing: 4) {
+                    Button {
+                        withAnimation(.spring(duration: 0.2)) { item.isStarred.toggle() }
+                    } label: {
+                        Image(systemName: item.isStarred ? "star.fill" : "star")
+                            .font(.system(size: 13))
+                            .foregroundColor(item.isStarred ? .yellow : .gray.opacity(0.3))
+                    }
+                    .buttonStyle(.plain)
 
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11)).foregroundColor(.gray.opacity(0.3))
+                    Text(item.isPurchased ? "purchased" : "idea")
+                        .font(.custom("DMSans-Medium", size: 11))
+                        .foregroundColor(item.isPurchased ? .oceanTeal : .gray)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(item.isPurchased ? Color.oceanTeal.opacity(0.1) : Color.mist)
+                        .clipShape(Capsule())
+                }
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
         }
@@ -626,6 +749,82 @@ struct PersonProfileView: View {
                 Text("No memories linked yet")
                     .font(.custom("DMSans-Regular", size: 13)).foregroundColor(.gray)
                     .frame(maxWidth: .infinity).padding(20)
+            }
+
+            Spacer().frame(height: 8)
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08), lineWidth: 0.5))
+    }
+
+    // MARK: - Gift History Card
+
+    private var giftHistoryCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("GIFT HISTORY")
+                .font(.custom("DMSans-Medium", size: 11))
+                .foregroundColor(.gray).tracking(0.5)
+                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
+
+            ForEach(pastGiftsByYear, id: \.year) { group in
+                // Year header
+                HStack {
+                    Text(String(group.year))
+                        .font(.custom("DMSans-Medium", size: 13))
+                        .foregroundColor(.deepNavy)
+                    Spacer()
+                    let purchasedCount = group.items.filter { $0.isPurchased }.count
+                    if purchasedCount > 0 {
+                        Text("\(purchasedCount) purchased")
+                            .font(.custom("DMSans-Regular", size: 12))
+                            .foregroundColor(.gray)
+                    }
+                }
+                .padding(.horizontal, 16).padding(.vertical, 8)
+                .background(Color.mist.opacity(0.5))
+
+                ForEach(group.items) { item in
+                    HStack(spacing: 12) {
+                        Image(systemName: item.isPurchased ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 18))
+                            .foregroundColor(item.isPurchased ? .oceanTeal : .gray.opacity(0.3))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name)
+                                .font(.custom("DMSans-Regular", size: 14))
+                                .foregroundColor(item.isPurchased ? .gray : .deepNavy)
+                                .strikethrough(item.isPurchased)
+                            HStack(spacing: 6) {
+                                Text(item.occasion)
+                                    .font(.custom("DMSans-Regular", size: 11))
+                                    .foregroundColor(.gray)
+                                if let price = item.price {
+                                    Text("· $\(Int(price))")
+                                        .font(.custom("DMSans-Regular", size: 11))
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                        }
+
+                        Spacer()
+
+                        if item.isStarred {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(.yellow)
+                        }
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+
+                    if item.id != group.items.last?.id {
+                        Divider().padding(.horizontal, 16)
+                    }
+                }
+
+                if group.year != pastGiftsByYear.last?.year {
+                    Divider()
+                }
             }
 
             Spacer().frame(height: 8)

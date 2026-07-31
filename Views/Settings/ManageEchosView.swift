@@ -19,7 +19,7 @@ struct ManageEchosView: View {
     var body: some View {
         List {
             Section {
-                ForEach(echos) { echo in
+                ForEach(echos.filter { !$0.isSystemEcho }) { echo in
                     HStack(spacing: 12) {
                         Text(echo.emoji)
                             .font(.system(size: 24))

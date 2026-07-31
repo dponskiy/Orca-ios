@@ -34,11 +34,40 @@ class NotificationService {
         return result.trimmingCharacters(in: .whitespaces)
     }
 
+    // MARK: - Notification Categories (actionable)
+
+    func registerCategories() {
+        let markDoneAction = UNNotificationAction(
+            identifier: "MARK_DONE",
+            title: "✓ Mark Done",
+            options: [.authenticationRequired]
+        )
+        let snoozeAction = UNNotificationAction(
+            identifier: "SNOOZE_1H",
+            title: "Snooze 1 hr",
+            options: []
+        )
+        let pingCategory = UNNotificationCategory(
+            identifier: "PING",
+            actions: [markDoneAction, snoozeAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([pingCategory])
+    }
+
+    // MARK: - Schedule Ping
+
     func schedulePing(ping: Ping, memoryText: String) {
         let content = UNMutableNotificationContent()
         content.title = "🐋 Orca Ping"
         content.body = cleanNotificationText(memoryText)
         content.sound = .default
+        content.categoryIdentifier = "PING"
+        content.userInfo = [
+            "memoryId": ping.memoryId.uuidString,
+            "pingId": ping.id.uuidString
+        ]
 
         let calendar = Calendar.current
         let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: ping.fireTime)
@@ -180,6 +209,19 @@ class NotificationService {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["inactivity_reminder"])
     }
 
+    // Returns an advance ping 2 weeks before a Birthday or Gifts memory's detected date.
+    // Returns nil if the echo doesn't warrant it, the date is too soon, or no date exists.
+    func makeAdvancePing(for memory: Memory, echoName: String?) -> Ping? {
+        guard let name = echoName, name == "Birthday",
+              let targetDate = memory.detectedDate else { return nil }
+        let now = Date()
+        guard let twoWeeksBefore = Calendar.current.date(byAdding: .day, value: -14, to: targetDate),
+              twoWeeksBefore > now else { return nil }
+        let ping = Ping(memoryId: memory.id, fireDate: twoWeeksBefore, recurrence: .none)
+        ping.fireTime = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: twoWeeksBefore) ?? twoWeeksBefore
+        return ping
+    }
+
     func cancelPing(pingId: UUID) {
         let ids = [pingId.uuidString, "followup-\(pingId.uuidString)"]
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
@@ -194,7 +236,9 @@ class NotificationService {
                 .map { $0.identifier }
                 .filter { id in
                     id != "inactivity_reminder" &&
+                    id != "morning_briefing" &&
                     !id.hasPrefix("followup-") &&
+                    !id.hasPrefix("snooze-") &&
                     !validIds.contains(id)
                 }
             if !orphaned.isEmpty {
@@ -206,5 +250,115 @@ class NotificationService {
 
     func cancelAllPings() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+    }
+
+    // MARK: - Badge Count
+
+    func updateBadge(memories: [Memory], pings: [Ping]) {
+        let now = Date()
+        let cal = Calendar.current
+
+        // Count tasks due today or overdue and not completed
+        // For recurring tasks, check recurringCompletedDates for today instead of isCompleted
+        let todayFormatter = ISO8601DateFormatter()
+        todayFormatter.formatOptions = [.withFullDate]
+        let todayKey = todayFormatter.string(from: now)
+        let taskCount = memories.filter { memory in
+            guard memory.isActionable && !memory.isCompleted else { return false }
+            // If completed today via recurring mechanism, don't count it
+            if memory.recurringCompletedDates.contains(todayKey) { return false }
+            if let date = memory.detectedDate {
+                return cal.isDateInToday(date)
+            }
+            // Undated tasks have no urgency signal — don't inflate the badge
+            return false
+        }.count
+
+        // Count pings firing today that aren't already covered by a task's detectedDate
+        let taskMemoryIds = Set(memories.filter { memory in
+            guard memory.isActionable && !memory.isCompleted else { return false }
+            guard let date = memory.detectedDate else { return false }
+            return cal.isDateInToday(date)
+        }.map { $0.id })
+        let pingCount = pings.filter { ping in
+            ping.isActive &&
+            cal.isDate(ping.fireDate, inSameDayAs: now) &&
+            !taskMemoryIds.contains(ping.memoryId)
+        }.count
+
+        let total = max(taskCount + pingCount, 0)
+        UNUserNotificationCenter.current().setBadgeCount(total) { error in
+            if let error { print("❌ Badge update failed: \(error)") }
+        }
+    }
+
+    // MARK: - Morning Briefing
+
+    func scheduleMorningBriefing(taskCount: Int, overdueCount: Int, upcomingBirthdays: [String], sharedEventTitles: [String] = []) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["morning_briefing"])
+
+        // Build message — keep today/overdue distinct so counts aren't confusing
+        var parts: [String] = []
+        if taskCount > 0 && overdueCount > 0 {
+            parts.append("\(taskCount) \(taskCount == 1 ? "task" : "tasks") today, \(overdueCount) overdue.")
+        } else if taskCount > 0 {
+            parts.append("\(taskCount) \(taskCount == 1 ? "task" : "tasks") on your list today.")
+        } else if overdueCount > 0 {
+            parts.append("\(overdueCount) overdue \(overdueCount == 1 ? "task" : "tasks") need attention.")
+        } else {
+            parts.append("You're all caught up today! 🎉")
+        }
+        if !upcomingBirthdays.isEmpty {
+            let names = upcomingBirthdays.prefix(2).joined(separator: " & ")
+            parts.append("🎂 \(names)'s birthday is coming up.")
+        }
+        if !sharedEventTitles.isEmpty {
+            if sharedEventTitles.count == 1 {
+                parts.append("🤝 \(sharedEventTitles[0]) today.")
+            } else {
+                parts.append("🤝 \(sharedEventTitles.count) shared events today.")
+            }
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Good morning 🐋"
+        content.body = parts.joined(separator: " ")
+        content.sound = .default
+
+        // One-shot for the next 8am so content is always fresh on reschedule
+        // (app reschedules on every foreground via scenePhase .active)
+        let cal = Calendar.current
+        let now = Date()
+        var next8am = cal.date(bySettingHour: 8, minute: 0, second: 0, of: now) ?? now
+        if next8am <= now {
+            next8am = cal.date(byAdding: .day, value: 1, to: next8am) ?? next8am
+        }
+        let components = cal.dateComponents([.year, .month, .day, .hour, .minute], from: next8am)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let request = UNNotificationRequest(identifier: "morning_briefing", content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error { print("❌ Morning briefing failed: \(error)") }
+            else { print("🌅 Morning briefing scheduled for \(next8am)") }
+        }
+    }
+
+    // MARK: - Snooze from notification
+
+    func snoozeFromNotification(pingId: UUID, memoryId: UUID?, memoryText: String, hours: Int = 1) {
+        let snoozeDate = Date().addingTimeInterval(TimeInterval(hours * 3600))
+        let content = UNMutableNotificationContent()
+        content.title = "🐋 Orca Ping"
+        content.body = cleanNotificationText(memoryText)
+        content.sound = .default
+        content.categoryIdentifier = "PING"
+        var userInfo: [String: String] = ["pingId": pingId.uuidString]
+        if let memoryId { userInfo["memoryId"] = memoryId.uuidString }
+        content.userInfo = userInfo
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(hours * 3600), repeats: false)
+        let id = "snooze-\(pingId.uuidString)"
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request)
+        print("😴 Snoozed ping \(pingId) for \(hours)h — fires at \(snoozeDate)")
     }
 }

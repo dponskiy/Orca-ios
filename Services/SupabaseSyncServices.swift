@@ -23,6 +23,27 @@ class SupabaseSyncService {
 
     private init() {}
 
+    // MARK: - Pending Delete Tracking
+
+    private let pendingDeleteKey = "pendingMemoryDeletes"
+
+    private var pendingDeleteIds: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: pendingDeleteKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: pendingDeleteKey) }
+    }
+
+    private func markPendingDelete(id: UUID) {
+        var ids = pendingDeleteIds
+        ids.insert(id.uuidString.lowercased())
+        pendingDeleteIds = ids
+    }
+
+    private func clearPendingDelete(id: UUID) {
+        var ids = pendingDeleteIds
+        ids.remove(id.uuidString.lowercased())
+        pendingDeleteIds = ids
+    }
+
     // MARK: - Setup
 
     func configure(modelContext: ModelContext) {
@@ -48,6 +69,9 @@ class SupabaseSyncService {
             try await syncPersons(userId: userId, context: context)
             try await syncGiftItems(userId: userId, context: context)
             try await syncWatchlistItems(userId: userId, context: context)
+            try await syncTCGCards(userId: userId, context: context)
+            try await syncSmiskiItems(userId: userId, context: context)
+            try await syncLegoSets(userId: userId, context: context)
             lastSyncDate = Date()
         } catch {
             syncError = error.localizedDescription
@@ -112,11 +136,26 @@ class SupabaseSyncService {
         let allWatchlistItems = try context.fetch(FetchDescriptor<WatchlistItem>())
         var seenWatchlistIds = Set<UUID>()
         for item in allWatchlistItems {
-            if seenWatchlistIds.contains(item.id) {
-                context.delete(item)
-            } else {
-                seenWatchlistIds.insert(item.id)
-            }
+            if seenWatchlistIds.contains(item.id) { context.delete(item) }
+            else { seenWatchlistIds.insert(item.id) }
+        }
+        let allTCGCards = try context.fetch(FetchDescriptor<TCGCard>())
+        var seenTCGIds = Set<UUID>()
+        for card in allTCGCards {
+            if seenTCGIds.contains(card.id) { context.delete(card) }
+            else { seenTCGIds.insert(card.id) }
+        }
+        let allSmiskiItems = try context.fetch(FetchDescriptor<SmiskiItem>())
+        var seenSmiskiIds = Set<UUID>()
+        for item in allSmiskiItems {
+            if seenSmiskiIds.contains(item.id) { context.delete(item) }
+            else { seenSmiskiIds.insert(item.id) }
+        }
+        let allLegoSets = try context.fetch(FetchDescriptor<LegoSet>())
+        var seenLegoIds = Set<UUID>()
+        for set in allLegoSets {
+            if seenLegoIds.contains(set.id) { context.delete(set) }
+            else { seenLegoIds.insert(set.id) }
         }
         try context.save()
         print("✅ Local deduplication complete")
@@ -196,6 +235,8 @@ class SupabaseSyncService {
 
         for remote in remoteEchos {
             guard let remoteId = UUID(uuidString: remote.id) else { continue }
+            // Thoughts is a local-only system echo — never import it from Supabase
+            guard remote.name != "Thoughts" else { continue }
 
             if let existing = localEchos.first(where: { $0.id == remoteId }) {
                 existing.name = remote.name
@@ -228,7 +269,8 @@ class SupabaseSyncService {
 
         let mergedEchos = try context.fetch(FetchDescriptor<Echo>())
         let remoteIds = Set(remoteEchos.map { $0.id })
-        let newLocalEchos = mergedEchos.filter { !remoteIds.contains($0.id.uuidString) }
+        // Exclude system echoes (e.g. Thoughts) from being pushed to Supabase
+        let newLocalEchos = mergedEchos.filter { !remoteIds.contains($0.id.uuidString) && !$0.isSystemEcho }
 
         if !newLocalEchos.isEmpty {
             let echoRows = newLocalEchos.map { EchoRow(from: $0, userId: userId) }
@@ -289,7 +331,20 @@ class SupabaseSyncService {
             .execute()
             .value
 
+        // Retry any deletes that didn't complete (e.g. app closed mid-flight)
+        let pending = pendingDeleteIds
+        for idStr in pending {
+            do {
+                try await supabase.from("memories").delete().eq("id", value: idStr).execute()
+                if let uid = UUID(uuidString: idStr) { clearPendingDelete(id: uid) }
+            } catch {
+                print("⚠️ Retry delete failed for \(idStr): \(error)")
+            }
+        }
+
         for remote in remoteMemories {
+            // Never re-insert a memory the user deleted locally
+            guard !pendingDeleteIds.contains(remote.id.lowercased()) else { continue }
             guard !localIds.contains(remote.id.lowercased()) else { continue }
             guard let remoteId = UUID(uuidString: remote.id),
                   let echoId = UUID(uuidString: remote.echo_id) else { continue }
@@ -389,6 +444,22 @@ class SupabaseSyncService {
         }
 
         try context.save()
+
+        // Reconcile hasChecklist — after a reinstall memories sync before subtasks,
+        // so hasChecklist can be false even though subtasks exist in Supabase.
+        // After subtasks are in, flip the flag for any memory that has them.
+        let allSubTasks = try context.fetch(FetchDescriptor<SubTask>())
+        let memoryIdsWithSubTasks = Set(allSubTasks.map { $0.memoryId })
+        let allMemories = try context.fetch(FetchDescriptor<Memory>())
+        var checklistFixed = false
+        for memory in allMemories {
+            if memoryIdsWithSubTasks.contains(memory.id) && !memory.hasChecklist {
+                memory.hasChecklist = true
+                checklistFixed = true
+            }
+        }
+        if checklistFixed { try context.save() }
+
         print("✅ SubTasks synced")
     }
 
@@ -435,6 +506,10 @@ class SupabaseSyncService {
 
         let localIds = Set(localPings.map { $0.id.uuidString.lowercased() })
 
+        // Only re-create pings whose parent memory still exists locally
+        let localMemories = try context.fetch(FetchDescriptor<Memory>())
+        let localMemoryIds = Set(localMemories.map { $0.id.uuidString.lowercased() })
+
         let remotePings: [PingRow] = try await supabase
             .from("pings")
             .select()
@@ -444,6 +519,8 @@ class SupabaseSyncService {
 
         for remote in remotePings {
             guard !localIds.contains(remote.id.lowercased()) else { continue }
+            // Skip orphaned pings whose memory was deleted — prevents phantom pings on sync
+            guard localMemoryIds.contains(remote.memory_id.lowercased()) else { continue }
             guard let remoteId = UUID(uuidString: remote.id),
                   let memoryId = UUID(uuidString: remote.memory_id),
                   let fireDate = ISO8601DateFormatter().date(from: remote.fire_date) else { continue }
@@ -526,6 +603,7 @@ class SupabaseSyncService {
 
         let rows = localItems.reduce(into: [GiftItemRow]()) { result, item in
             guard !result.contains(where: { $0.id == item.id.uuidString }) else { return }
+            guard item.personId != GiftItem.wishlistPersonId else { return }
             result.append(GiftItemRow(
                 id: item.id.uuidString,
                 user_id: userId.uuidString,
@@ -593,7 +671,8 @@ class SupabaseSyncService {
                 comment: item.comment,
                 created_at: ISO8601DateFormatter().string(from: item.createdAt),
                 completed_at: item.completedAt.map { ISO8601DateFormatter().string(from: $0) },
-                updated_at: ISO8601DateFormatter().string(from: item.updatedAt)
+                updated_at: ISO8601DateFormatter().string(from: item.updatedAt),
+                season: item.season
             ))
         }
 
@@ -630,6 +709,7 @@ class SupabaseSyncService {
             if let c = remote.created_at { item.createdAt = ISO8601DateFormatter().date(from: c) ?? Date() }
             if let u = remote.updated_at { item.updatedAt = ISO8601DateFormatter().date(from: u) ?? Date() }
             if let ca = remote.completed_at { item.completedAt = ISO8601DateFormatter().date(from: ca) }
+            item.season = remote.season
             context.insert(item)
         }
 
@@ -704,6 +784,7 @@ class SupabaseSyncService {
     // MARK: - Push Single Echo
 
     func pushEcho(_ echo: Echo, userId: UUID) async {
+        guard !echo.isSystemEcho else { return }  // Thoughts is local-only, never push
         let row = EchoRow(from: echo, userId: userId)
         do {
             try await supabase
@@ -760,16 +841,26 @@ class SupabaseSyncService {
 
     // MARK: - Delete Memory
 
+    /// Preferred call site: registers the pending-delete synchronously (so UserDefaults
+    /// is written before any Task runs), then fires the network delete in the background.
+    /// Safe to call from a button action on the main thread.
+    func scheduleDelete(id: UUID) {
+        markPendingDelete(id: id)
+        Task { await deleteMemory(id: id) }
+    }
+
     func deleteMemory(id: UUID) async {
+        markPendingDelete(id: id) // no-op if scheduleDelete already registered it
         do {
             try await supabase
                 .from("memories")
                 .delete()
                 .eq("id", value: id.uuidString)
                 .execute()
+            clearPendingDelete(id: id)
             print("✅ Memory deleted from Supabase: \(id)")
         } catch {
-            print("❌ Failed to delete memory: \(error)")
+            print("❌ Failed to delete memory (will retry on next sync): \(error)")
         }
     }
 
@@ -818,6 +909,30 @@ class SupabaseSyncService {
         }
     }
 
+    // MARK: - Push Single Watchlist Item
+
+    func pushWatchlistItem(_ item: WatchlistItem, userId: UUID) async {
+        let row = WatchlistItemRow(
+            id: item.id.uuidString,
+            user_id: userId.uuidString,
+            title: item.title,
+            item_type: item.itemType,
+            streaming_service: item.streamingService,
+            status: item.status,
+            rating: item.rating,
+            comment: item.comment,
+            created_at: ISO8601DateFormatter().string(from: item.createdAt),
+            completed_at: item.completedAt.map { ISO8601DateFormatter().string(from: $0) },
+            updated_at: ISO8601DateFormatter().string(from: item.updatedAt),
+            season: item.season
+        )
+        do {
+            try await supabase.from("watchlist_items").upsert(row, onConflict: "id").execute()
+        } catch {
+            print("❌ Failed to push watchlist item: \(error)")
+        }
+    }
+
     // MARK: - Delete Watchlist Item
 
     func deleteWatchlistItem(id: UUID) async {
@@ -831,6 +946,192 @@ class SupabaseSyncService {
         } catch {
             print("❌ Failed to delete watchlist item: \(error)")
         }
+    }
+
+    // MARK: - Sync TCG Cards
+
+    private func syncTCGCards(userId: UUID, context: ModelContext) async throws {
+        let localCards = try context.fetch(FetchDescriptor<TCGCard>())
+        let rows = localCards.reduce(into: [TCGCardRow]()) { result, card in
+            guard !result.contains(where: { $0.id == card.id.uuidString }) else { return }
+            result.append(TCGCardRow(
+                id: card.id.uuidString,
+                user_id: userId.uuidString,
+                pokemon_id: card.pokemonId,
+                name: card.name,
+                set_id: card.setId,
+                set_name: card.setName,
+                number: card.number,
+                image_url: card.imageURL,
+                large_image_url: card.largeImageURL,
+                rarity: card.rarity,
+                status: card.statusRaw,
+                market_price: card.marketPrice,
+                low_price: card.lowPrice,
+                high_price: card.highPrice,
+                price_variant: card.priceVariant,
+                added_at: ISO8601DateFormatter().string(from: card.addedAt),
+                psa_grade: card.psaGrade,
+                psa_target_grade: card.psaTargetGrade
+            ))
+        }
+        if !rows.isEmpty {
+            try await supabase.from("tcg_cards").upsert(rows, onConflict: "id").execute()
+        }
+        let localIds = Set(localCards.map { $0.id.uuidString.lowercased() })
+        let remoteCards: [TCGCardRow] = try await supabase
+            .from("tcg_cards").select().eq("user_id", value: userId.uuidString).execute().value
+        for remote in remoteCards {
+            guard !localIds.contains(remote.id.lowercased()), let remoteId = UUID(uuidString: remote.id) else { continue }
+            let card = TCGCard(pokemonId: remote.pokemon_id, name: remote.name, setId: remote.set_id,
+                               setName: remote.set_name, number: remote.number,
+                               imageURL: remote.image_url, largeImageURL: remote.large_image_url,
+                               rarity: remote.rarity)
+            card.id = remoteId
+            card.statusRaw = remote.status
+            card.marketPrice = remote.market_price
+            card.lowPrice = remote.low_price
+            card.highPrice = remote.high_price
+            card.priceVariant = remote.price_variant
+            card.psaGrade = remote.psa_grade
+            card.psaTargetGrade = remote.psa_target_grade
+            if let a = remote.added_at { card.addedAt = ISO8601DateFormatter().date(from: a) ?? Date() }
+            context.insert(card)
+        }
+        print("✅ TCG cards synced")
+    }
+
+    // MARK: - Sync Smiski Items
+
+    private func syncSmiskiItems(userId: UUID, context: ModelContext) async throws {
+        let localItems = try context.fetch(FetchDescriptor<SmiskiItem>())
+        let rows = localItems.reduce(into: [SmiskiItemRow]()) { result, item in
+            guard !result.contains(where: { $0.id == item.id.uuidString }) else { return }
+            result.append(SmiskiItemRow(
+                id: item.id.uuidString,
+                user_id: userId.uuidString,
+                figure_id: item.figureId,
+                series_id: item.seriesId,
+                series_name: item.seriesName,
+                figure_name: item.figureName,
+                is_secret: item.isSecret,
+                status: item.statusRaw,
+                added_at: ISO8601DateFormatter().string(from: item.addedAt)
+            ))
+        }
+        if !rows.isEmpty {
+            try await supabase.from("smiski_items").upsert(rows, onConflict: "id").execute()
+        }
+        let localIds = Set(localItems.map { $0.id.uuidString.lowercased() })
+        let remoteItems: [SmiskiItemRow] = try await supabase
+            .from("smiski_items").select().eq("user_id", value: userId.uuidString).execute().value
+        for remote in remoteItems {
+            guard !localIds.contains(remote.id.lowercased()), let remoteId = UUID(uuidString: remote.id) else { continue }
+            let item = SmiskiItem(figureId: remote.figure_id, seriesId: remote.series_id,
+                                  seriesName: remote.series_name, figureName: remote.figure_name,
+                                  isSecret: remote.is_secret)
+            item.id = remoteId
+            item.statusRaw = remote.status
+            if let a = remote.added_at { item.addedAt = ISO8601DateFormatter().date(from: a) ?? Date() }
+            context.insert(item)
+        }
+        print("✅ Smiski items synced")
+    }
+
+    // MARK: - Sync Lego Sets
+
+    private func syncLegoSets(userId: UUID, context: ModelContext) async throws {
+        let localSets = try context.fetch(FetchDescriptor<LegoSet>())
+        let rows = localSets.reduce(into: [LegoSetRow]()) { result, set in
+            guard !result.contains(where: { $0.id == set.id.uuidString }) else { return }
+            result.append(LegoSetRow(
+                id: set.id.uuidString,
+                user_id: userId.uuidString,
+                set_num: set.setNum,
+                name: set.name,
+                year: set.year,
+                theme_id: set.themeId,
+                theme_name: set.themeName,
+                num_parts: set.numParts,
+                image_url: set.imageURL,
+                status: set.statusRaw,
+                added_at: ISO8601DateFormatter().string(from: set.addedAt)
+            ))
+        }
+        if !rows.isEmpty {
+            try await supabase.from("lego_sets").upsert(rows, onConflict: "id").execute()
+        }
+        let localIds = Set(localSets.map { $0.id.uuidString.lowercased() })
+        let remoteSets: [LegoSetRow] = try await supabase
+            .from("lego_sets").select().eq("user_id", value: userId.uuidString).execute().value
+        for remote in remoteSets {
+            guard !localIds.contains(remote.id.lowercased()), let remoteId = UUID(uuidString: remote.id) else { continue }
+            let set = LegoSet(setNum: remote.set_num, name: remote.name, year: remote.year ?? 0,
+                              themeId: remote.theme_id ?? 0, themeName: remote.theme_name,
+                              numParts: remote.num_parts ?? 0, imageURL: remote.image_url ?? "")
+            set.id = remoteId
+            set.statusRaw = remote.status
+            if let a = remote.added_at { set.addedAt = ISO8601DateFormatter().date(from: a) ?? Date() }
+            context.insert(set)
+        }
+        print("✅ Lego sets synced")
+    }
+
+    // MARK: - Push Single TCG Card
+
+    func pushTCGCard(_ card: TCGCard, userId: UUID) async {
+        let row = TCGCardRow(
+            id: card.id.uuidString, user_id: userId.uuidString, pokemon_id: card.pokemonId,
+            name: card.name, set_id: card.setId, set_name: card.setName, number: card.number,
+            image_url: card.imageURL, large_image_url: card.largeImageURL, rarity: card.rarity,
+            status: card.statusRaw, market_price: card.marketPrice, low_price: card.lowPrice,
+            high_price: card.highPrice, price_variant: card.priceVariant,
+            added_at: ISO8601DateFormatter().string(from: card.addedAt),
+            psa_grade: card.psaGrade, psa_target_grade: card.psaTargetGrade
+        )
+        do { try await supabase.from("tcg_cards").upsert(row, onConflict: "id").execute() }
+        catch { print("❌ Failed to push TCG card: \(error)") }
+    }
+
+    func deleteTCGCard(id: UUID) async {
+        do { try await supabase.from("tcg_cards").delete().eq("id", value: id.uuidString).execute() }
+        catch { print("❌ Failed to delete TCG card: \(error)") }
+    }
+
+    // MARK: - Push Single Smiski Item
+
+    func pushSmiskiItem(_ item: SmiskiItem, userId: UUID) async {
+        let row = SmiskiItemRow(
+            id: item.id.uuidString, user_id: userId.uuidString, figure_id: item.figureId,
+            series_id: item.seriesId, series_name: item.seriesName, figure_name: item.figureName,
+            is_secret: item.isSecret, status: item.statusRaw,
+            added_at: ISO8601DateFormatter().string(from: item.addedAt)
+        )
+        do { try await supabase.from("smiski_items").upsert(row, onConflict: "id").execute() }
+        catch { print("❌ Failed to push Smiski item: \(error)") }
+    }
+
+    func deleteSmiskiItem(id: UUID) async {
+        do { try await supabase.from("smiski_items").delete().eq("id", value: id.uuidString).execute() }
+        catch { print("❌ Failed to delete Smiski item: \(error)") }
+    }
+
+    // MARK: - Push Single Lego Set
+
+    func pushLegoSet(_ set: LegoSet, userId: UUID) async {
+        let row = LegoSetRow(
+            id: set.id.uuidString, user_id: userId.uuidString, set_num: set.setNum,
+            name: set.name, year: set.year, theme_id: set.themeId, theme_name: set.themeName,
+            num_parts: set.numParts, image_url: set.imageURL, status: set.statusRaw,
+            added_at: ISO8601DateFormatter().string(from: set.addedAt)
+        )
+        do { try await supabase.from("lego_sets").upsert(row, onConflict: "id").execute() }
+        catch { print("❌ Failed to push Lego set: \(error)") }
+    }
+
+    func deleteLegoSet(id: UUID) async {
+        do { try await supabase.from("lego_sets").delete().eq("id", value: id.uuidString).execute() }
+        catch { print("❌ Failed to delete Lego set: \(error)") }
     }
 
     // MARK: - Auto Sync
@@ -956,6 +1257,7 @@ struct WatchlistItemRow: Codable {
     let created_at: String?
     let completed_at: String?
     let updated_at: String?
+    let season: Int?
 }
 
 struct SubTaskRow: Codable {
@@ -966,4 +1268,51 @@ struct SubTaskRow: Codable {
     let is_completed: Bool
     let sort_order: Int
     let created_at: String?
+}
+
+struct TCGCardRow: Codable {
+    let id: String
+    let user_id: String
+    let pokemon_id: String
+    let name: String
+    let set_id: String
+    let set_name: String
+    let number: String
+    let image_url: String
+    let large_image_url: String
+    let rarity: String?
+    let status: String
+    let market_price: Double?
+    let low_price: Double?
+    let high_price: Double?
+    let price_variant: String?
+    let added_at: String?
+    let psa_grade: Int?
+    let psa_target_grade: Int?
+}
+
+struct SmiskiItemRow: Codable {
+    let id: String
+    let user_id: String
+    let figure_id: String
+    let series_id: String
+    let series_name: String
+    let figure_name: String
+    let is_secret: Bool
+    let status: String
+    let added_at: String?
+}
+
+struct LegoSetRow: Codable {
+    let id: String
+    let user_id: String
+    let set_num: String
+    let name: String
+    let year: Int?
+    let theme_id: Int?
+    let theme_name: String
+    let num_parts: Int?
+    let image_url: String?
+    let status: String
+    let added_at: String?
 }

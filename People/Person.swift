@@ -15,6 +15,7 @@ class Person {
     var relationship: String?
     var birthday: Date?
     var notes: String?
+    var email: String?
     var linkedMemoryIds: [UUID] = []
     var excludedMemoryIds: [UUID] = []
     var occasionBudgets: [String: Double] = [:]

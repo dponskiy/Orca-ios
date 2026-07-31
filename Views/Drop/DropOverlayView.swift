@@ -35,7 +35,6 @@ struct DropOverlayView: View {
         ("🎂", "\"Cara's birthday is December 8th\""),
         ("✈️", "\"Screenshot a flight or hotel — auto-saved\""),
         ("📋", "\"Say 'and' between items to make a checklist\""),
-        ("🏈", "\"Say your Pro sports team to track schedules and scores\""),
         ("🍳", "\"Paste a recipe URL to import ingredients\""),
         ("🔔", "\"Dentist April 5th at 2pm, remind me the day before\""),
         ("🏋️", "\"Bench press 185 pounds 3 sets of 8\""),
@@ -158,7 +157,6 @@ struct DropOverlayView: View {
             } else if permissionDenied {
                 permissionDeniedView
             } else if showBanner {
-                // Keep recording view visible, dimmed behind banner
                 recordingView
                     .allowsHitTesting(false)
 
@@ -196,7 +194,7 @@ struct DropOverlayView: View {
                         onGroceryHint: {
                             NotificationCenter.default.post(name: .groceryModeHint, object: nil)
                         },
-                        onAddToWatchlist: { title, type, service in 
+                        onAddToWatchlist: { title, type, service in
                             let item = WatchlistItem(title: title, itemType: type, streamingService: service)
                             modelContext.insert(item)
                         }
@@ -308,7 +306,6 @@ struct DropOverlayView: View {
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // TOP HALF — Tips
                 VStack(alignment: .leading, spacing: 0) {
                     Text("WHAT CAN I SAY?")
                         .font(.custom("DMSans-Medium", size: 11))
@@ -347,7 +344,6 @@ struct DropOverlayView: View {
 
                 Divider().background(Color.white.opacity(0.08)).padding(.horizontal, 28)
 
-                // BOTTOM HALF — Recording controls
                 VStack(spacing: 16) {
                     if !audioService.transcription.isEmpty {
                         Text(audioService.transcription)
@@ -464,6 +460,8 @@ struct DropOverlayView: View {
     }
 
     // MARK: - Stop and Process
+    // Sonar runs first (sync, instant), then AI enhances while the
+    // sonar animation is still showing — no extra perceived latency.
 
     private func stopAndProcess() {
         cancelSilenceTimer()
@@ -478,23 +476,41 @@ struct DropOverlayView: View {
         withAnimation(.easeOut(duration: 0.2)) { visibleTipIndices = [] }
         withAnimation(.easeIn(duration: 0.2)) { showSonarAnimation = true }
 
+        // Capture for use inside Task (avoids capturing self or @Query echos across actor boundaries)
+        let text = savedTranscription
+        let echoSnapshot = Array(echos)
+
         Task {
+            // Minimum animation duration
             try? await Task.sleep(nanoseconds: 900_000_000)
+
+            // Sonar — synchronous, runs off main actor is fine since SonarEngine is a plain class
+            let rawResult = SonarEngine().process(text: text, echos: echoSnapshot)
+
+            // AI enhance — runs while animation is still visible, adds no perceived latency
+            let finalResult = await AppleIntelligenceService.shared.enhance(
+                text: text,
+                sonarResult: rawResult,
+                echos: echoSnapshot
+            )
+
             await MainActor.run {
                 withAnimation(.easeOut(duration: 0.2)) { showSonarAnimation = false }
-                processSonarResult()
+                processSonarResult(with: finalResult)
             }
         }
     }
 
     // MARK: - Process Sonar Result
+    // Now accepts a pre-computed (and AI-enhanced) SonarResult.
 
-    private func processSonarResult() {
-        sonarResult = sonarEngine.process(text: savedTranscription, echos: echos)
-        let isWorkout = sonarResult?.echoName.lowercased().contains("workout") == true
+    private func processSonarResult(with result: SonarResult) {
+        sonarResult = result
+
+        let isWorkout = result.echoName.lowercased().contains("workout")
         if isWorkout,
            let existing = WorkoutSessionManager.shared.mergeIntoTodaySession(
-               text: savedTranscription, echos: echos, context: modelContext) {
+               text: savedTranscription, echos: Array(echos), context: modelContext) {
             if let userId = authService.userId {
                 Task { await SupabaseSyncService.shared.pushMemory(existing, userId: userId) }
             }
@@ -502,48 +518,76 @@ struct DropOverlayView: View {
             return
         }
 
-        let echoId = sonarResult?.echoId ?? echos.first?.id ?? UUID()
+        let echoId = result.echoId ?? echos.first?.id ?? UUID()
         let memory = Memory(text: savedTranscription, echoId: echoId)
-        memory.tags = sonarResult?.tags ?? []
-        memory.detectedDate = sonarResult?.detectedDate
-        memory.endDate = sonarResult?.endDate
-        memory.echoConfidence = sonarResult?.echoConfidence ?? 1.0
-        memory.dateConfidence = sonarResult?.dateConfidence
-        memory.sonarConfidence = sonarResult?.echoConfidence ?? 1.0
-        memory.isActionable = sonarResult?.isActionable ?? false
-        memory.estimatedMinutes = sonarResult?.estimatedMinutes
+        memory.tags = result.tags
+        memory.detectedDate = result.detectedDate
+        memory.endDate = result.endDate
+        memory.echoConfidence = result.echoConfidence
+        memory.dateConfidence = result.dateConfidence
+        memory.sonarConfidence = result.echoConfidence
+        memory.isActionable = result.isActionable
+        memory.estimatedMinutes = result.estimatedMinutes
+        if !result.checklistItems.isEmpty {
+            memory.hasChecklist = true
+            for (i, item) in result.checklistItems.enumerated() {
+                modelContext.insert(SubTask(memoryId: memory.id, text: item, sortOrder: i))
+            }
+        }
         modelContext.insert(memory)
         SpotlightService.shared.indexMemory(
             memory,
-            echoName: sonarResult?.echoName ?? "Notes",
+            echoName: result.echoName,
             echoEmoji: echos.first { $0.id == memory.echoId }?.emoji ?? "📝"
         )
         NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
 
-        if let userId = authService.userId, let result = sonarResult {
-            Task {
+        if memory.detectedDate != nil {
+            let recurrence = result.pingRecurrence
+            NotificationCenter.default.post(
+                name: .calendarSyncCheck,
+                object: memory,
+                userInfo: ["recurrence": recurrence.rawValue]
+            )
+        }
+
+        // Create pings locally first so reminders always work
+        if !result.pingSuggestions.isEmpty {
+            var createdPings: [Ping] = []
+            for suggestion in result.pingSuggestions {
+                let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
+                let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
+                if let fireTime = suggestion.fireTime { ping.fireTime = fireTime }
+                modelContext.insert(ping)
+                NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                createdPings.append(ping)
+            }
+            if let advancePing = NotificationService.shared.makeAdvancePing(for: memory, echoName: result.echoName) {
+                modelContext.insert(advancePing)
+                NotificationService.shared.schedulePing(ping: advancePing, memoryText: "2 weeks out: \(memory.text)")
+                createdPings.append(advancePing)
+            }
+            try? modelContext.save()
+
+            if let userId = authService.userId {
+                Task { @MainActor in
+                    await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
+                    for ping in createdPings {
+                        await SupabaseSyncService.shared.pushPing(ping, userId: userId)
+                    }
+                }
+            }
+        } else if let userId = authService.userId {
+            Task { @MainActor in
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
-                for suggestion in result.pingSuggestions {
-                    let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
-                    let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
-                    if let fireTime = suggestion.fireTime { ping.fireTime = fireTime }
-                    modelContext.insert(ping)
-                    await SupabaseSyncService.shared.pushPing(ping, userId: userId)
-                    NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
-                }
-                if sonarResult?.detectedSportsTeam != nil {
-                    await SportsMemoryService.shared.createGamePings(
-                        for: savedTranscription, memory: memory,
-                        modelContext: modelContext, userId: userId.uuidString)
-                }
             }
         }
 
         AnalyticsService.shared.trackMemoryDropped(
             captureType: "voice",
-            echoName: sonarResult?.echoName ?? "Unknown",
-            hasPing: sonarResult?.shouldCreatePing ?? false,
-            hasDate: sonarResult?.detectedDate != nil,
+            echoName: result.echoName,
+            hasPing: result.shouldCreatePing,
+            hasDate: result.detectedDate != nil,
             hasURL: memory.url != nil,
             hasChecklist: memory.hasChecklist,
             wordCount: savedTranscription.split(separator: " ").count
@@ -552,7 +596,8 @@ struct DropOverlayView: View {
         if let detectedURL = sonarEngine.detectURL(text: savedTranscription) {
             memory.url = detectedURL
         }
-        if let checklistItems = sonarEngine.detectChecklist(text: savedTranscription) {
+        // Checklist already handled via result.checklistItems above; only fall back to legacy detection if nothing was found
+        if result.checklistItems.isEmpty, let checklistItems = sonarEngine.detectChecklist(text: savedTranscription) {
             memory.hasChecklist = true
             for (index, item) in checklistItems.enumerated() {
                 let subTask = SubTask(memoryId: memory.id, text: item, sortOrder: index)
@@ -561,7 +606,7 @@ struct DropOverlayView: View {
         }
 
         // Auto-create GiftItem
-        let isGiftsEcho = sonarResult?.echoName == "Gifts"
+        let isGiftsEcho = result.echoName == "Gifts"
         let lowerText = savedTranscription.lowercased()
 
         let hasGiftKeyword = ["gift", "present", "got", "get", "getting", "bought", "buy",
@@ -583,7 +628,7 @@ struct DropOverlayView: View {
         if isGiftsEcho || (hasGiftKeyword && hasOccasionKeyword) {
             let personDescriptor = FetchDescriptor<Person>()
             let allPersons = (try? modelContext.fetch(personDescriptor)) ?? []
-            let detectedPeople = sonarResult?.detectedPeople ?? []
+            let detectedPeople = result.detectedPeople
             let matchingPersons: [Person] = allPersons.filter { person in
                 let firstName = person.name.split(separator: " ").first.map(String.init) ?? person.name
                 guard firstName.count > 2 else { return false }
@@ -694,7 +739,7 @@ struct DropOverlayView: View {
         if let last = recent?.first {
             let id = last.id
             modelContext.delete(last)
-            Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+            SupabaseSyncService.shared.scheduleDelete(id: id)
         }
         isPresented = false
     }

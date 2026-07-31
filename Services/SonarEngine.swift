@@ -31,15 +31,15 @@ struct SonarResult {
     let shouldOfferRecipeFetch: Bool
     let suggestedLocationName: String?
     let hasRestaurantSignal: Bool
-    let detectedSportsTeam: ESPNTeam?
     let detectedPeople: [String]
     let estimatedMinutes: Int?
+    let checklistItems: [String]
 }
 
 class SonarEngine {
     
     private let keywordMap: [(echo: String, keywords: [String], priority: Int)] = [
-        ("Health", ["doctor", "medicine", "prescription", "appointment", "dentist", "therapy", "vitamin", "hospital", "symptoms", "allergy", "medication", "pharmacy", "sick", " pain", "blood pressure", "checkup", "nurse", "clinic", "urgent care", "specialist", "surgeon", "physical", "lab results", "diagnosis", "chronic", "inflammation", "fever", "nausea", "injury", "rehab", "physical therapy",
+        ("Health", ["doctor", "medicine", "prescription", "appointment", "dentist", "therapy", "vitamin", "hospital", "symptoms", "allergy", "medication", "pharmacy", "sick", "pain", "blood pressure", "checkup", "nurse", "clinic", "urgent care", "specialist", "surgeon", "physical", "lab results", "diagnosis", "chronic", "inflammation", "fever", "nausea", "injury", "rehab", "physical therapy",
                     "mental health", "anxiety", "depression", "therapist", "psychiatrist", "psychologist",
                     "dermatologist", "ophthalmologist", "optometrist", "chiropractor", "acupuncture",
                     "blood work", "mri", "xray", "x-ray", "ultrasound", "scan", "biopsy",
@@ -47,7 +47,7 @@ class SonarEngine {
                     "cholesterol", "diabetes", "thyroid", "migraine", "headache", "back pain",
                     "sleep", "insomnia", "melatonin", "supplement", "probiotic", "omega",
                     "colonoscopy", "mammogram", "annual physical", "flu shot", "vaccine", "booster",
-                    "stitches", "cast", "crutches", "er", "emergency room", "prescription refill", "second opinion"], 1),
+                    "stitches", "cast", "crutches", "the er", "went to er", "emergency room", "prescription refill", "second opinion"], 1),
         
         ("Kids", ["daycare", "teacher", "parent", "pediatrician", "baby", "child", "kid", "daughter", "son", "playground", "soccer practice", "ballet", "tutor", "school pickup", "drop off kids", "nanny", "babysitter", "kindergarten", "preschool", "school project",
                   "homework", "report card", "parent teacher", "pta", "field trip", "school supplies",
@@ -153,7 +153,32 @@ class SonarEngine {
                     "sportsbook", "fanduel", "draftkings", "prizepicks", "underdog",
                     "nfl", "nba", "mlb", "nhl", "mls", "ncaa", "sec", "big ten",
                     "college football", "march madness", "bracket", "bowl game",
-                    "hat trick", "home run", "touchdown", "three pointer", "slam dunk"], 8),
+                    "hat trick", "home run", "touchdown", "three pointer", "slam dunk",
+                    // NFL
+                    "cowboys", "eagles", "patriots", "chiefs", "49ers", "ravens", "bills",
+                    "bengals", "steelers", "texans", "colts", "jaguars", "titans", "broncos",
+                    "raiders", "chargers", "rams", "seahawks", "cardinals", "giants", "jets",
+                    "commanders", "bears", "lions", "packers", "vikings", "falcons", "panthers",
+                    "saints", "buccaneers", "dolphins",
+                    // NBA
+                    "lakers", "celtics", "warriors", "bulls", "heat", "knicks", "nets", "bucks",
+                    "suns", "nuggets", "clippers", "76ers", "sixers", "mavericks", "mavs",
+                    "grizzlies", "timberwolves", "thunder", "pelicans", "kings", "jazz",
+                    "raptors", "hawks", "hornets", "magic", "wizards", "cavaliers", "cavs",
+                    "pacers", "pistons", "rockets", "spurs", "blazers",
+                    // MLB
+                    "yankees", "red sox", "dodgers", "cubs", "astros", "braves", "mets",
+                    "phillies", "blue jays", "padres", "nationals", "orioles", "rays",
+                    "mariners", "angels", "rangers", "twins", "white sox", "royals",
+                    "guardians", "brewers", "pirates", "reds", "rockies", "diamondbacks",
+                    // NHL
+                    "bruins", "penguins", "capitals", "lightning", "maple leafs", "canadiens",
+                    "blackhawks", "flyers", "rangers", "devils", "islanders", "oilers",
+                    "flames", "canucks", "avalanche", "golden knights", "predators", "blues",
+                    // Soccer
+                    "arsenal", "chelsea", "liverpool", "man city", "man united", "tottenham",
+                    "spurs", "barcelona", "real madrid", "psg", "juventus", "bayern",
+                    "dortmund", "wrexham"], 8),
         
         ("Events", ["concert", "show", "festival", "conference", "expo", "recital", "performance", "gala", "ceremony", "graduation", "prom", "meetup", "gathering", "networking", "keynote", "panel", "workshop", "seminar", "opening night", "premiere", "launch event", "happy hour", "cocktail party", "wedding", "engagement", "baby shower", "retirement party",
                     "tickets", "venue", "sold out", "general admission", "vip", "backstage",
@@ -307,7 +332,9 @@ class SonarEngine {
                      "lifted", "pressed", "incline", "decline", "lat pulldown", "leg press",
                      "chest fly", "tricep", "triceps", "bicep", "biceps",
                      "back day", "leg day", "chest day", "push day", "pull day", "arms day",
-                     "superset", "drop set", "max out", "sets and reps", "working out", "gym", "workout", "lifting", "volume", "hit the gym", "ran", "running", "miles", "kilometers", "treadmill", "elliptical",
+                     "superset", "drop set", "max out", "sets and reps", "working out", "gym", "workout", "lifting", "volume", "hit the gym",
+                     "i ran", "we ran", "just ran", "ran today", "ran this morning", "ran for", "ran a mile", "ran a 5k", "went for a run",
+                     "running", "miles", "kilometers", "treadmill", "elliptical",
                      "cycling", "swim", "swam", "rowing", "hiit", "circuit", "cardio",
                      "peloton", "crossfit", "wod", "spin class", "personal trainer",
                      "5k", "10k", "half marathon", "marathon", "pace", "race time",
@@ -341,6 +368,11 @@ class SonarEngine {
     private let reminderKeywords = ["remind", "remember", "don't forget", "dont forget", "every monday", "every tuesday", "every wednesday", "every thursday", "every friday", "every saturday", "every sunday", "every week", "every month", "every year", "every day", "daily", "weekly", "monthly", "yearly", "annually", "appointment", "deadline", "due date"]
     
     private let actionKeywords = [
+        // Voice-natural intent phrases ("I need to call...", "gotta pick up...", "have to send...")
+        "need to", "have to", "got to", "gotta", "gonna", "i should", "should probably",
+        "don't forget to", "dont forget to", "make sure to", "make sure i",
+        "i have an", "i have a", // "I have an appointment", "I have a meeting"
+
         // Getting / acquiring
         "buy", "get", "pick up", "pickup", "grab", "order", "purchase", "stock up", "reorder",
 
@@ -401,9 +433,12 @@ class SonarEngine {
     ]
     
     private let diningContextWords = [
-        "eat", "ate", "food", "dish", "menu", "lunch", "dinner", "brunch",
+        // "eat" and "ate" removed — "eat" matches "feature"/"meat"/"heat", "ate" matches "date"/"state"/"create"
+        "eating out", "eating at", "let's eat", "going to eat", "want to eat",
+        "we ate", "i ate", "just ate", "ate at", "ate there", "ate here",
+        "food", "dish", "menu", "lunch", "dinner", "brunch",
         "breakfast", "taste", "flavor", "delicious", "portions", "service", "waiter",
-        "try", "tried", "trying", "dining", "restaurant", "reservations", "takeout",
+        "tried", "dining", "restaurant", "reservations", "takeout",
         "delivery", "cuisine", "spot", "eats"
     ]
     
@@ -422,7 +457,6 @@ class SonarEngine {
         
         let entities = extractEntities(text: text)
         let echoResult = assignEcho(text: lower, originalText: text, echos: echos, entities: entities)
-        let detectedSportsTeam = ESPNService.shared.detectTeam(in: text)
         let dateResults = detectDates(text: text)
         let tags = generateTags(text: text, echoName: echoResult.name, entities: entities)
         var actionable = detectAction(text: lower)
@@ -441,7 +475,9 @@ class SonarEngine {
         
         let hasDiningContext = diningContextWords.contains { lower.contains($0) }
         let hasRestaurantSignal = !entities.organizations.isEmpty && hasDiningContext
-        
+
+        let checklistItems = detectChecklistItems(text: text)
+
         return SonarResult(
             echoId: echoResult.id,
             echoName: echoResult.name,
@@ -459,10 +495,144 @@ class SonarEngine {
             shouldOfferRecipeFetch: shouldOfferRecipeFetch,
             suggestedLocationName: entities.organizations.first,
             hasRestaurantSignal: hasRestaurantSignal,
-            detectedSportsTeam: detectedSportsTeam,
             detectedPeople: entities.people.map { $0.capitalized },
-            estimatedMinutes: DurationParser.shared.parse(text: text)
+            estimatedMinutes: DurationParser.shared.parse(text: text),
+            checklistItems: checklistItems
         )
+    }
+
+    // Detects comma/and separated action items after trigger phrases like "need to", "have to", etc.
+    private func detectChecklistItems(text: String) -> [String] {
+        let lower = text.lowercased()
+
+        // Action verbs that signal a task item
+        let actionVerbs = ["pick up", "pickup", "buy", "get", "grab", "prep", "prepare", "clean",
+                           "call", "email", "text", "book", "reserve", "order", "return", "drop off",
+                           "dropoff", "send", "print", "pack", "unpack", "fix", "repair", "check",
+                           "confirm", "schedule", "remind", "bring", "take", "make", "cook", "bake",
+                           "wash", "iron", "wrap", "charge", "download", "install", "cancel", "pay",
+                           "register", "sign up", "review", "finish", "complete", "submit", "upload",
+                           "clear", "tidy", "sweep", "mop", "mow", "dust", "wipe", "scrub", "set out",
+                           "put away", "gather", "throw", "set up", "pick", "move", "fold"]
+
+        // Trigger phrases that introduce a list
+        let triggerPhrases = [
+            // Direct intent
+            "need to", "needs to", "have to", "has to", "gotta", "got to", "gonna",
+            "want to", "wants to", "plan to", "planning to", "going to",
+            "trying to", "hoping to", "supposed to", "i should", "we should",
+
+            // Memory / reminder framing
+            "remind me to", "remind me i need to", "remind us to", "reminder to",
+            "remember to", "remember i need to", "don't forget to", "dont forget to",
+            "don't forget", "dont forget", "before i forget", "note to self",
+            "make sure to", "make sure i", "make sure we",
+            "need to make sure", "just a reminder", "set a reminder to",
+
+            // Casual spoken forms
+            "i gotta", "i've gotta", "ive gotta", "i got to", "i need to",
+            "we gotta", "we've gotta", "we need to", "we have to",
+            "i have to", "i've got to", "ive got to",
+            "can you remind me to", "can you remind us to",
+            "don't let me forget", "dont let me forget",
+            "i keep forgetting to", "keep forgetting to",
+            "add to my list", "add to the list", "put on my list",
+            "on my list", "on the list",
+
+            // Obligation / necessity
+            "must", "should", "need:", "i must",
+
+            // List framing
+            "to do:", "todo:", "tasks:", "items:", "checklist:", "list:",
+            "action items:", "things to", "stuff to", "things i need",
+            "few things", "a few things", "couple things", "some things",
+            "a couple of things", "few things i need", "some stuff i need",
+            "bunch of things", "a bunch of things",
+
+            // Event prep framing
+            "before the", "before we", "before i", "for the party", "for the trip",
+            "for the event", "for the dinner", "for the meeting", "for the weekend",
+            "for tomorrow", "for today", "this week i need to",
+        ]
+
+        // Find the position after the trigger phrase
+        var listStart: String.Index? = nil
+        for phrase in triggerPhrases {
+            if let range = lower.range(of: phrase) {
+                listStart = range.upperBound
+                break
+            }
+        }
+
+        guard let start = listStart else { return [] }
+
+        let remainder = String(text[start...]).trimmingCharacters(in: .whitespaces)
+
+        // Split on comma, "and", semicolon
+        var rawItems = remainder
+            .components(separatedBy: ",")
+            .flatMap { $0.components(separatedBy: " and ") }
+            .flatMap { $0.components(separatedBy: ";") }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        // Second pass: split on embedded action verbs for voice input (no commas spoken)
+        let sortedVerbs = actionVerbs.sorted { $0.count > $1.count }
+        rawItems = rawItems.flatMap { item -> [String] in
+            var results: [String] = []
+            var current = item
+            while current.count > 1 {
+                let searchFrom = current.index(after: current.startIndex)
+                let searchRange = searchFrom..<current.endIndex
+                var splitFound = false
+                for verb in sortedVerbs {
+                    let pattern = " \(verb) "
+                    if let range = current.range(of: pattern, options: .caseInsensitive, range: searchRange) {
+                        let before = String(current[current.startIndex..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                        let afterSpace = current.index(after: range.lowerBound)
+                        current = String(current[afterSpace...]).trimmingCharacters(in: .whitespaces)
+                        if !before.isEmpty { results.append(before) }
+                        splitFound = true
+                        break
+                    }
+                }
+                if !splitFound { break }
+            }
+            if !current.isEmpty { results.append(current) }
+            return results
+        }
+
+        // Only keep items that start with an action verb or are short enough to be a clear task
+        let filtered = rawItems.filter { item in
+            let itemLower = item.lowercased()
+            let startsWithVerb = actionVerbs.contains { itemLower.hasPrefix($0) }
+            let isShortTask = item.split(separator: " ").count <= 8
+            return startsWithVerb && isShortTask
+        }
+
+        // Need at least 2 items to auto-create a checklist
+        if filtered.count >= 2 {
+            return filtered.map { item in item.prefix(1).uppercased() + item.dropFirst() }
+        }
+
+        // Fallback: colon-separated list style ("to buy: milk, eggs, bread")
+        let colonPatterns = [
+            #"(?:to buy|to get|to watch|to read|to do|grocery|shopping list|need|want)[\s:,]+(.+)$"#
+        ]
+        for pattern in colonPatterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                  let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+                  let range = Range(match.range(at: 1), in: text) else { continue }
+            let listText = String(text[range])
+            let colonItems = listText.components(separatedBy: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if colonItems.count >= 2 {
+                return colonItems.map { item in item.prefix(1).uppercased() + item.dropFirst() }
+            }
+        }
+
+        return []
     }
     
     // MARK: - Named Entity Recognition
@@ -695,15 +865,6 @@ class SonarEngine {
             }
         }
         
-        let detectedTeam = ESPNService.shared.detectTeam(in: originalText)
-        if detectedTeam != nil {
-            if let idx = scores.firstIndex(where: { $0.name == "Sports" }) {
-                scores[idx].score += 3.0
-            } else {
-                scores.append(("Sports", 3.0, 8))
-            }
-        }
-        
         let detectedWorkout = WorkoutParser.shared.detectWorkout(in: originalText)
         if detectedWorkout != nil {
             if let idx = scores.firstIndex(where: { $0.name == "Workout" }) {
@@ -903,54 +1064,98 @@ class SonarEngine {
             return (relativeDate, nil, 0.9, relativeDate, relativeDate)
         }
         
+        // Bare-hyphen shorthand: "May 3-5", "June 14-16" — month shared, numeric end day
+        let bareHyphenPattern = #"((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2})-(\d{1,2})"#
+        if let match = lower.range(of: bareHyphenPattern, options: [.regularExpression, .caseInsensitive]) {
+            let matchStr = String(lower[match])
+            // Split on the hyphen between the two day numbers
+            if let hyphen = matchStr.range(of: #"(?<=\d)-(?=\d)"#, options: .regularExpression) {
+                let startPart = String(matchStr[matchStr.startIndex..<hyphen.lowerBound])
+                let endDay   = String(matchStr[hyphen.upperBound...])
+                // Extract the month word to reconstruct the end part
+                let monthPattern = #"^((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?)"#
+                if let monthMatch = startPart.range(of: monthPattern, options: [.regularExpression, .caseInsensitive]) {
+                    let monthWord = String(startPart[monthMatch])
+                    let endPart = "\(monthWord) \(endDay)"
+                    let currentYear = Calendar.current.component(.year, from: Date())
+                    let startFull = "\(startPart) \(currentYear)"
+                    let endFull   = "\(endPart) \(currentYear)"
+                    let r1 = NSRange(startFull.startIndex..<startFull.endIndex, in: startFull)
+                    let r2 = NSRange(endFull.startIndex..<endFull.endIndex, in: endFull)
+                    let d1 = detector?.matches(in: startFull, range: r1).compactMap { $0.date } ?? []
+                    let d2 = detector?.matches(in: endFull,   range: r2).compactMap { $0.date } ?? []
+                    if let s = d1.first, let e = d2.first {
+                        return (s, e, 0.9, nil, nil)
+                    }
+                }
+            }
+        }
+
         let rangeKeywords = [" through ", " until ", " thru ", " to ", " - ", "–", "—"]
         for keyword in rangeKeywords {
             guard lower.contains(keyword) else { continue }
-            
+
             var searchRange = lower.startIndex..<lower.endIndex
             var splitRanges: [Range<String.Index>] = []
             while let found = lower.range(of: keyword, range: searchRange) {
                 splitRanges.append(found)
                 searchRange = found.upperBound..<lower.endIndex
             }
-            
+
             for splitRange in splitRanges {
                 var firstHalf = String(text[text.startIndex..<splitRange.lowerBound])
                 var secondHalf = String(text[splitRange.upperBound...])
-                
+
                 if firstHalf.lowercased().hasPrefix("from ") {
                     firstHalf = String(firstHalf.dropFirst(5))
                 }
                 if let fromRange = firstHalf.range(of: " from ", options: .caseInsensitive) {
                     firstHalf = String(firstHalf[fromRange.upperBound...])
                 }
-                
+
                 let currentYear = Calendar.current.component(.year, from: Date())
                 let yearString = " \(currentYear)"
                 let hasYear1 = firstHalf.contains("202") || firstHalf.contains("203")
                 let hasYear2 = secondHalf.contains("202") || secondHalf.contains("203")
                 if !hasYear1 { firstHalf = firstHalf + yearString }
                 if !hasYear2 { secondHalf = secondHalf + yearString }
-                
+
                 let range1 = NSRange(firstHalf.startIndex..<firstHalf.endIndex, in: firstHalf)
                 let range2 = NSRange(secondHalf.startIndex..<secondHalf.endIndex, in: secondHalf)
-                
+
                 let dates1 = detector?.matches(in: firstHalf, range: range1).compactMap { $0.date } ?? []
                 let dates2 = detector?.matches(in: secondHalf, range: range2).compactMap { $0.date } ?? []
-                
-                if let startDate = dates1.first, let endDate = dates2.first {
+
+                if var startDate = dates1.first, var endDate = dates2.first {
+                    // Bug fix: if range spans year boundary (e.g. Dec 30 - Jan 2), bump endDate by 1 year
+                    if endDate < startDate {
+                        endDate = Calendar.current.date(byAdding: .year, value: 1, to: endDate) ?? endDate
+                    }
                     return (startDate, endDate, 0.9, nil, nil)
                 }
             }
         }
         
+        // Guard: if text looks like a measurement/size context with no real date words, skip NSDataDetector
+        // to prevent bare numbers like "11" in "shoe size 11" being parsed as times/dates.
+        let measurementWords = ["size", " oz", " lb", " lbs", " kg", " cm", " mm", " ml", " mph", "serving", "qty", "count", "grade", "psig", "psi"]
+        let hasMeasurementContext = measurementWords.contains { lower.contains($0) }
+        let hasDateContext = lower.contains("today") || lower.contains("tomorrow") || lower.contains("tonight") ||
+            lower.range(of: #"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*"#, options: [.regularExpression, .caseInsensitive]) != nil ||
+            lower.range(of: #"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"#, options: [.regularExpression, .caseInsensitive]) != nil ||
+            lower.contains(" am") || lower.contains(" pm") || lower.contains("o'clock") ||
+            lower.contains("morning") || lower.contains("afternoon") || lower.contains("evening") ||
+            lower.contains("noon") || lower.contains("midnight") || lower.contains("next week") || lower.contains("this week") ||
+            lower.contains("at ") || lower.contains("remind") || lower.contains("appointment")
+        if hasMeasurementContext && !hasDateContext { return (nil, nil, nil, nil, nil) }
+
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         let matches = detector?.matches(in: text, range: range) ?? []
         let dates = matches.compactMap { $0.date }
-        
+
         let hasAbsoluteDate = text.contains(where: { $0.isNumber })
         let confidence = hasAbsoluteDate ? 0.9 : 0.6
-        
+
         guard !dates.isEmpty else { return (nil, nil, nil, nil, nil) }
         
         if dates.count == 1 {
@@ -987,7 +1192,9 @@ class SonarEngine {
             ("(30|thirty)\\s+minutes?\\s+before", -1800),
             ("(15|fifteen)\\s+minutes?\\s+before", -900),
             ("(45|forty.?five)\\s+minutes?\\s+before", -2700),
-            ("(a|1|one)\\s+days?\\s+before", -86400),
+            ("(a|1|one|the)\\s+days?\\s+before", -86400),
+            ("the\\s+day\\s+before", -86400),
+            ("night\\s+before", -43200),
             ("(2|two)\\s+days?\\s+before", -172800),
             ("(a|1|one)\\s+weeks?\\s+before", -604800),
         ]
@@ -1026,11 +1233,17 @@ class SonarEngine {
         let calendar = Calendar.current
         let hasEvery = text.contains("every")
         
+        let lower = text.lowercased()
+        // Spoken time words from voice transcription (e.g. "at three pm", "three thirty", "three o'clock")
+        let spokenTimeWords = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
+        let hasSpokenTime = spokenTimeWords.contains { lower.contains("at \($0)") || lower.contains("\($0) o'clock") || lower.contains("\($0) oclock") }
         let hasSpecificTime = text.range(of: #"\bat\s+\d"#, options: .regularExpression) != nil ||
         text.range(of: #"\d+\s*(am|pm)"#, options: .regularExpression) != nil ||
+        lower.range(of: #"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(am|pm)\b"#, options: .regularExpression) != nil ||
         text.contains("noon") ||
         text.contains("midnight") ||
-        text.contains("midday")
+        text.contains("midday") ||
+        hasSpokenTime
         
         let weekdays = detectWeekdays(text: text)
         if !weekdays.isEmpty {
@@ -1095,7 +1308,24 @@ class SonarEngine {
         }
         
         guard let eventDate = dates.eventDate else { return [] }
-        
+
+        // Require explicit date/time vocabulary — bare numbers (sizes, quantities, prices)
+        // are parsed as dates by NSDataDetector but should never produce pings.
+        let hasExplicitDateVocab =
+            text.range(of: #"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*"#, options: [.regularExpression, .caseInsensitive]) != nil ||
+            text.range(of: #"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b"#, options: [.regularExpression, .caseInsensitive]) != nil ||
+            text.contains("today") || text.contains("tomorrow") || text.contains("tonight") ||
+            text.contains("next week") || text.contains("this week") || text.contains("next month") ||
+            text.contains("morning") || text.contains("afternoon") || text.contains("evening") ||
+            text.contains("noon") || text.contains("midnight") || text.contains("o'clock") ||
+            text.contains(" am") || text.contains(" pm") ||
+            text.contains("remind") || text.contains("appointment") || text.contains("deadline") ||
+            text.range(of: #"\bat\s+\d"#, options: .regularExpression) != nil ||
+            text.range(of: #"\d+\s*(am|pm)"#, options: [.regularExpression, .caseInsensitive]) != nil ||
+            text.range(of: #"\d{1,2}/\d{1,2}"#, options: .regularExpression) != nil ||
+            hasSpecificTime
+        guard hasExplicitDateVocab else { return [] }
+
         let hasReminderIntent = reminderKeywords.contains { text.contains($0) }
         let isActionable = detectAction(text: text)
         guard hasReminderIntent || hasSpecificTime || isActionable else { return [] }

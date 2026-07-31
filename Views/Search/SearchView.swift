@@ -12,6 +12,7 @@ struct SearchView: View {
     @Binding var isPresented: Bool
     @Query(sort: \Memory.createdAt, order: .reverse) private var memories: [Memory]
     @Query private var echos: [Echo]
+    @Query private var thoughtTabs: [ThoughtTab]
     
     @State private var editingMemory: Memory?
     @State private var detailMemory: Memory?
@@ -253,17 +254,33 @@ struct SearchView: View {
                 
                 HStack(spacing: 8) {
                     if let echo = echos.first(where: { $0.id == memory.echoId }) {
-                        HStack(spacing: 3) {
-                            Text(echo.emoji)
-                                .font(.system(size: 11))
-                            Text(echo.name)
-                                .font(.custom("DMSans-Medium", size: 12))
-                                .foregroundColor(.deepNavy)
+                        // Thoughts entries show tab name
+                        if echo.name == "Thoughts", let tabId = memory.thoughtTabId,
+                           let tab = thoughtTabs.first(where: { $0.id == tabId }) {
+                            HStack(spacing: 3) {
+                                Text("💭")
+                                    .font(.system(size: 11))
+                                Text("Thoughts · \(tab.name)")
+                                    .font(.custom("DMSans-Medium", size: 12))
+                                    .foregroundColor(.deepNavy)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color.oceanTeal.opacity(0.08))
+                            .clipShape(Capsule())
+                        } else {
+                            HStack(spacing: 3) {
+                                Text(echo.emoji)
+                                    .font(.system(size: 11))
+                                Text(echo.name)
+                                    .font(.custom("DMSans-Medium", size: 12))
+                                    .foregroundColor(.deepNavy)
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(Color.mist)
+                            .clipShape(Capsule())
                         }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Color.mist)
-                        .clipShape(Capsule())
                     }
                     
                     Text(memory.createdAt, format: .dateTime.month(.abbreviated).day().year())

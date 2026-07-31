@@ -155,55 +155,67 @@ struct OnboardingFlow: View {
 
         let features: [(String, String, String)] = [
             ("mic.fill", "Voice-first memory capture", "Say anything — Orca hears it, files it, and reminds you exactly when it matters."),
-            ("sparkles", "Sonar sorts everything", "Sports, Finance, Workouts, Travel, Gifts, People — Orca routes every memory automatically."),
-            ("person.2.fill", "People & Gift Mode", "Track birthdays, gift ideas, budgets, and countdowns for everyone who matters."),
+            ("sparkles", "Sonar sorts everything", "Chores, to-do, birthdays — Orca routes every memory automatically."),
+            ("cart.fill", "Recipes & Grocery Mode", "Paste any recipe URL and ingredients auto-import. Shop in Grocery Mode with items sorted by aisle."),
+            ("person.2.wave.2.fill", "Shared Spaces", "Share lists and tasks with family, roommates, or partners. Real-time updates for everyone."),
             ("popcorn.fill", "Media Mode", "Queue shows, movies, and books. Mark them done, rate them, and track what to watch next."),
+            ("note.text", "Thoughts — your private notebook", "Write freely without Orca categorizing or turning it into reminders. Just notes."),
+            ("person.2.fill", "People & Gift Mode", "Track birthdays, gift ideas, budgets, and countdowns for everyone who matters."),
+            ("sparkle", "Collectibles", "Track your Pokémon cards, Lego sets, and Smiski figures. See your collection's value and share your list with anyone."),
         ]
 
         var body: some View {
-            ZStack {
+            ZStack(alignment: .bottom) {
                 LinearGradient(colors: [Color(hex: "0B1D33"), Color(hex: "1A3A5C")], startPoint: .top, endPoint: .bottom)
                     .ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    Spacer().frame(height: 72)
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        Spacer().frame(height: 72)
 
-                    VStack(spacing: 6) {
-                        Text("The gap between thinking it")
-                            .font(.custom("DMSans-Regular", size: 24)).foregroundColor(.white)
-                        Text("and remembering it.")
-                            .font(.custom("DMSans-Regular", size: 24)).foregroundColor(.white)
-                        Text("That's where Orca lives.")
-                            .font(.custom("DMSans-Medium", size: 24)).foregroundColor(.oceanTeal)
-                    }
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 28)
-                    .padding(.bottom, 48)
-
-                    VStack(spacing: 28) {
-                        ForEach(features.indices, id: \.self) { i in
-                            let f = features[i]
-                            HStack(alignment: .center, spacing: 18) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.1)).frame(width: 48, height: 48)
-                                    Image(systemName: f.0).font(.system(size: 20)).foregroundColor(.oceanTeal)
-                                }
-                                .frame(width: 48, height: 48)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(f.1).font(.custom("DMSans-Medium", size: 17)).foregroundColor(.white)
-                                    Text(f.2).font(.custom("DMSans-Regular", size: 14)).foregroundColor(.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
-                                }
-                                Spacer()
-                            }
-                            .padding(.horizontal, 28)
-                            .opacity(itemsVisible ? 1 : 0)
-                            .offset(y: itemsVisible ? 0 : 20)
-                            .animation(.easeOut(duration: 0.4).delay(Double(i) * 0.15), value: itemsVisible)
+                        VStack(spacing: 6) {
+                            Text("The gap between thinking it")
+                                .font(.custom("DMSans-Regular", size: 24)).foregroundColor(.white)
+                            Text("and remembering it.")
+                                .font(.custom("DMSans-Regular", size: 24)).foregroundColor(.white)
+                            Text("That's where Orca lives.")
+                                .font(.custom("DMSans-Medium", size: 24)).foregroundColor(.oceanTeal)
                         }
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 28)
+                        .padding(.bottom, 48)
+
+                        VStack(spacing: 28) {
+                            ForEach(features.indices, id: \.self) { i in
+                                let f = features[i]
+                                HStack(alignment: .center, spacing: 18) {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.1)).frame(width: 48, height: 48)
+                                        Image(systemName: f.0).font(.system(size: 20)).foregroundColor(.oceanTeal)
+                                    }
+                                    .frame(width: 48, height: 48)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(f.1).font(.custom("DMSans-Medium", size: 17)).foregroundColor(.white)
+                                        Text(f.2).font(.custom("DMSans-Regular", size: 14)).foregroundColor(.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 28)
+                                .opacity(itemsVisible ? 1 : 0)
+                                .offset(y: itemsVisible ? 0 : 20)
+                                .animation(.easeOut(duration: 0.4).delay(Double(i) * 0.15), value: itemsVisible)
+                            }
+                        }
+
+                        Spacer().frame(height: 120)
                     }
+                }
 
-                    Spacer()
-
+                // Button pinned at bottom, above scroll content
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, Color(hex: "1A3A5C")], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 32)
+                        .allowsHitTesting(false)
                     Button { onNext() } label: {
                         Text("See it in action")
                             .font(.custom("DMSans-Medium", size: 17)).foregroundColor(.white)
@@ -213,6 +225,7 @@ struct OnboardingFlow: View {
                             .shadow(color: .oceanTeal.opacity(0.4), radius: 12, y: 4)
                     }
                     .padding(.horizontal, 28).padding(.bottom, 52)
+                    .background(Color(hex: "1A3A5C"))
                 }
             }
             .onAppear { withAnimation { itemsVisible = true } }
@@ -332,6 +345,7 @@ struct OnboardingFlow: View {
         @State private var checkItem1 = false
         @State private var checkItem2 = false
         @State private var checkItem3 = false
+        @State private var showGroceryBadge = false
 
         var body: some View {
             ZStack {
@@ -342,9 +356,9 @@ struct OnboardingFlow: View {
                     Spacer().frame(height: 52)
 
                     VStack(spacing: 8) {
-                        Text("Save recipes in seconds")
+                        Text("Cooking made effortless")
                             .font(.custom("DMSans-Medium", size: 28)).foregroundColor(.white)
-                        Text("Paste any recipe URL — Orca imports ingredients automatically. Then shop in Grocery Mode.")
+                        Text("Paste any recipe URL — Orca pulls the ingredients. Then hit Grocery Mode and shop like a pro.")
                             .font(.custom("DMSans-Regular", size: 15))
                             .foregroundColor(.white.opacity(0.5))
                             .multilineTextAlignment(.center)
@@ -356,10 +370,12 @@ struct OnboardingFlow: View {
                     Spacer()
 
                     VStack(spacing: 12) {
+                        // Step 1: URL input
                         HStack(spacing: 10) {
-                            Image(systemName: "link").font(.system(size: 14)).foregroundColor(.white.opacity(0.5))
-                            Text("https://nytcooking.com/recipes/...")
-                                .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.white.opacity(0.7))
+                            Image(systemName: "link").font(.system(size: 14)).foregroundColor(.oceanTeal)
+                            Text("nytcooking.com/recipes/chicken-tikka")
+                                .font(.custom("DMSans-Regular", size: 13)).foregroundColor(.white.opacity(0.7))
+                                .lineLimit(1)
                             Spacer()
                             ZStack {
                                 RoundedRectangle(cornerRadius: 8).fill(Color.oceanTeal).frame(width: 32, height: 32)
@@ -376,48 +392,44 @@ struct OnboardingFlow: View {
                         Image(systemName: "arrow.down").font(.system(size: 20, weight: .medium)).foregroundColor(.oceanTeal)
                             .opacity(showArrow ? 1 : 0).animation(.easeOut(duration: 0.3), value: showArrow)
 
+                        // Step 2: Recipe card with grocery mode
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 10) {
-                                Text("🍽").font(.system(size: 24))
+                                Text("🍽").font(.system(size: 22))
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Sheet-Pan Chicken Tikka").font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy)
-                                    Text("Prep: 15m · Cook: 30m · Serves: 4").font(.custom("DMMono-Regular", size: 11)).foregroundColor(.gray)
+                                    Text("Prep 15m · Cook 30m · Serves 4").font(.custom("DMMono-Regular", size: 11)).foregroundColor(.gray)
                                 }
                                 Spacer()
+                                if showGroceryBadge {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "cart.fill").font(.system(size: 10))
+                                        Text("Grocery Mode").font(.custom("DMSans-Medium", size: 11))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Color.oceanTeal)
+                                    .clipShape(Capsule())
+                                    .transition(.scale.combined(with: .opacity))
+                                }
                             }
 
                             Divider()
 
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("INGREDIENTS").font(.custom("DMSans-Medium", size: 11)).foregroundColor(.oceanTeal).tracking(1)
-                                    Spacer()
-                                    if showGrocery {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "cart.fill").font(.system(size: 10))
-                                            Text("Grocery Mode").font(.custom("DMSans-Medium", size: 11))
-                                        }
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 8).padding(.vertical, 4)
-                                        .background(Color.oceanTeal)
-                                        .clipShape(Capsule())
-                                        .transition(.scale.combined(with: .opacity))
-                                    }
-                                }
+                            Text("INGREDIENTS").font(.custom("DMSans-Medium", size: 10)).foregroundColor(.oceanTeal).tracking(1)
 
-                                ingredientRow(text: "1 kg chicken thighs", checked: checkItem1)
-                                    .opacity(showCard ? 1 : 0).animation(.easeOut(duration: 0.3).delay(0.1), value: showCard)
-                                ingredientRow(text: "2 tbsp tikka masala paste", checked: checkItem2)
-                                    .opacity(showCard ? 1 : 0).animation(.easeOut(duration: 0.3).delay(0.2), value: showCard)
-                                ingredientRow(text: "200ml coconut cream", checked: checkItem3)
-                                    .opacity(showCard ? 1 : 0).animation(.easeOut(duration: 0.3).delay(0.3), value: showCard)
-                            }
+                            ingredientRow(text: "1 kg chicken thighs", checked: checkItem1)
+                                .opacity(showCard ? 1 : 0).animation(.easeOut(duration: 0.3).delay(0.1), value: showCard)
+                            ingredientRow(text: "2 tbsp tikka masala paste", checked: checkItem2)
+                                .opacity(showCard ? 1 : 0).animation(.easeOut(duration: 0.3).delay(0.2), value: showCard)
+                            ingredientRow(text: "200ml coconut cream", checked: checkItem3)
+                                .opacity(showCard ? 1 : 0).animation(.easeOut(duration: 0.3).delay(0.3), value: showCard)
 
                             if showGrocery {
                                 Divider()
                                 HStack(spacing: 6) {
-                                    Image(systemName: "info.circle").font(.system(size: 11)).foregroundColor(.gray)
-                                    Text("Tap ingredients as you shop to check them off")
+                                    Image(systemName: "cart.badge.checkmark").font(.system(size: 11)).foregroundColor(.oceanTeal)
+                                    Text("Tap each ingredient to check it off as you shop")
                                         .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
                                 }
                                 .transition(.opacity)
@@ -435,7 +447,7 @@ struct OnboardingFlow: View {
                     Spacer()
 
                     Button { onNext() } label: {
-                        Text("Nice, let's continue")
+                        Text("Nice, let's go")
                             .font(.custom("DMSans-Medium", size: 17)).foregroundColor(.white)
                             .frame(maxWidth: .infinity).padding(.vertical, 16)
                             .background(LinearGradient(colors: [.oceanTeal, .seafoam], startPoint: .leading, endPoint: .trailing))
@@ -452,17 +464,20 @@ struct OnboardingFlow: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { showURL = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { showArrow = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { showCard = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) {
                     withAnimation(.spring(duration: 0.3)) { checkItem1 = true }
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.1) {
                     withAnimation(.spring(duration: 0.3)) { checkItem2 = true }
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                     withAnimation(.spring(duration: 0.3)) { checkItem3 = true }
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.8) {
-                    withAnimation(.spring(duration: 0.4, bounce: 0.3)) { showGrocery = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    withAnimation(.spring(duration: 0.4, bounce: 0.3)) {
+                        showGrocery = true
+                        showGroceryBadge = true
+                    }
                 }
             }
         }
@@ -815,14 +830,13 @@ struct OnboardingFlow: View {
 
         let tips: [(String, String)] = [
             ("🎙️", "Tap the fin button for instant voice capture"),
-            ("🛒", "Shopping Mode — Grocery, Hardware, or Warehouse lists with aisle grouping"),
+            ("📸", "Tap the fin button → Photo to scan flights, hotels & recipes"),
+            ("🍽️", "Paste a recipe URL → ingredients auto-import, shop in Grocery Mode"),
             ("🍿", "Media Mode — queue shows, movies & books. Rate them when done"),
-            ("📸", "Swipe up → Photo to scan flights, hotels & recipes"),
             ("👥", "People tab — track birthdays, gifts & budgets"),
-            ("🏈", "Say your pro sports team to track scores & schedules"),
-            ("🍽️", "Paste your Recipes to track ingredients & cook times"),
+            ("💭", "Thoughts tab — your private notebook, not categorized or pinged"),
+            ("🤝", "Shared Spaces — share lists with family or roommates in real time"),
             ("💪", "Log workouts by voice — sets, reps, cardio auto-parsed"),
-            ("🔍", "Search or browse all memories by echo or person"),
             ("⚙️", "Set Orca as your Action Button in iOS Settings"),
         ]
 

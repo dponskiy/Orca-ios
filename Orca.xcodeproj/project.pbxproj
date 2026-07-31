@@ -7,13 +7,19 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		083C5E44278743C0B9AE4B0E /* ThoughtsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 276A05743BF74E6486DC3BC3 /* ThoughtsView.swift */; };
+		0E0B5CE042EB4F66A223A796 /* WorkoutModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72E850EBA51B4FA389A321C6 /* WorkoutModeView.swift */; };
+		2E3DB8E3161F4ACCB16A8022 /* SharedSpacesHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5E027962775488B95900143 /* SharedSpacesHubView.swift */; };
+		53EAA882FC7E4307A297C067 /* SharedSpaceSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAA6770445784A249FC6295F /* SharedSpaceSyncService.swift */; };
+		63BDF21486C84994AB881237 /* RecipeImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA5165992CA4D5EADE9D002 /* RecipeImportService.swift */; };
+		69E446DDE7464699BF9CDAE0 /* SharedSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92EF8EC96EE4A21951BE9DC /* SharedSpace.swift */; };
+		867FB0F82B994B528E2B3B89 /* ThoughtTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DA8A35C3014ACB9B38725E /* ThoughtTab.swift */; };
 		8729F5282F7727C600B58E0B /* FinanceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5272F7727C000B58E0B /* FinanceService.swift */; };
 		8729F52A2F7727E000B58E0B /* FinanceEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5292F7727DB00B58E0B /* FinanceEchoView.swift */; };
 		8729F52C2F7881F600B58E0B /* WorkoutParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F52B2F7881EA00B58E0B /* WorkoutParser.swift */; };
 		8729F52E2F78826B00B58E0B /* WorkoutDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F52D2F78826900B58E0B /* WorkoutDetailBlock.swift */; };
 		8729F5302F78828500B58E0B /* WorkoutEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F52F2F78828400B58E0B /* WorkoutEchoView.swift */; };
 		8729F5322F78829F00B58E0B /* QuickLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5312F78829A00B58E0B /* QuickLogView.swift */; };
-		8729F5342F7882BD00B58E0B /* SportsDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5332F7882BA00B58E0B /* SportsDetailBlock.swift */; };
 		8729F5382F7882EB00B58E0B /* FinanceDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5372F7882E700B58E0B /* FinanceDetailBlock.swift */; };
 		8729F53A2F7883F500B58E0B /* TravelDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5392F7883F200B58E0B /* TravelDetailBlock.swift */; };
 		8729F53C2F789CAA00B58E0B /* WorkoutSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F53B2F789CA800B58E0B /* WorkoutSessionManager.swift */; };
@@ -65,12 +71,12 @@
 		878C037D2F6F940C0016D38A /* GroceryModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C037C2F6F940A0016D38A /* GroceryModeView.swift */; };
 		878C037F2F6F9F160016D38A /* GroceryList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C037E2F6F9F100016D38A /* GroceryList.swift */; };
 		878C03812F737F7D0016D38A /* TravelConfirmationParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03802F737F7A0016D38A /* TravelConfirmationParser.swift */; };
-		878C03852F740EA90016D38A /* SportsMemoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03842F740EA40016D38A /* SportsMemoryService.swift */; };
-		878C03872F740EBB0016D38A /* SportsEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03862F740EB90016D38A /* SportsEchoView.swift */; };
-		878C03892F7411990016D38A /* ESPNService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878C03882F74118F0016D38A /* ESPNService.swift */; };
 		879CB27D2FB8F02D00CA1494 /* .env in Resources */ = {isa = PBXBuildFile; fileRef = 879CB27C2FB8F01B00CA1494 /* .env */; };
 		879E5B2E2F8C933D0017738D /* RecipeBuilderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 879E5B2D2F8C93330017738D /* RecipeBuilderView.swift */; };
 		87A1B2C3D4E5F6A7B8C9D101 /* RecipeInstructionEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A1B2C3D4E5F6A7B8C9D100 /* RecipeInstructionEditorView.swift */; };
+		87AB74CB2FC0A0760065A2D6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 878C03562F63B8BE0016D38A /* WidgetKit.framework */; };
+		87AB74CC2FC0A0760065A2D6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 878C03582F63B8BE0016D38A /* SwiftUI.framework */; };
+		87AB74D92FC0A0770065A2D6 /* OrcaWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 87AB74CA2FC0A0760065A2D6 /* OrcaWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		87BBD7A52F805A4900CB8A33 /* WeatherDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87BBD7A42F805A4200CB8A33 /* WeatherDetailView.swift */; };
 		87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */; };
 		87CD0AE12F52917B00CAAB4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B932F4EB2FB0058324F /* Config.swift */; };
@@ -88,6 +94,28 @@
 		87CD0AFA2F57D99A00CAAB4D /* Mixpanel in Frameworks */ = {isa = PBXBuildFile; productRef = 87CD0AF92F57D99A00CAAB4D /* Mixpanel */; };
 		87CD0AFB2F57D9B100CAAB4D /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9E2F4EB40A0058324F /* AnalyticsService.swift */; };
 		87CD0AFD2F59312F00CAAB4D /* SupabaseSyncServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CD0AFC2F59311F00CAAB4D /* SupabaseSyncServices.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E1F3 /* GiftQuickActionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E1F2 /* GiftQuickActionView.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E2F1 /* TMDBService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E2F0 /* TMDBService.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E3F1 /* MediaDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E3F0 /* MediaDetailSheet.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E4F1 /* TCGCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E4F0 /* TCGCard.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E5F1 /* PokemonTCGService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E5F0 /* PokemonTCGService.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E6F1 /* TCGView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E6F0 /* TCGView.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E7F1 /* TCGSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E7F0 /* TCGSearchView.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E8F1 /* TCGCardDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E8F0 /* TCGCardDetailSheet.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E9F1 /* TCGSetBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E9F0 /* TCGSetBrowserView.swift */; };
+		A1B2C3D4E5F6A7B8C9D0EAF1 /* TCGSetDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0EAF0 /* TCGSetDetailView.swift */; };
+		A1B2C3D4E5F6A7B8C9D0EBF1 /* SmiskiData.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0EBF0 /* SmiskiData.swift */; };
+		A1B2C3D4E5F6A7B8C9D0ECF1 /* SmiskiItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0ECF0 /* SmiskiItem.swift */; };
+		A1B2C3D4E5F6A7B8C9D0EDF1 /* SmiskiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0EDF0 /* SmiskiView.swift */; };
+		A1B2C3D4E5F6A7B8C9D0EEF1 /* LegoSet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0EEF0 /* LegoSet.swift */; };
+		A1B2C3D4E5F6A7B8C9D0EFF1 /* RebrickableService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0EFF0 /* RebrickableService.swift */; };
+		A1B2C3D4E5F6A7B8C9D0F0F1 /* LegoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0F0F0 /* LegoView.swift */; };
+		AA01B1112F9A000100CA1001 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA01B1102F9A000100CA1001 /* CalendarService.swift */; };
+		AA02C1012FAB000100A10001 /* AppleIntelligenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02C1002FAB000100A10001 /* AppleIntelligenceService.swift */; };
+		BF52E9249DAA48CA9B4D5F0E /* InvitePartnerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB38421D0E414BE8B1B1CB3F /* InvitePartnerView.swift */; };
+		EB965DF991AB49D7A6535285 /* SharedSpaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E9EBA5833A045DDA182CE6C /* SharedSpaceView.swift */; };
+		EBEA33F619B04CD8BC00A521 /* SharedEventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894410E66040486FB43DCB22 /* SharedEventDetailView.swift */; };
+		FACA77F7FC9540CDB8130293 /* MealDBService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 784F83020862420ABC203C97 /* MealDBService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -105,6 +133,13 @@
 			remoteGlobalIDString = 873C1B5A2F4EA59D0058324F;
 			remoteInfo = Orca;
 		};
+		87AB74D72FC0A0770065A2D6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 873C1B532F4EA59D0058324F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 87AB74C92FC0A0760065A2D6;
+			remoteInfo = OrcaWidgetExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -114,6 +149,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
+				87AB74D92FC0A0770065A2D6 /* OrcaWidgetExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -121,13 +157,18 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		276A05743BF74E6486DC3BC3 /* ThoughtsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThoughtsView.swift; sourceTree = "<group>"; };
+		35DA8A35C3014ACB9B38725E /* ThoughtTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThoughtTab.swift; sourceTree = "<group>"; };
+		3CA5165992CA4D5EADE9D002 /* RecipeImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeImportService.swift; sourceTree = "<group>"; };
+		6E9EBA5833A045DDA182CE6C /* SharedSpaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpaceView.swift; sourceTree = "<group>"; };
+		72E850EBA51B4FA389A321C6 /* WorkoutModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutModeView.swift; sourceTree = "<group>"; };
+		784F83020862420ABC203C97 /* MealDBService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealDBService.swift; sourceTree = "<group>"; };
 		8729F5272F7727C000B58E0B /* FinanceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceService.swift; sourceTree = "<group>"; };
 		8729F5292F7727DB00B58E0B /* FinanceEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceEchoView.swift; sourceTree = "<group>"; };
 		8729F52B2F7881EA00B58E0B /* WorkoutParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutParser.swift; sourceTree = "<group>"; };
 		8729F52D2F78826900B58E0B /* WorkoutDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutDetailBlock.swift; sourceTree = "<group>"; };
 		8729F52F2F78828400B58E0B /* WorkoutEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutEchoView.swift; sourceTree = "<group>"; };
 		8729F5312F78829A00B58E0B /* QuickLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLogView.swift; sourceTree = "<group>"; };
-		8729F5332F7882BA00B58E0B /* SportsDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsDetailBlock.swift; sourceTree = "<group>"; };
 		8729F5372F7882E700B58E0B /* FinanceDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceDetailBlock.swift; sourceTree = "<group>"; };
 		8729F5392F7883F200B58E0B /* TravelDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TravelDetailBlock.swift; sourceTree = "<group>"; };
 		8729F53B2F789CA800B58E0B /* WorkoutSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSessionManager.swift; sourceTree = "<group>"; };
@@ -191,12 +232,12 @@
 		878C037C2F6F940A0016D38A /* GroceryModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroceryModeView.swift; sourceTree = "<group>"; };
 		878C037E2F6F9F100016D38A /* GroceryList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroceryList.swift; sourceTree = "<group>"; };
 		878C03802F737F7A0016D38A /* TravelConfirmationParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TravelConfirmationParser.swift; sourceTree = "<group>"; };
-		878C03842F740EA40016D38A /* SportsMemoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsMemoryService.swift; sourceTree = "<group>"; };
-		878C03862F740EB90016D38A /* SportsEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsEchoView.swift; sourceTree = "<group>"; };
-		878C03882F74118F0016D38A /* ESPNService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNService.swift; sourceTree = "<group>"; };
 		879CB27C2FB8F01B00CA1494 /* .env */ = {isa = PBXFileReference; lastKnownFileType = text; path = .env; sourceTree = "<group>"; };
 		879E5B2D2F8C93330017738D /* RecipeBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeBuilderView.swift; sourceTree = "<group>"; };
 		87A1B2C3D4E5F6A7B8C9D100 /* RecipeInstructionEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeInstructionEditorView.swift; sourceTree = "<group>"; };
+		87AB74CA2FC0A0760065A2D6 /* OrcaWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = OrcaWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		87AB74DE2FC0A2FA0065A2D6 /* OrcaWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OrcaWidgetExtension.entitlements; sourceTree = "<group>"; };
+		87AB74DF2FC0AE2B0065A2D6 /* OrcaWidgetExtensionDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OrcaWidgetExtensionDebug.entitlements; sourceTree = "<group>"; };
 		87BBD7A42F805A4200CB8A33 /* WeatherDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherDetailView.swift; sourceTree = "<group>"; };
 		87CD0ADE2F5236DA00CAAB4D /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
 		87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseManager.swift; sourceTree = "<group>"; };
@@ -207,6 +248,29 @@
 		87CD0AF32F576FC300CAAB4D /* RecipeExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeExtractor.swift; sourceTree = "<group>"; };
 		87CD0AF52F578BC200CAAB4D /* ManageEchosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageEchosView.swift; sourceTree = "<group>"; };
 		87CD0AFC2F59311F00CAAB4D /* SupabaseSyncServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseSyncServices.swift; sourceTree = "<group>"; };
+		894410E66040486FB43DCB22 /* SharedEventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedEventDetailView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* GiftQuickActionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GiftQuickActionView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E2F0 /* TMDBService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TMDBService.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E3F0 /* MediaDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailSheet.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E4F0 /* TCGCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCGCard.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E5F0 /* PokemonTCGService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PokemonTCGService.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E6F0 /* TCGView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCGView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E7F0 /* TCGSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCGSearchView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E8F0 /* TCGCardDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCGCardDetailSheet.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E9F0 /* TCGSetBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCGSetBrowserView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0EAF0 /* TCGSetDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TCGSetDetailView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0EBF0 /* SmiskiData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmiskiData.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0ECF0 /* SmiskiItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmiskiItem.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0EDF0 /* SmiskiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmiskiView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0EEF0 /* LegoSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegoSet.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0EFF0 /* RebrickableService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RebrickableService.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0F0F0 /* LegoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegoView.swift; sourceTree = "<group>"; };
+		AA01B1102F9A000100CA1001 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
+		AA02C1002FAB000100A10001 /* AppleIntelligenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligenceService.swift; sourceTree = "<group>"; };
+		B5E027962775488B95900143 /* SharedSpacesHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpacesHubView.swift; sourceTree = "<group>"; };
+		B92EF8EC96EE4A21951BE9DC /* SharedSpace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpace.swift; sourceTree = "<group>"; };
+		BAA6770445784A249FC6295F /* SharedSpaceSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpaceSyncService.swift; sourceTree = "<group>"; };
+		CB38421D0E414BE8B1B1CB3F /* InvitePartnerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitePartnerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -216,6 +280,13 @@
 				Info.plist,
 			);
 			target = 873C1B5A2F4EA59D0058324F /* Orca */;
+		};
+		87AB74DD2FC0A0770065A2D6 /* Exceptions for "OrcaWidget" folder in "OrcaWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 87AB74C92FC0A0760065A2D6 /* OrcaWidgetExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -238,9 +309,12 @@
 			path = OrcaUITests;
 			sourceTree = "<group>";
 		};
-		8788DA3F2FB2BA57004DD77D /* AI */ = {
+		87AB74CD2FC0A0760065A2D6 /* OrcaWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = AI;
+			exceptions = (
+				87AB74DD2FC0A0770065A2D6 /* Exceptions for "OrcaWidget" folder in "OrcaWidgetExtension" target */,
+			);
+			path = OrcaWidget;
 			sourceTree = "<group>";
 		};
 		87BBD7782F7A121900CB8A33 /* People */ = {
@@ -274,12 +348,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		87AB74C72FC0A0760065A2D6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				87AB74CC2FC0A0760065A2D6 /* SwiftUI.framework in Frameworks */,
+				87AB74CB2FC0A0760065A2D6 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		873C1B522F4EA59D0058324F = {
 			isa = PBXGroup;
 			children = (
+				87AB74DF2FC0AE2B0065A2D6 /* OrcaWidgetExtensionDebug.entitlements */,
+				87AB74DE2FC0A2FA0065A2D6 /* OrcaWidgetExtension.entitlements */,
 				8788DA3F2FB2BA57004DD77D /* AI */,
 				87BBD7782F7A121900CB8A33 /* People */,
 				873C1B902F4EB2D70058324F /* Resources */,
@@ -291,6 +376,7 @@
 				873C1B5D2F4EA59D0058324F /* Orca */,
 				873C1B6D2F4EA59E0058324F /* OrcaTests */,
 				873C1B772F4EA59E0058324F /* OrcaUITests */,
+				87AB74CD2FC0A0760065A2D6 /* OrcaWidget */,
 				87CD0AE82F529B4700CAAB4D /* Frameworks */,
 				873C1B5C2F4EA59D0058324F /* Products */,
 				879CB27C2FB8F01B00CA1494 /* .env */,
@@ -303,6 +389,7 @@
 				873C1B5B2F4EA59D0058324F /* Orca.app */,
 				873C1B6A2F4EA59E0058324F /* OrcaTests.xctest */,
 				873C1B742F4EA59E0058324F /* OrcaUITests.xctest */,
+				87AB74CA2FC0A0760065A2D6 /* OrcaWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -321,6 +408,8 @@
 			children = (
 				878C037E2F6F9F100016D38A /* GroceryList.swift */,
 				87CD0AF12F57443300CAAB4D /* SubTask.swift */,
+				B92EF8EC96EE4A21951BE9DC /* SharedSpace.swift */,
+				35DA8A35C3014ACB9B38725E /* ThoughtTab.swift */,
 				873C1BA22F4EB4440058324F /* Ping.swift */,
 				873C1BA12F4EB43E0058324F /* Echo.swift */,
 				873C1BA02F4EB4350058324F /* Memory.swift */,
@@ -348,18 +437,33 @@
 			isa = PBXGroup;
 			children = (
 				8788DA282FA3B0D3004DD77D /* WatchModeView.swift */,
+				A1B2C3D4E5F6A7B8C9D0E2F0 /* TMDBService.swift */,
+				A1B2C3D4E5F6A7B8C9D0E3F0 /* MediaDetailSheet.swift */,
+				A1B2C3D4E5F6A7B8C9D0E4F0 /* TCGCard.swift */,
+				A1B2C3D4E5F6A7B8C9D0E5F0 /* PokemonTCGService.swift */,
+				A1B2C3D4E5F6A7B8C9D0E6F0 /* TCGView.swift */,
+				A1B2C3D4E5F6A7B8C9D0E7F0 /* TCGSearchView.swift */,
+				A1B2C3D4E5F6A7B8C9D0E8F0 /* TCGCardDetailSheet.swift */,
+				A1B2C3D4E5F6A7B8C9D0E9F0 /* TCGSetBrowserView.swift */,
+				A1B2C3D4E5F6A7B8C9D0EAF0 /* TCGSetDetailView.swift */,
+				A1B2C3D4E5F6A7B8C9D0EBF0 /* SmiskiData.swift */,
+				A1B2C3D4E5F6A7B8C9D0ECF0 /* SmiskiItem.swift */,
+				A1B2C3D4E5F6A7B8C9D0EDF0 /* SmiskiView.swift */,
+				A1B2C3D4E5F6A7B8C9D0EEF0 /* LegoSet.swift */,
+				A1B2C3D4E5F6A7B8C9D0EFF0 /* RebrickableService.swift */,
+				A1B2C3D4E5F6A7B8C9D0F0F0 /* LegoView.swift */,
 				8788DA262FA3B0B5004DD77D /* WatchListItem.swift */,
 				87BBD7A42F805A4200CB8A33 /* WeatherDetailView.swift */,
 				8729F53B2F789CA800B58E0B /* WorkoutSessionManager.swift */,
 				8729F52B2F7881EA00B58E0B /* WorkoutParser.swift */,
 				8729F5272F7727C000B58E0B /* FinanceService.swift */,
-				878C03882F74118F0016D38A /* ESPNService.swift */,
-				878C03842F740EA40016D38A /* SportsMemoryService.swift */,
 				878C03802F737F7A0016D38A /* TravelConfirmationParser.swift */,
 				878C03782F68A8C00016D38A /* SpotLightService.swift */,
 				878C03762F6898B40016D38A /* LocationService.swift */,
 				878C03742F68988D0016D38A /* WeatherService.swift */,
 				87CD0AFC2F59311F00CAAB4D /* SupabaseSyncServices.swift */,
+				BAA6770445784A249FC6295F /* SharedSpaceSyncService.swift */,
+				AA01B1102F9A000100CA1001 /* CalendarService.swift */,
 				87CD0AEF2F57357300CAAB4D /* OrcaShortcuts.swift */,
 				87CD0AE32F52990400CAAB4D /* SupabaseManager.swift */,
 				873C1B9E2F4EB40A0058324F /* AnalyticsService.swift */,
@@ -367,6 +471,8 @@
 				873C1B9B2F4EB3E60058324F /* NotifcationService.swift */,
 				873C1B9A2F4EB3DF0058324F /* AudioService.swift */,
 				87CD0AF32F576FC300CAAB4D /* RecipeExtractor.swift */,
+				784F83020862420ABC203C97 /* MealDBService.swift */,
+				3CA5165992CA4D5EADE9D002 /* RecipeImportService.swift */,
 				873C1B992F4EB3CE0058324F /* SonarEngine.swift */,
 			);
 			path = Services;
@@ -479,18 +585,31 @@
 			children = (
 				8729F5392F7883F200B58E0B /* TravelDetailBlock.swift */,
 				8729F5372F7882E700B58E0B /* FinanceDetailBlock.swift */,
-				8729F5332F7882BA00B58E0B /* SportsDetailBlock.swift */,
 				8729F5312F78829A00B58E0B /* QuickLogView.swift */,
 				8729F52F2F78828400B58E0B /* WorkoutEchoView.swift */,
+				72E850EBA51B4FA389A321C6 /* WorkoutModeView.swift */,
+				276A05743BF74E6486DC3BC3 /* ThoughtsView.swift */,
+				6E9EBA5833A045DDA182CE6C /* SharedSpaceView.swift */,
+				B5E027962775488B95900143 /* SharedSpacesHubView.swift */,
+				894410E66040486FB43DCB22 /* SharedEventDetailView.swift */,
+				CB38421D0E414BE8B1B1CB3F /* InvitePartnerView.swift */,
 				8729F52D2F78826900B58E0B /* WorkoutDetailBlock.swift */,
 				8729F5292F7727DB00B58E0B /* FinanceEchoView.swift */,
-				878C03862F740EB90016D38A /* SportsEchoView.swift */,
 				878C037C2F6F940A0016D38A /* GroceryModeView.swift */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* GiftQuickActionView.swift */,
 				878C037A2F6F228B0016D38A /* LocationSearchView.swift */,
 				872F72702F4FF9A9000A4AE3 /* MemoryEditView.swift */,
 				872F72452F4F2417000A4AE3 /* MemoryDetailView.swift */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		8788DA3F2FB2BA57004DD77D /* AI */ = {
+			isa = PBXGroup;
+			children = (
+				AA02C1002FAB000100A10001 /* AppleIntelligenceService.swift */,
+			);
+			path = AI;
 			sourceTree = "<group>";
 		};
 		87CD0AE02F5236E300CAAB4D /* Today */ = {
@@ -525,10 +644,10 @@
 			buildRules = (
 			);
 			dependencies = (
+				87AB74D82FC0A0770065A2D6 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				873C1B5D2F4EA59D0058324F /* Orca */,
-				8788DA3F2FB2BA57004DD77D /* AI */,
 				87BBD7782F7A121900CB8A33 /* People */,
 			);
 			name = Orca;
@@ -586,6 +705,28 @@
 			productReference = 873C1B742F4EA59E0058324F /* OrcaUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		87AB74C92FC0A0760065A2D6 /* OrcaWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 87AB74DA2FC0A0770065A2D6 /* Build configuration list for PBXNativeTarget "OrcaWidgetExtension" */;
+			buildPhases = (
+				87AB74C62FC0A0760065A2D6 /* Sources */,
+				87AB74C72FC0A0760065A2D6 /* Frameworks */,
+				87AB74C82FC0A0760065A2D6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				87AB74CD2FC0A0760065A2D6 /* OrcaWidget */,
+			);
+			name = OrcaWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = OrcaWidgetExtension;
+			productReference = 87AB74CA2FC0A0760065A2D6 /* OrcaWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -593,7 +734,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2630;
+				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					873C1B5A2F4EA59D0058324F = {
@@ -606,6 +747,9 @@
 					873C1B732F4EA59E0058324F = {
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = 873C1B5A2F4EA59D0058324F;
+					};
+					87AB74C92FC0A0760065A2D6 = {
+						CreatedOnToolsVersion = 26.5;
 					};
 				};
 			};
@@ -630,6 +774,7 @@
 				873C1B5A2F4EA59D0058324F /* Orca */,
 				873C1B692F4EA59E0058324F /* OrcaTests */,
 				873C1B732F4EA59E0058324F /* OrcaUITests */,
+				87AB74C92FC0A0760065A2D6 /* OrcaWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -668,6 +813,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		87AB74C82FC0A0760065A2D6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -677,17 +829,32 @@
 			files = (
 				872F72672F4FE728000A4AE3 /* EchoDetailView.swift in Sources */,
 				872F72752F512601000A4AE3 /* SettingsView.swift in Sources */,
-				8729F5342F7882BD00B58E0B /* SportsDetailBlock.swift in Sources */,
 				87CD0AF02F57357500CAAB4D /* OrcaShortcuts.swift in Sources */,
 				872F726C2F4FF148000A4AE3 /* ConfirmBannerView.swift in Sources */,
 				8788DA292FA3B0D9004DD77D /* WatchModeView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E2F1 /* TMDBService.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E3F1 /* MediaDetailSheet.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E4F1 /* TCGCard.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E5F1 /* PokemonTCGService.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E6F1 /* TCGView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E7F1 /* TCGSearchView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E8F1 /* TCGCardDetailSheet.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E9F1 /* TCGSetBrowserView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0EAF1 /* TCGSetDetailView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0EBF1 /* SmiskiData.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0ECF1 /* SmiskiItem.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0EDF1 /* SmiskiView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0EEF1 /* LegoSet.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0EFF1 /* RebrickableService.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0F0F1 /* LegoView.swift in Sources */,
 				8788DA272FA3B0B9004DD77D /* WatchListItem.swift in Sources */,
 				872F725E2F4FDC7D000A4AE3 /* Echo.swift in Sources */,
 				87CD0AEC2F55407D00CAAB4D /* NotifcationService.swift in Sources */,
+				AA01B1112F9A000100CA1001 /* CalendarService.swift in Sources */,
+				AA02C1012FAB000100A10001 /* AppleIntelligenceService.swift in Sources */,
 				87CD0AF72F57930700CAAB4D /* OnboardingFlow.swift in Sources */,
 				8788DA232F96F217004DD77D /* EchoColors.swift in Sources */,
 				872F72722F51254C000A4AE3 /* UpcomingCard.swift in Sources */,
-				878C03852F740EA90016D38A /* SportsMemoryService.swift in Sources */,
 				872F72622F4FE4D1000A4AE3 /* DropButton.swift in Sources */,
 				87CD0ADF2F5236DD00CAAB4D /* TodayView.swift in Sources */,
 				872F72612F4FDE07000A4AE3 /* Colors.swift in Sources */,
@@ -695,14 +862,20 @@
 				872F72652F4FE5D8000A4AE3 /* EchoBubbleView.swift in Sources */,
 				8729F53C2F789CAA00B58E0B /* WorkoutSessionManager.swift in Sources */,
 				87CD0AF42F576FCC00CAAB4D /* RecipeExtractor.swift in Sources */,
+				FACA77F7FC9540CDB8130293 /* MealDBService.swift in Sources */,
+				63BDF21486C84994AB881237 /* RecipeImportService.swift in Sources */,
 				872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */,
 				872F726F2F4FF511000A4AE3 /* TypeCaptureView.swift in Sources */,
 				8729F5302F78828500B58E0B /* WorkoutEchoView.swift in Sources */,
+				0E0B5CE042EB4F66A223A796 /* WorkoutModeView.swift in Sources */,
+				EB965DF991AB49D7A6535285 /* SharedSpaceView.swift in Sources */,
+				2E3DB8E3161F4ACCB16A8022 /* SharedSpacesHubView.swift in Sources */,
+				EBEA33F619B04CD8BC00A521 /* SharedEventDetailView.swift in Sources */,
+				BF52E9249DAA48CA9B4D5F0E /* InvitePartnerView.swift in Sources */,
 				878C036F2F676FD70016D38A /* MemoryDetailView.swift in Sources */,
 				8729F5282F7727C600B58E0B /* FinanceService.swift in Sources */,
 				878C03732F67A67E0016D38A /* RecipeCaptureView.swift in Sources */,
 				872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */,
-				878C03872F740EBB0016D38A /* SportsEchoView.swift in Sources */,
 				87CD0AFB2F57D9B100CAAB4D /* AnalyticsService.swift in Sources */,
 				8729F5382F7882EB00B58E0B /* FinanceDetailBlock.swift in Sources */,
 				878C03792F68A8D00016D38A /* SpotLightService.swift in Sources */,
@@ -711,6 +884,7 @@
 				872F72602F4FDDBC000A4AE3 /* ContentView.swift in Sources */,
 				87CD0AEE2F57300700CAAB4D /* PhotoCaptureView.swift in Sources */,
 				87CD0AFD2F59312F00CAAB4D /* SupabaseSyncServices.swift in Sources */,
+				53EAA882FC7E4307A297C067 /* SharedSpaceSyncService.swift in Sources */,
 				872F72682F4FE746000A4AE3 /* CalendarTabView.swift in Sources */,
 				872F72642F4FE598000A4AE3 /* DashboardView.swift in Sources */,
 				872F725D2F4FDC77000A4AE3 /* Ping.swift in Sources */,
@@ -729,6 +903,9 @@
 				872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */,
 				872F72762F512770000A4AE3 /* BrowseAllView.swift in Sources */,
 				878C037F2F6F9F160016D38A /* GroceryList.swift in Sources */,
+				69E446DDE7464699BF9CDAE0 /* SharedSpace.swift in Sources */,
+				867FB0F82B994B528E2B3B89 /* ThoughtTab.swift in Sources */,
+				083C5E44278743C0B9AE4B0E /* ThoughtsView.swift in Sources */,
 				872F72632F4FE581000A4AE3 /* FinIcon.swift in Sources */,
 				8729F52E2F78826B00B58E0B /* WorkoutDetailBlock.swift in Sources */,
 				878C03812F737F7D0016D38A /* TravelConfirmationParser.swift in Sources */,
@@ -736,12 +913,12 @@
 				878C037B2F6F22920016D38A /* LocationSearchView.swift in Sources */,
 				872F722D2F4ED482000A4AE3 /* OrcaApp.swift in Sources */,
 				8729F52C2F7881F600B58E0B /* WorkoutParser.swift in Sources */,
-				878C03892F7411990016D38A /* ESPNService.swift in Sources */,
 				872F72662F4FE723000A4AE3 /* SearchView.swift in Sources */,
 				8788DA212F96F1F7004DD77D /* DurationParser.swift in Sources */,
 				8729F52A2F7727E000B58E0B /* FinanceEchoView.swift in Sources */,
 				87CD0AE52F52992E00CAAB4D /* SupabaseManager.swift in Sources */,
 				878C037D2F6F940C0016D38A /* GroceryModeView.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E1F3 /* GiftQuickActionView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -753,6 +930,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		873C1B702F4EA59E0058324F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		87AB74C62FC0A0760065A2D6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -771,6 +955,11 @@
 			isa = PBXTargetDependency;
 			target = 873C1B5A2F4EA59D0058324F /* Orca */;
 			targetProxy = 873C1B752F4EA59E0058324F /* PBXContainerItemProxy */;
+		};
+		87AB74D82FC0A0770065A2D6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 87AB74C92FC0A0760065A2D6 /* OrcaWidgetExtension */;
+			targetProxy = 87AB74D72FC0A0770065A2D6 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -899,7 +1088,7 @@
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -939,7 +1128,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca.dev;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -965,7 +1154,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1005,7 +1194,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 2.1;
+				MARKETING_VERSION = 2.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -1125,6 +1314,75 @@
 			};
 			name = Release;
 		};
+		87AB74DB2FC0A0770065A2D6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = OrcaWidgetExtensionDebug.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = NT9FS4SA62;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = OrcaWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = OrcaWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca.dev.OrcaWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		87AB74DC2FC0A0770065A2D6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = OrcaWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = NT9FS4SA62;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = OrcaWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = OrcaWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca.OrcaWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1160,6 +1418,15 @@
 			buildConfigurations = (
 				873C1B852F4EA59E0058324F /* Debug */,
 				873C1B862F4EA59E0058324F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		87AB74DA2FC0A0770065A2D6 /* Build configuration list for PBXNativeTarget "OrcaWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				87AB74DB2FC0A0770065A2D6 /* Debug */,
+				87AB74DC2FC0A0770065A2D6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -39,6 +39,8 @@
 </array>
 </dict>
 </array>
+<key>NSCalendarsFullAccessUsageDescription</key>
+<string>Orca adds your memories and shared events with dates to your iPhone Calendar so they show up in Calendar.app, Siri, and your lock screen.</string>
 <key>LSApplicationQueriesSchemes</key>
 <array>
 <string>comgooglemaps</string>

@@ -26,9 +26,6 @@ struct AuthView: View {
                 
                 // Logo
                 VStack(spacing: 16) {
-                    FinIcon()
-                        .fill(Color.white)
-                        .frame(width: 56, height: 64)
                     
                     Text("Orca")
                         .font(.custom("InstrumentSerif-Regular", size: 40))
@@ -38,9 +35,6 @@ struct AuthView: View {
                         .font(.custom("DMSans-Regular", size: 16))
                         .foregroundColor(.white.opacity(0.6))
                 }
-                
-                Spacer()
-                
                 // Features
                 VStack(alignment: .leading, spacing: 16) {
                     featureRow(icon: "mic.fill", text: "Drop memories in seconds")

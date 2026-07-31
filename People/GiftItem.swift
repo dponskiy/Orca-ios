@@ -14,6 +14,7 @@ enum GiftStatus: String, Codable {
 
 @Model
 class GiftItem {
+    static let wishlistPersonId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     var id: UUID = UUID()
     var personId: UUID
     var name: String
@@ -23,6 +24,8 @@ class GiftItem {
     var year: Int = Calendar.current.component(.year, from: Date())
     var linkedMemoryId: UUID?
     var url: String?
+    var imageURL: String?
+    var isStarred: Bool = false
     var createdAt: Date = Date()
 
     var status: GiftStatus {

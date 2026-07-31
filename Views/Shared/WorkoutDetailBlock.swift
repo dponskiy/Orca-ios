@@ -30,8 +30,16 @@ struct WorkoutDetailBlock: View {
 
     // MARK: - Lifting Card
 
+    private func splitNameAndEquipment(_ name: String) -> (baseName: String, equipment: String?) {
+        if name.hasSuffix(")"), let range = name.range(of: " (") {
+            return (String(name[..<range.lowerBound]), String(name[range.upperBound...].dropLast()))
+        }
+        return (name, nil)
+    }
+
     @ViewBuilder
     private func liftingCard(_ exercise: ParsedExercise) -> some View {
+        let (baseName, equipmentBadge) = splitNameAndEquipment(exercise.name)
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack(spacing: 10) {
@@ -44,7 +52,7 @@ struct WorkoutDetailBlock: View {
                         .foregroundColor(.oceanTeal)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(exercise.name)
+                    Text(baseName)
                         .font(.custom("DMSans-Medium", size: 16))
                         .foregroundColor(.deepNavy)
                     HStack(spacing: 6) {
@@ -57,6 +65,17 @@ struct WorkoutDetailBlock: View {
                         Text(exercise.muscleGroup)
                             .font(.custom("DMMono-Regular", size: 12))
                             .foregroundColor(.gray)
+                        if let badge = equipmentBadge {
+                            Text("·")
+                                .font(.custom("DMMono-Regular", size: 12))
+                                .foregroundColor(.gray)
+                            Text(badge)
+                                .font(.custom("DMMono-Regular", size: 11))
+                                .foregroundColor(.oceanTeal)
+                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .background(Color.oceanTeal.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
                     }
                 }
                 Spacer()

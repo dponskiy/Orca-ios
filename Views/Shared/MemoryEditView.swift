@@ -163,7 +163,7 @@ struct MemoryEditView: View {
                 Section {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
-                            ForEach(echos.sorted { e1, e2 in
+                            ForEach(echos.filter { !$0.isSystemEcho }.sorted { e1, e2 in
                                 if e1.id == selectedEchoId { return true }
                                 if e2.id == selectedEchoId { return false }
                                 return e1.sortOrder < e2.sortOrder
@@ -630,10 +630,11 @@ struct MemoryEditView: View {
                         for ping in memoryPings {
                             NotificationService.shared.cancelPing(pingId: ping.id)
                             modelContext.delete(ping)
+                            Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
                         }
                         modelContext.delete(memory)
                         SpotlightService.shared.removeMemory(id: id)
-                        Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+                        SupabaseSyncService.shared.scheduleDelete(id: id)
                         dismiss()
                     } label: {
                         HStack(spacing: 8) {
@@ -1069,6 +1070,7 @@ struct MemoryEditView: View {
             if !keptIds.contains(ping.id) {
                 NotificationService.shared.cancelPing(pingId: ping.id)
                 modelContext.delete(ping)
+                Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
             }
         }
 

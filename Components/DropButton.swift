@@ -12,10 +12,10 @@ struct DropButton: View {
     var onLongPress: () -> Void
     @State private var isPulsing = true
     @State private var dragOffset: CGFloat = 0
-    
+
     var body: some View {
         ZStack {
-            // Pulse rings
+            // Pulse ring
             if isPulsing {
                 Circle()
                     .stroke(Color.oceanTeal.opacity(0.3), lineWidth: 2)
@@ -27,24 +27,59 @@ struct DropButton: View {
                         value: isPulsing
                     )
             }
-            
+
             // Main button
             Circle()
                 .fill(Color.oceanTeal)
                 .frame(width: 56, height: 56)
                 .shadow(color: .oceanTeal.opacity(0.4), radius: 8, y: 4)
-            
-            // Fin icon
-            FinIcon()
-                .fill(.white)
-                .frame(width: 24, height: 28)
+
+            // Sonar ping + mic
+            ZStack {
+                // Outer ring
+                Circle()
+                    .stroke(Color.white.opacity(0.28), lineWidth: 1)
+                    .frame(width: 46, height: 46)
+                    .offset(y: -2)
+
+                // Mid ring
+                Circle()
+                    .stroke(Color.white.opacity(0.55), lineWidth: 1.5)
+                    .frame(width: 30, height: 30)
+                    .offset(y: -2)
+
+                // Inner ring
+                Circle()
+                    .stroke(Color.white.opacity(0.95), lineWidth: 2.2)
+                    .frame(width: 14, height: 14)
+                    .offset(y: -2)
+
+                // Center dot
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 7, height: 7)
+                    .offset(y: -2)
+
+                // Mic stem vertical line
+                Rectangle()
+                    .fill(Color.white.opacity(0.85))
+                    .frame(width: 2, height: 10)
+                    .clipShape(Capsule())
+                    .offset(y: 12)
+
+                // Mic base horizontal line
+                Rectangle()
+                    .fill(Color.white.opacity(0.85))
+                    .frame(width: 14, height: 2)
+                    .clipShape(Capsule())
+                    .offset(y: 17)
+            }
         }
         .offset(y: dragOffset)
         .gesture(
             DragGesture(minimumDistance: 10)
                 .onChanged { value in
                     if value.translation.height < 0 {
-                        // Only allow upward drag, with resistance
                         dragOffset = value.translation.height * 0.3
                     }
                 }
@@ -52,7 +87,6 @@ struct DropButton: View {
                     withAnimation(.spring(duration: 0.4, bounce: 0.5)) {
                         dragOffset = 0
                     }
-                    // Trigger if swiped up more than 30pts
                     if value.translation.height < -30 {
                         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                         impactFeedback.impactOccurred()

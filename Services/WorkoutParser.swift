@@ -228,7 +228,7 @@ class WorkoutParser {
             let isPR = prKeywords.contains { seg.text.lowercased().contains($0) }
             return seg.entry.isCardio
                 ? parseCardio(segment: seg.text, entry: seg.entry, isPR: isPR)
-                : parseLifting(segment: seg.text, entry: seg.entry, isPR: isPR)
+                : parseLifting(segment: seg.text, entry: seg.entry, isPR: isPR, canonicalName: seg.canonical)
         }
 
         if hasPR, !exercises.isEmpty, !exercises.contains(where: { $0.isPR }) {
@@ -254,7 +254,7 @@ class WorkoutParser {
 
     // MARK: - Segment Extraction
 
-    private func extractExerciseSegments(from text: String) -> [(text: String, entry: ExerciseEntry)] {
+    private func extractExerciseSegments(from text: String) -> [(text: String, entry: ExerciseEntry, canonical: String)] {
         var normalized = text.components(separatedBy: "\n")
             .filter { !$0.hasPrefix("Workout ·") && !$0.hasPrefix("Workout·") }
             .joined(separator: "\n")
@@ -315,14 +315,17 @@ class WorkoutParser {
 
         for chunk in chunks {
             let lower = chunk.lowercased()
+            // Equipment prefix appended to canonical so same exercise on different equipment stays separate
+            let equipmentSuffix = lower.hasPrefix("[machine]") ? " (Machine)" : ""
             for entry in exerciseMap {
                 if entry.aliases.contains(where: { lower.contains($0) }) {
+                    let canonicalWithEquip = entry.canonical + equipmentSuffix
                     // Cardio exercises always get their own group — two runs are two separate sessions
                     // Lifting exercises merge into the same group — multiple sets of the same exercise
-                    if !entry.isCardio, let idx = groups.firstIndex(where: { $0.canonical == entry.canonical }) {
+                    if !entry.isCardio, let idx = groups.firstIndex(where: { $0.canonical == canonicalWithEquip }) {
                         groups[idx].texts.append(chunk)
                     } else {
-                        groups.append((entry.canonical, entry, [chunk]))
+                        groups.append((canonicalWithEquip, entry, [chunk]))
                     }
                     break
                 }
@@ -355,12 +358,12 @@ class WorkoutParser {
             }
         }
 
-        return groups.map { ($0.texts.joined(separator: "\n"), $0.entry) }
+        return groups.map { ($0.texts.joined(separator: "\n"), $0.entry, $0.canonical) }
     }
 
     // MARK: - Lifting Parser
 
-    private func parseLifting(segment: String, entry: ExerciseEntry, isPR: Bool) -> ParsedExercise {
+    private func parseLifting(segment: String, entry: ExerciseEntry, isPR: Bool, canonicalName: String = "") -> ParsedExercise {
         let lines = segment.components(separatedBy: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
@@ -392,7 +395,7 @@ class WorkoutParser {
         }()
 
         return ParsedExercise(
-            name: entry.canonical, muscleGroup: entry.muscleGroup, sets: allSets,
+            name: canonicalName.isEmpty ? entry.canonical : canonicalName, muscleGroup: entry.muscleGroup, sets: allSets,
             isPR: isPR, totalVolume: volume, isCardio: false,
             durationMinutes: nil, distanceValue: nil, distanceUnit: nil,
             pace: nil, calories: nil, heartRate: nil

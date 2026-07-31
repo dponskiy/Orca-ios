@@ -8,72 +8,76 @@
 import SwiftUI
 import SwiftData
 import WeatherKit
+import Combine
 import CoreLocation
 
 struct DashboardView: View {
     @Binding var showSearch: Bool
+    @Binding var resetTrigger: Bool
     @Query private var memories: [Memory]
     @Query private var echos: [Echo]
     @Query private var pings: [Ping]
     @Environment(\.modelContext) private var modelContext
+    @State private var navigationPath = NavigationPath()
     @State private var showCreateEcho = false
     @State private var showUpcoming = true
     @State private var showPinned = true
     @State private var editingMemory: Memory?
     @State private var detailMemory: Memory?
-    @State private var showQuickLog = false
-    @State private var navigateToWorkoutEcho = false
+    @Query private var sharedSpaces: [SharedSpace]
+    @Query private var sharedEvents: [SharedEvent]
+    @Environment(AuthService.self) private var authService
+    @State private var showCollectibles = false
+    @State private var showSharedSpaces = false
+    @State private var showThoughts = false
+    @State private var showEditQuickActions = false
+    @AppStorage("enabledQuickActions") private var enabledActionsRaw = "shopping,thoughts,shared,media,collectibles"
     @State private var showWeatherDetail = false
     @StateObject private var weatherService = WeatherService.shared
     @StateObject private var locationService = LocationService.shared
     @State private var showGroceryMode = false
     @State private var showMediaMode = false
+    @State private var showGiftMode = false
+    @State private var showSettings = false
+    @AppStorage("cleanUpDismissedAtCount") private var cleanUpDismissedAtCount = 0
 
     // MARK: - Computed Properties
 
+    // O(n) — build count map once, then sort once
     var displayedEchos: [Echo] {
-        let withMemories = echos.filter { echo in
-            memories.contains { $0.echoId == echo.id }
-        }.sorted { $0.sortOrder < $1.sortOrder }
-
-        if withMemories.count >= 6 { return withMemories }
-
-        let withMemoryIds = Set(withMemories.map { $0.id })
-        let topEmpty = echos
-            .filter { !withMemoryIds.contains($0.id) }
-            .sorted { $0.sortOrder < $1.sortOrder }
-            .prefix(6 - withMemories.count)
-
-        return withMemories + Array(topEmpty)
+        var countByEcho: [UUID: Int] = [:]
+        for memory in memories { countByEcho[memory.echoId, default: 0] += 1 }
+        return echos
+            .filter { !$0.isSystemEcho && countByEcho[$0.id] != nil }
+            .sorted { (countByEcho[$0.id] ?? 0) > (countByEcho[$1.id] ?? 0) }
     }
 
     var pinnedMemories: [Memory] { memories.filter { $0.isPinned } }
 
     var upcomingTasks: [Memory] {
         let now = Date()
-        let window = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
-        let sportsEchoId = echos.first { $0.name.lowercased() == "sports" }?.id
-        let hideSports = !UserDefaults.standard.showSportsInUpcoming
+        let cal = Calendar.current
+        let window = cal.date(byAdding: .day, value: 7, to: now) ?? now
+
+        // Build ping lookup once — O(n) instead of O(n*m) nested scan
+        var pingsByMemory: [UUID: [Ping]] = [:]
+        for ping in pings { pingsByMemory[ping.memoryId, default: []].append(ping) }
 
         let withDate = memories.filter {
             $0.isActionable && !$0.isCompleted && $0.detectedDate != nil &&
-            $0.detectedDate! > now && $0.detectedDate! <= window &&
-            !(hideSports && $0.echoId == sportsEchoId)
+            $0.detectedDate! > now && $0.detectedDate! <= window
         }
+        let withDateIds = Set(withDate.map { $0.id })
 
         let withPing = memories.filter { memory in
-            guard !memory.isCompleted else { return false }
-            guard !(hideSports && memory.echoId == sportsEchoId) else { return false }
-            guard !withDate.contains(where: { $0.id == memory.id }) else { return false }
-            return pings.contains { ping in
-                guard ping.memoryId == memory.id && ping.isActive else { return false }
+            guard !memory.isCompleted, !withDateIds.contains(memory.id) else { return false }
+            guard let memPings = pingsByMemory[memory.id] else { return false }
+            return memPings.contains { ping in
+                guard ping.isActive else { return false }
                 if ping.recurrence != .none {
-                    let completedToday = memory.completedAt.map {
-                        Calendar.current.isDate($0, inSameDayAs: Date())
-                    } ?? false
+                    let completedToday = memory.completedAt.map { cal.isDate($0, inSameDayAs: now) } ?? false
                     if completedToday { return false }
                     if ping.recurrence == .yearly {
-                        let cal = Calendar.current
                         var components = cal.dateComponents([.month, .day], from: ping.fireDate)
                         components.year = cal.component(.year, from: now)
                         var nextFire = cal.date(from: components) ?? ping.fireDate
@@ -87,8 +91,8 @@ struct DashboardView: View {
         }
 
         func soonestDate(for memory: Memory) -> Date {
-            let pingDate = pings
-                .filter { $0.memoryId == memory.id && $0.isActive && $0.fireDate > now }
+            let pingDate = pingsByMemory[memory.id]?
+                .filter { $0.isActive && $0.fireDate > now }
                 .map { $0.fireDate }.min()
             return [memory.detectedDate, pingDate].compactMap { $0 }.min() ?? memory.createdAt
         }
@@ -100,10 +104,6 @@ struct DashboardView: View {
 
     // MARK: - Shortcuts Logic
 
-    private var hasWorkoutMemories: Bool {
-        guard let id = echos.first(where: { $0.name.lowercased().contains("workout") })?.id else { return false }
-        return memories.contains { $0.echoId == id }
-    }
 
     private var hasCookingWithChecklist: Bool {
         guard let id = echos.first(where: { $0.name.lowercased() == "cooking" })?.id else { return false }
@@ -112,8 +112,29 @@ struct DashboardView: View {
 
     private var showShortcutsStrip: Bool { true }
 
-    private var workoutEcho: Echo? { echos.first { $0.name.lowercased().contains("workout") } }
     private var cookingEcho: Echo? { echos.first { $0.name.lowercased() == "cooking" } }
+
+    private var hasSharedSpaces: Bool {
+        let userId = authService.userId?.uuidString ?? ""
+        return sharedSpaces.contains { $0.createdByUserId == userId || $0.invitedUserId == userId }
+    }
+
+    private var upcomingSharedEvents: [SharedEvent] {
+        let userId = authService.userId?.uuidString ?? ""
+        let mySpaceIds = Set(sharedSpaces.filter {
+            $0.createdByUserId == userId || $0.invitedUserId == userId
+        }.map { $0.id })
+        let now = Date()
+        let cal = Calendar.current
+        let window = cal.date(byAdding: .day, value: 7, to: now) ?? now
+        let today = cal.startOfDay(for: now)
+        return sharedEvents.filter { event in
+            guard mySpaceIds.contains(event.spaceId), let start = event.date else { return false }
+            let end = event.endDate ?? start
+            // Show if event starts within window OR is currently spanning today
+            return start <= window && cal.startOfDay(for: end) >= today
+        }.sorted { ($0.date ?? $0.createdAt) < ($1.date ?? $1.createdAt) }
+    }
 
     // MARK: - Helpers
 
@@ -138,24 +159,27 @@ struct DashboardView: View {
         return !memoryPings.contains { $0.fireDate > Date() }
     }
 
-    private func pendingCountFor(echo: Echo) -> Int {
-        let echoMemories = memories.filter { $0.echoId == echo.id }
+    // Pre-computed once — O(n) — used by echoBubbleGrid per echo
+    private var pendingCountByEcho: [UUID: Int] {
         let now = Date()
-        var count = 0
-        for memory in echoMemories {
-            guard memory.isActionable && !memory.isCompleted else { continue }
-            let memoryPings = pings.filter { $0.memoryId == memory.id && $0.isActive }
-            for ping in memoryPings {
-                if Calendar.current.isDate(ping.fireDate, inSameDayAs: now) { count += 1; break }
-            }
+        var pingsByMemory: [UUID: [Ping]] = [:]
+        for ping in pings where ping.isActive {
+            pingsByMemory[ping.memoryId, default: []].append(ping)
         }
-        return count
+        var result: [UUID: Int] = [:]
+        for memory in memories {
+            guard memory.isActionable && !memory.isCompleted else { continue }
+            guard let memPings = pingsByMemory[memory.id] else { continue }
+            let hasTodayPing = memPings.contains { Calendar.current.isDate($0.fireDate, inSameDayAs: now) }
+            if hasTodayPing { result[memory.echoId, default: 0] += 1 }
+        }
+        return result
     }
 
     // MARK: - Body
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
 
@@ -185,16 +209,15 @@ struct DashboardView: View {
                                     .buttonStyle(.plain)
                                 }
 
-                                NavigationLink(destination: SettingsView()) {
+                                Button { showSettings = true } label: {
                                     ZStack {
                                         Circle().fill(Color.mist).frame(width: 36, height: 36)
                                         Image(systemName: "person").font(.system(size: 15)).foregroundColor(.oceanTeal)
                                     }
                                 }
+                                .buttonStyle(.plain)
                             }
-                            let activeCount = displayedEchos.filter { echo in
-                                memories.contains { $0.echoId == echo.id }
-                            }.count
+                            let activeCount = displayedEchos.count
                             Text("\(memories.count) \(memories.count == 1 ? "memory" : "memories") across \(activeCount) \(activeCount == 1 ? "Echo" : "Echos")")
                                 .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.gray)
                         }
@@ -215,23 +238,29 @@ struct DashboardView: View {
                     }
 
                     // Clean up hint
-                    if cleanUpCount > 0 {
-                        NavigationLink(destination: SettingsView()) {
-                            HStack(spacing: 10) {
-                                Image(systemName: "sparkles.rectangle.stack")
-                                    .font(.system(size: 14)).foregroundColor(.oceanTeal)
+                    if cleanUpCount > 0 && cleanUpCount > cleanUpDismissedAtCount {
+                        HStack(spacing: 10) {
+                            Image(systemName: "sparkles.rectangle.stack")
+                                .font(.system(size: 14)).foregroundColor(.oceanTeal)
+                            Button { showSettings = true } label: {
                                 Text("\(cleanUpCount) old \(cleanUpCount == 1 ? "task" : "tasks") can be cleaned up")
                                     .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.deepNavy)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 11, weight: .medium)).foregroundColor(.gray.opacity(0.5))
                             }
-                            .padding(.horizontal, 14).padding(.vertical, 10)
-                            .background(Color.oceanTeal.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .buttonStyle(.plain)
+                            Spacer()
+                            Button {
+                                cleanUpDismissedAtCount = cleanUpCount
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(.gray.opacity(0.5))
+                            }
+                            .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(Color.oceanTeal.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
-
                     // Pinned
                     if showPinned && !pinnedMemories.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
@@ -270,6 +299,11 @@ struct DashboardView: View {
                         }
                     }
 
+                    // Shared upcoming
+                    if !upcomingSharedEvents.isEmpty {
+                        sharedUpcomingSection
+                    }
+
                     // Quick Actions Strip
                     if showShortcutsStrip { quickActionsStrip }
 
@@ -295,16 +329,12 @@ struct DashboardView: View {
                 .padding(.top, 16)
             }
             .background(Color.pearl)
-            .background(
-                NavigationLink(
-                    destination: Group {
-                        if let echo = echos.first(where: { $0.name.lowercased().contains("workout") }) {
-                            EchoDetailView(echo: echo)
-                        }
-                    },
-                    isActive: $navigateToWorkoutEcho
-                ) { EmptyView() }
-            )
+            .navigationDestination(for: Echo.self) { echo in
+                EchoDetailView(echo: echo)
+            }
+            .navigationDestination(isPresented: $showSettings) {
+                SettingsView()
+            }
             .onAppear {
                 showUpcoming = true
                 showPinned = true
@@ -312,6 +342,23 @@ struct DashboardView: View {
                     Task { await weatherService.fetchWeather(for: location) }
                 }
                 locationService.requestLocation()
+                // Migrate quick actions: add new, remove retired
+                var ids = enabledActionsRaw.split(separator: ",").map(String.init)
+                var changed = false
+                for newAction in ["gifts", "collectibles"] where !ids.contains(newAction) {
+                    ids.append(newAction)
+                    changed = true
+                }
+                if ids.contains("workout") {
+                    ids.removeAll { $0 == "workout" }
+                    changed = true
+                }
+                if changed {
+                    enabledActionsRaw = QuickActionItem.allCases
+                        .filter { ids.contains($0.rawValue) }
+                        .map { $0.rawValue }
+                        .joined(separator: ",")
+                }
             }
             .onChange(of: locationService.location) { _, location in
                 if let location = location { Task { await weatherService.fetchWeather(for: location) } }
@@ -325,17 +372,160 @@ struct DashboardView: View {
             .sheet(isPresented: $showMediaMode) {
                 WatchModeView()
             }
-            .sheet(isPresented: $showQuickLog) {
-                QuickLogView(onFinish: {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        navigateToWorkoutEcho = true
-                    }
-                })
+            .sheet(isPresented: $showCollectibles) {
+                CollectiblesView()
+            }
+            .sheet(isPresented: $showSharedSpaces) {
+                SharedSpacesHubView()
+            }
+            .sheet(isPresented: $showThoughts) {
+                ThoughtsView()
+            }
+            .sheet(isPresented: $showGiftMode) {
+                GiftQuickActionView()
             }
             // NEW: Weather detail sheet
             .sheet(isPresented: $showWeatherDetail) {
                 WeatherDetailView()
             }
+        }
+        .onChange(of: resetTrigger) { _, _ in
+            withAnimation {
+                navigationPath = NavigationPath()
+                showSettings = false
+            }
+        }
+    }
+
+    // MARK: - Shared Upcoming Section
+
+    private var sharedUpcomingSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "person.2.fill").font(.system(size: 11)).foregroundColor(.oceanTeal)
+                Text("SHARED").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal).tracking(1)
+            }
+            ForEach(upcomingSharedEvents.prefix(3)) { event in
+                sharedEventRow(event: event)
+            }
+        }
+    }
+
+    private func sharedEventRow(event: SharedEvent) -> some View {
+        let space = sharedSpaces.first { $0.id == event.spaceId }
+        let partnerName = space?.invitedUserEmail.components(separatedBy: "@").first?.capitalized ?? "Shared"
+
+        return HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(Color.oceanTeal.opacity(0.1)).frame(width: 32, height: 32)
+                Image(systemName: "person.2.fill").font(.system(size: 12)).foregroundColor(.oceanTeal)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(event.title)
+                    .font(.custom("DMSans-Regular", size: 15))
+                    .foregroundColor(.deepNavy)
+                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    if let date = event.date {
+                        Image(systemName: "clock").font(.system(size: 10)).foregroundColor(.oceanTeal)
+                        Text(date, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                            .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.oceanTeal)
+                    }
+                    Text("· \(partnerName)")
+                        .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
+                }
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
+        .onTapGesture { showSharedSpaces = true }
+    }
+
+    // MARK: - Quick Actions Strip
+
+    // MARK: - Quick Actions Data
+
+    enum QuickActionItem: String, CaseIterable {
+        case shopping, thoughts, shared, media, gifts, collectibles
+
+        var icon: String {
+            switch self {
+            case .shopping:     return "cart.fill"
+            case .collectibles: return "square.stack.3d.up.fill"
+            case .media:        return "popcorn.fill"
+            case .shared:       return "person.2.fill"
+            case .thoughts:     return "bubble.left.fill"
+            case .gifts:        return "gift.fill"
+            }
+        }
+        var title: String {
+            switch self {
+            case .shopping:     return "Shopping"
+            case .collectibles: return "Collectibles"
+            case .media:        return "Media"
+            case .shared:       return "Shared Space"
+            case .thoughts:     return "Thoughts"
+            case .gifts:        return "Gifts"
+            }
+        }
+        var displayName: String {
+            switch self {
+            case .shopping:     return "Shopping Mode"
+            case .collectibles: return "Collectibles"
+            case .media:        return "Media Mode"
+            case .shared:       return "Shared Space"
+            case .thoughts:     return "Thoughts"
+            case .gifts:        return "Gifts"
+            }
+        }
+    }
+
+    private var enabledActions: [QuickActionItem] {
+        let ids = enabledActionsRaw.split(separator: ",").map(String.init)
+        return QuickActionItem.allCases.filter { ids.contains($0.rawValue) }
+    }
+
+    private func isEnabled(_ action: QuickActionItem) -> Bool {
+        enabledActionsRaw.split(separator: ",").map(String.init).contains(action.rawValue)
+    }
+
+    private func toggleAction(_ action: QuickActionItem) {
+        var ids = enabledActionsRaw.split(separator: ",").map(String.init)
+        if ids.contains(action.rawValue) {
+            guard ids.count > 1 else { return } // keep at least 1
+            ids.removeAll { $0 == action.rawValue }
+        } else {
+            ids.append(action.rawValue)
+        }
+        // Preserve original order
+        enabledActionsRaw = QuickActionItem.allCases
+            .filter { ids.contains($0.rawValue) }
+            .map { $0.rawValue }
+            .joined(separator: ",")
+    }
+
+    private func subtitle(for action: QuickActionItem) -> String {
+        switch action {
+        case .shopping:     return hasCookingWithChecklist ? "Build your grocery list" : "Recipes & grocery lists"
+        case .collectibles: return "Pokémon, Legos & more"
+        case .media:        return "Movies, shows & books"
+        case .shared:       return hasSharedSpaces ? "View shared spaces" : "Invite someone"
+        case .thoughts:     return "Notes & journal"
+        case .gifts:        return "Track gift ideas"
+        }
+    }
+
+    private func triggerAction(_ action: QuickActionItem) {
+        switch action {
+        case .shopping:     showGroceryMode = true
+        case .collectibles: showCollectibles = true
+        case .media:        showMediaMode = true
+        case .shared:       showSharedSpaces = true
+        case .thoughts:     showThoughts = true
+        case .gifts:        showGiftMode = true
         }
     }
 
@@ -343,40 +533,125 @@ struct DashboardView: View {
 
     private var quickActionsStrip: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("QUICK ACTIONS")
-                .font(.custom("DMSans-Medium", size: 11))
-                .foregroundColor(.gray)
-                .tracking(0.5)
 
-            HStack(spacing: 10) {
-                Button { showGroceryMode = true } label: {
-                    shortcutCard(icon: "cart.fill", iconColor: Color.oceanTeal, title: "Shopping\nmode", subtitle: hasCookingWithChecklist ? "From recipes" : "Build your list", accentBorder: false)
+            // Section header — matches Upcoming / Your Echos style
+            HStack {
+                Text("QUICK ACTIONS")
+                    .font(.custom("DMSans-Medium", size: 13))
+                    .foregroundColor(.oceanTeal)
+                    .tracking(1)
+                Spacer()
+                Button {
+                    showEditQuickActions = true
+                } label: {
+                    Text("Edit")
+                        .font(.custom("DMSans-Medium", size: 13))
+                        .foregroundColor(.oceanTeal)
                 }
+            }
 
-                Button { showQuickLog = true } label: {
-                    shortcutCard(icon: "figure.strengthtraining.traditional", iconColor: Color.oceanTeal, title: "Workout\nmode", subtitle: hasWorkoutMemories ? "Log a set" : "Start first session", accentBorder: true)
-                }
-
-                Button { showMediaMode = true } label: {
-                    shortcutCard(icon: "popcorn.fill", iconColor: Color.oceanTeal, title: "Media\nmode", subtitle: "Shows, movies & books", accentBorder: false)
+            // Dynamic grid — 3 per row, wraps automatically
+            let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(enabledActions, id: \.rawValue) { action in
+                    Button { triggerAction(action) } label: {
+                        shortcutCard(
+                            icon: action.icon,
+                            iconColor: .oceanTeal,
+                            title: action.title,
+                            subtitle: subtitle(for: action),
+                            accentBorder: true
+                        )
+                    }
                 }
             }
         }
+        .sheet(isPresented: $showEditQuickActions) { editQuickActionsSheet }
+    }
+
+    // MARK: - Edit Quick Actions Sheet
+
+    private var editQuickActionsSheet: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("Choose which quick actions appear on your dashboard. At least one must be selected.")
+                        .font(.custom("DMSans-Regular", size: 13))
+                        .foregroundColor(.gray)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+
+                Section {
+                    ForEach(QuickActionItem.allCases, id: \.rawValue) { action in
+                        let enabled = isEnabled(action)
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) { toggleAction(action) }
+                        } label: {
+                            HStack(spacing: 14) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(enabled ? Color.oceanTeal : Color.mist)
+                                        .frame(width: 36, height: 36)
+                                    Image(systemName: action.icon)
+                                        .font(.system(size: 15))
+                                        .foregroundColor(enabled ? .white : .gray)
+                                }
+                                Text(action.displayName)
+                                    .font(.custom("DMSans-Regular", size: 16))
+                                    .foregroundColor(.deepNavy)
+                                Spacer()
+                                Image(systemName: enabled ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(enabled ? .oceanTeal : .gray.opacity(0.3))
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Quick Actions")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showEditQuickActions = false }
+                        .foregroundColor(.oceanTeal)
+                        .font(.custom("DMSans-Medium", size: 16))
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 
     private func shortcutCard(icon: String, iconColor: Color, title: String, subtitle: String, accentBorder: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: icon).font(.system(size: 18)).foregroundColor(iconColor).frame(width: 32, height: 32)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.custom("DMSans-Medium", size: 13)).foregroundColor(.deepNavy).multilineTextAlignment(.leading).lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                Text(subtitle).font(.custom("DMSans-Regular", size: 11)).foregroundColor(.gray).lineLimit(1)
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 26))
+                .foregroundColor(iconColor)
+                .frame(height: 32)
+            VStack(spacing: 2) {
+                Text(title)
+                    .font(.custom("DMSans-Medium", size: 13))
+                    .foregroundColor(.deepNavy)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(.custom("DMSans-Regular", size: 11))
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 16)
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, minHeight: 96)
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(accentBorder ? Color.oceanTeal.opacity(0.35) : Color.black.opacity(0.08), lineWidth: accentBorder ? 1.0 : 0.5))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.oceanTeal.opacity(0.3), lineWidth: 1.0))
         .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
     }
 
@@ -507,24 +782,24 @@ struct DashboardView: View {
 
     private var echoBubbleGrid: some View {
         let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
-        return LazyVGrid(columns: columns, spacing: 24) {
-            ForEach(Array(displayedEchos.enumerated()), id: \.element.id) { index, echo in
-                let count = memories.filter { $0.echoId == echo.id }.count
-                let isEmpty = count == 0
-                NavigationLink(destination: EchoDetailView(echo: echo)) {
-                    EchoBubbleView(echo: echo, count: count, pendingCount: isEmpty ? 0 : pendingCountFor(echo: echo), totalMemories: memories.count)
-                        .opacity(isEmpty ? 0.5 : 1.0)
+        let countMap = { () -> [UUID: Int] in
+            var m: [UUID: Int] = [:]
+            for memory in memories { m[memory.echoId, default: 0] += 1 }
+            return m
+        }()
+        let pendingMap = pendingCountByEcho
+        let total = memories.count
+        return LazyVGrid(columns: columns, spacing: 16) {
+            ForEach(displayedEchos, id: \.id) { echo in
+                NavigationLink(value: echo) {
+                    EchoBubbleView(echo: echo, count: countMap[echo.id] ?? 0, pendingCount: pendingMap[echo.id] ?? 0, totalMemories: total)
                 }
-                .offset(
-                    x: isEmpty ? 0 : CGFloat([8, -6, 10, -8, 5, -10, 7, -5, 9, -7, 6, -9, 8, -6][index % 14]),
-                    y: isEmpty ? 0 : CGFloat([4, -8, 6, -4, 10, -6, 3, -9, 7, -3, 8, -5, 4, -7][index % 14])
-                )
             }
         }
     }
 }
 
 #Preview {
-    DashboardView(showSearch: .constant(false))
+    DashboardView(showSearch: .constant(false), resetTrigger: .constant(false))
         .modelContainer(for: [Memory.self, Echo.self, Ping.self], inMemory: true)
 }

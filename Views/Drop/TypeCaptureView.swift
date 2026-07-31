@@ -306,22 +306,45 @@ struct TypeCaptureView: View {
         savedMemory = memory
         NotificationService.shared.scheduleInactivityReminder(afterDays: 5)
 
-        if let userId = authService.userId, let result = sonarResult {
-            Task {
+        if memory.detectedDate != nil {
+            let recurrence = sonarResult?.pingRecurrence ?? .none
+            NotificationCenter.default.post(
+                name: .calendarSyncCheck,
+                object: memory,
+                userInfo: ["recurrence": recurrence.rawValue]
+            )
+        }
+
+        // Create pings locally regardless of auth state so reminders always work
+        if let result = sonarResult, !result.pingSuggestions.isEmpty {
+            var createdPings: [Ping] = []
+            for suggestion in result.pingSuggestions {
+                let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
+                let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
+                if let fireTime = suggestion.fireTime { ping.fireTime = fireTime }
+                modelContext.insert(ping)
+                NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                createdPings.append(ping)
+            }
+            if let advancePing = NotificationService.shared.makeAdvancePing(for: memory, echoName: sonarResult?.echoName) {
+                modelContext.insert(advancePing)
+                NotificationService.shared.schedulePing(ping: advancePing, memoryText: "2 weeks out: \(memory.text)")
+                createdPings.append(advancePing)
+            }
+            try? modelContext.save()
+
+            // Push to Supabase if signed in
+            if let userId = authService.userId {
+                Task { @MainActor in
+                    await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
+                    for ping in createdPings {
+                        await SupabaseSyncService.shared.pushPing(ping, userId: userId)
+                    }
+                }
+            }
+        } else if let userId = authService.userId {
+            Task { @MainActor in
                 await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
-                for suggestion in result.pingSuggestions {
-                    let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
-                    let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
-                    if let fireTime = suggestion.fireTime { ping.fireTime = fireTime }
-                    modelContext.insert(ping)
-                    await SupabaseSyncService.shared.pushPing(ping, userId: userId)
-                    NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
-                }
-                if result.detectedSportsTeam != nil {
-                    await SportsMemoryService.shared.createGamePings(
-                        for: text, memory: memory,
-                        modelContext: modelContext, userId: userId.uuidString)
-                }
             }
         }
 
@@ -334,11 +357,15 @@ struct TypeCaptureView: View {
         if urlText.isEmpty {
             if let detectedURL = sonarEngine.detectURL(text: text) { memory.url = detectedURL }
         }
-        if !recipeFetched, let checklistItems = sonarEngine.detectChecklist(text: text) {
+        if let items = sonarResult?.checklistItems, !items.isEmpty {
+            memory.hasChecklist = true
+            for (i, item) in items.enumerated() {
+                modelContext.insert(SubTask(memoryId: memory.id, text: item, sortOrder: i))
+            }
+        } else if !recipeFetched, let checklistItems = sonarEngine.detectChecklist(text: text) {
             memory.hasChecklist = true
             for (index, item) in checklistItems.enumerated() {
-                let subTask = SubTask(memoryId: memory.id, text: item, sortOrder: index)
-                modelContext.insert(subTask)
+                modelContext.insert(SubTask(memoryId: memory.id, text: item, sortOrder: index))
             }
         }
 
@@ -352,7 +379,7 @@ struct TypeCaptureView: View {
         if let last = recent?.first {
             let id = last.id
             modelContext.delete(last)
-            Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+            SupabaseSyncService.shared.scheduleDelete(id: id)
         }
         isPresented = false
     }

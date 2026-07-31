@@ -8,6 +8,13 @@
 import SwiftUI
 import SwiftData
 
+struct UpcomingOccasionEntry: Identifiable {
+    let id: String
+    let person: Person
+    let occasion: String
+    let days: Int
+}
+
 struct PeopleView: View {
     @Query(sort: \Person.name) private var persons: [Person]
     @Query private var giftItems: [GiftItem]
@@ -15,6 +22,7 @@ struct PeopleView: View {
 
     @State private var showAddPerson = false
     @State private var selectedPerson: Person?
+    @State private var showGiftAction = false
 
     private var deduplicatedPersons: [Person] {
         var seen = Set<UUID>()
@@ -28,10 +36,21 @@ struct PeopleView: View {
         }
     }
 
-    private var upcomingBirthdays: [Person] {
-        deduplicatedPersons
-            .filter { ($0.daysUntilBirthday ?? 999) <= 90 }
-            .sorted { ($0.daysUntilBirthday ?? 999) < ($1.daysUntilBirthday ?? 999) }
+    private var upcomingOccasions: [UpcomingOccasionEntry] {
+        var results: [UpcomingOccasionEntry] = []
+        for person in deduplicatedPersons {
+            for occasion in person.allOccasions {
+                if let days = person.daysUntilOccasion(occasion), days <= 90 {
+                    results.append(UpcomingOccasionEntry(
+                        id: "\(person.id.uuidString)-\(occasion)",
+                        person: person,
+                        occasion: occasion,
+                        days: days
+                    ))
+                }
+            }
+        }
+        return results.sorted { $0.days < $1.days }
     }
 
     var body: some View {
@@ -39,21 +58,24 @@ struct PeopleView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
 
+                    // My Wishlist — always visible
+                    wishlistCard
+
                     if deduplicatedPersons.isEmpty {
                         emptyState
                     } else {
 
-                        // Birthdays coming up
-                        if !upcomingBirthdays.isEmpty {
+                        // Coming up — birthdays + all occasions with dates set
+                        if !upcomingOccasions.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("BIRTHDAYS COMING UP")
+                                Text("COMING UP")
                                     .font(.custom("DMSans-Medium", size: 11))
                                     .foregroundColor(.gray)
                                     .tracking(0.5)
 
-                                ForEach(upcomingBirthdays) { person in
-                                    NavigationLink(destination: PersonProfileView(person: person)) {
-                                        birthdayCard(person: person)
+                                ForEach(upcomingOccasions) { entry in
+                                    NavigationLink(destination: PersonProfileView(person: entry.person)) {
+                                        occasionCard(person: entry.person, occasion: entry.occasion, days: entry.days)
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -121,18 +143,64 @@ struct PeopleView: View {
             .sheet(isPresented: $showAddPerson) {
                 AddPersonView()
             }
+            .sheet(isPresented: $showGiftAction) {
+                GiftQuickActionView(openWishlistDirectly: true)
+            }
         }
     }
 
-    // MARK: - Birthday Card
+    // MARK: - My Wishlist Card
 
-    private func birthdayCard(person: Person) -> some View {
-        let days = person.daysUntilBirthday ?? 0
+    private var wishlistItems: [GiftItem] {
+        giftItems.filter { $0.personId == GiftItem.wishlistPersonId }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private var wishlistCard: some View {
+        Button { showGiftAction = true } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle().fill(Color.oceanTeal.opacity(0.12)).frame(width: 44, height: 44)
+                    Image(systemName: "star.fill").font(.system(size: 17)).foregroundColor(.oceanTeal)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("My Wishlist")
+                        .font(.custom("DMSans-Medium", size: 15))
+                        .foregroundColor(.deepNavy)
+                    if wishlistItems.isEmpty {
+                        Text("Add things you want")
+                            .font(.custom("DMSans-Regular", size: 12))
+                            .foregroundColor(.gray)
+                    } else {
+                        let purchased = wishlistItems.filter { $0.isPurchased }.count
+                        let total = wishlistItems.count
+                        Text("\(total) \(total == 1 ? "item" : "items")\(purchased > 0 ? " · \(purchased) purchased" : "")")
+                            .font(.custom("DMSans-Regular", size: 12))
+                            .foregroundColor(.gray)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.gray.opacity(0.3))
+            }
+            .padding(14)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Occasion Card
+
+    private func occasionCard(person: Person, occasion: String, days: Int) -> some View {
         let currentYear = Calendar.current.component(.year, from: Date())
-        let personGifts = giftItems.filter { $0.personId == person.id && $0.year == currentYear }
+        let personGifts = giftItems.filter { $0.personId == person.id && $0.occasion == occasion && $0.year == currentYear }
         let totalSpent = personGifts.filter { $0.isPurchased }.compactMap { $0.price }.reduce(0, +)
         let ideaCount = personGifts.filter { !$0.isPurchased }.count
         let colors = avatarColors(for: person.colorIndex)
+        let dateStr = person.occasionDateDisplay(occasion)
 
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
@@ -145,27 +213,27 @@ struct PeopleView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
-                        Text(person.name)
-                            .font(.custom("DMSans-Medium", size: 14))
-                            .foregroundColor(.deepNavy)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(person.name)
+                                .font(.custom("DMSans-Medium", size: 14))
+                                .foregroundColor(.deepNavy)
+                            Text(occasion)
+                                .font(.custom("DMSans-Regular", size: 11))
+                                .foregroundColor(.gray)
+                        }
                         Spacer()
-                        Text(days == 0 ? "Today!" : "\(days) days")
-                            .font(.custom("DMSans-Medium", size: 11))
-                            .foregroundColor(days <= 7 ? .white : colors.text)
-                            .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(days <= 7 ? Color.coral : colors.background)
-                            .clipShape(Capsule())
-                    }
-                    HStack(spacing: 4) {
-                        if let rel = person.relationship {
-                            Text(rel.capitalized)
-                                .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
-                        }
-                        if person.relationship != nil, person.birthdayDisplayString != nil {
-                            Text("·").font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
-                        }
-                        if let bd = person.birthdayDisplayString {
-                            Text(bd).font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(days == 0 ? "Today!" : "\(days)d")
+                                .font(.custom("DMSans-Medium", size: 11))
+                                .foregroundColor(days <= 7 ? .white : colors.text)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(days <= 7 ? Color.coral : colors.background)
+                                .clipShape(Capsule())
+                            if let ds = dateStr {
+                                Text(ds)
+                                    .font(.custom("DMSans-Regular", size: 10))
+                                    .foregroundColor(.gray)
+                            }
                         }
                     }
                 }
@@ -187,7 +255,7 @@ struct PeopleView: View {
                         if ideaCount > 0 {
                             Text("·").font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
                         }
-                        if let budget = person.occasionBudgets["Birthday"] {
+                        if let budget = person.occasionBudgets[occasion] {
                             Text("$\(Int(totalSpent)) of $\(Int(budget)) spent")
                                 .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.oceanTeal)
                         } else {
@@ -218,7 +286,10 @@ struct PeopleView: View {
                 Text(person.initials)
                     .font(.custom("DMSans-Medium", size: 16))
                     .foregroundColor(colors.text)
-                if let days = person.daysUntilBirthday, days <= 14 {
+                let hasUpcoming = person.allOccasions.contains { occ in
+                    (person.daysUntilOccasion(occ) ?? 999) <= 14
+                }
+                if hasUpcoming {
                     Circle()
                         .fill(Color.coral)
                         .frame(width: 10, height: 10)

@@ -7,12 +7,15 @@
 
 import SwiftUI
 import SwiftData
+import EventKit
 
 struct SettingsView: View {
     @Environment(AuthService.self) private var authService
     @Environment(\.modelContext) private var modelContext
     @AppStorage("hasSkippedAuth") private var hasSkippedAuth = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
+    @AppStorage("calendarSyncEnabled") private var calendarSyncEnabled = false
+    @AppStorage("calendarSyncSingleOnly") private var calendarSyncSingleOnly = true
 
     @Query private var memories: [Memory]
     @Query private var pings: [Ping]
@@ -25,8 +28,7 @@ struct SettingsView: View {
     @State private var isDeletingAccount = false
 
     var body: some View {
-        NavigationStack {
-            List {
+        List {
                 // MARK: - Account
                 Section("Account") {
                     if authService.isAuthenticated {
@@ -123,6 +125,38 @@ struct SettingsView: View {
                         Label("Manage Echos", systemImage: "circle.grid.2x2")
                             .foregroundColor(.deepNavy)
                     }
+
+                    Toggle(isOn: Binding(
+                        get: { calendarSyncEnabled },
+                        set: { newValue in
+                            if newValue {
+                                Task {
+                                    let granted = await CalendarService.shared.requestAccess()
+                                    await MainActor.run {
+                                        calendarSyncEnabled = granted
+                                        CalendarService.shared.promptShown = true
+                                    }
+                                }
+                            } else {
+                                calendarSyncEnabled = false
+                            }
+                        }
+                    )) {
+                        Label("Apple Calendar Sync", systemImage: "calendar.badge.checkmark")
+                            .foregroundColor(.deepNavy)
+                    }
+                    .tint(.oceanTeal)
+
+                    if calendarSyncEnabled {
+                        Picker("Sync", selection: $calendarSyncSingleOnly) {
+                            Text("Single events only").tag(true)
+                            Text("All events (incl. recurring)").tag(false)
+                        }
+                        .pickerStyle(.menu)
+                        .font(.custom("DMSans-Regular", size: 15))
+                        .foregroundColor(.gray)
+                    }
+
                 }
 
                 // MARK: - Support
@@ -187,7 +221,7 @@ struct SettingsView: View {
                             FinIcon()
                                 .fill(Color.seafoam.opacity(0.4))
                                 .frame(width: 24, height: 28)
-                            Text("Orca v1.4")
+                            Text("Orca v2.8")
                                 .font(.custom("DMMono-Regular", size: 12))
                                 .foregroundColor(.gray)
                             Text("\(memories.count) memories saved")
@@ -211,10 +245,11 @@ struct SettingsView: View {
                         for ping in memoryPings {
                             NotificationService.shared.cancelPing(pingId: ping.id)
                             modelContext.delete(ping)
+                            Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
                         }
                         modelContext.delete(memory)
                         SpotlightService.shared.removeMemory(id: memory.id)
-                        Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+                        SupabaseSyncService.shared.scheduleDelete(id: id)
                     }
                 }
             }
@@ -244,7 +279,6 @@ struct SettingsView: View {
             } message: {
                 Text("Your account, all memories, and all data will be permanently removed from our servers within 30 days.")
             }
-        }
     }
 
     private var initials: String {
@@ -263,10 +297,11 @@ struct SettingsView: View {
             for ping in memoryPings {
                 NotificationService.shared.cancelPing(pingId: ping.id)
                 modelContext.delete(ping)
+                Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
             }
             modelContext.delete(memory)
             SpotlightService.shared.removeMemory(id: id)
-            Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+            SupabaseSyncService.shared.scheduleDelete(id: id)
         }
     }
 

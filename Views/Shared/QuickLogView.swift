@@ -119,9 +119,34 @@ struct QuickLogView: View {
     @State private var lastLoggedReps: Int? = nil
     @State private var lastLoggedExercise: String? = nil
 
+    // Quick-add picker state
+    @State private var quickAddWeightDelta: Double = 0
+    @State private var quickAddSelectedReps: Int? = nil
+    @State private var quickAddManualWeight: String = ""
+    @State private var quickAddManualReps: String = ""
+
+    // Session setup
+    @State private var selectedDayTypes: [String] = []
+    @State private var customDayType: String = ""
+    @State private var selectedEquipment: String = "Free Weight"
+    @State private var isSessionConfigured: Bool = false
+    @State private var showEquipmentPicker: Bool = false
+
     // Tip card
     @State private var tipDismissed = false
     @AppStorage("quickLogTipDismissed") private var tipPermanentlyDismissed = false
+
+    private let dayTypes = [
+        "Chest", "Back", "Legs", "Shoulders", "Triceps", "Biceps",
+        "Arms", "Core", "Glutes", "Push Day", "Pull Day", "Full Body", "Cardio"
+    ]
+    private let equipmentTypes = ["Free Weight", "Machine", "Bodyweight"]
+    private let weightDeltas: [Double] = [0, 5, 10, 15, 20, 25]
+    private let repOptions = [5, 6, 8, 10, 12]
+
+    // Persistence keys
+    private let kWorkoutDayDate = "workoutDayDate"
+    private let kWorkoutDayTypes = "workoutDayTypes"
 
     // MARK: - Data
 
@@ -149,9 +174,9 @@ struct QuickLogView: View {
         if loggedSets.isEmpty && todayWorkoutMemory == nil {
             return "Start logging — it all stays together"
         }
-        if let result = todayWorkoutMemory.map({ WorkoutParser.shared.parse(text: $0.text) }),
-           let type = result.sessionType {
-            return "\(type) · tap Done when finished"
+        if !selectedDayTypes.isEmpty {
+            let label = selectedDayTypes.map { $0.replacingOccurrences(of: " Day", with: "") }.joined(separator: " + ")
+            return "\(label) · tap Done when finished"
         }
         return "Today's session · tap Done when finished"
     }
@@ -183,6 +208,13 @@ struct QuickLogView: View {
                 VStack(alignment: .leading, spacing: 16) {
 
                     if showTipCard { tipCard }
+
+                    if isSessionConfigured {
+                        sessionHeaderCard
+                    } else {
+                        workoutTypePickerCard
+                    }
+
                     if !priorExercises.isEmpty { todaySoFarCard }
                     if !loggedSets.isEmpty { liveSessionCard }
                     logASetCard
@@ -217,6 +249,7 @@ struct QuickLogView: View {
                 }
             }
             .onAppear {
+                loadTodaySession()
                 if let existing = todayWorkoutMemory {
                     let parsed = WorkoutParser.shared.parse(text: existing.text)
                     priorExercises = parsed.exercises
@@ -318,6 +351,120 @@ struct QuickLogView: View {
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.oceanTeal.opacity(0.2), lineWidth: 1))
+    }
+
+    // MARK: - Workout Type Picker (shown once per day)
+
+    private var workoutTypePickerCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("WHAT'S TODAY'S WORKOUT?")
+                .font(.custom("DMSans-Medium", size: 11))
+                .foregroundColor(.gray)
+                .tracking(0.5)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 90))], spacing: 8) {
+                ForEach(dayTypes, id: \.self) { dayType in
+                    let isSelected = selectedDayTypes.contains(dayType)
+                    Button {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            if isSelected {
+                                selectedDayTypes.removeAll { $0 == dayType }
+                            } else {
+                                selectedDayTypes.append(dayType)
+                            }
+                        }
+                    } label: {
+                        Text(dayType)
+                            .font(.custom("DMSans-Regular", size: 13))
+                            .foregroundColor(isSelected ? .white : .deepNavy)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(isSelected ? Color.oceanTeal : Color.mist)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(
+                                isSelected ? Color.clear : Color.black.opacity(0.06),
+                                lineWidth: 0.5
+                            ))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // Custom
+            HStack(spacing: 8) {
+                TextField("Custom (e.g. Upper Body)", text: $customDayType)
+                    .font(.custom("DMSans-Regular", size: 13))
+                    .foregroundColor(.deepNavy)
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .background(!customDayType.isEmpty ? Color.oceanTeal.opacity(0.08) : Color.mist)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(
+                        !customDayType.isEmpty ? Color.oceanTeal.opacity(0.35) : Color.clear,
+                        lineWidth: 1
+                    ))
+                if !customDayType.isEmpty {
+                    Button { customDayType = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.gray.opacity(0.4))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Button(action: startSession) {
+                Text(selectedDayTypes.isEmpty && customDayType.isEmpty ? "Skip & Start" : "Start Session")
+                    .font(.custom("DMSans-Medium", size: 15))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(Color.oceanTeal)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08), lineWidth: 0.5))
+    }
+
+    // MARK: - Session Header (shown after type is set)
+
+    private var sessionHeaderCard: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("TODAY'S SESSION")
+                    .font(.custom("DMSans-Medium", size: 11))
+                    .foregroundColor(.gray)
+                    .tracking(0.5)
+                Text(
+                    selectedDayTypes.isEmpty
+                        ? "Workout"
+                        : selectedDayTypes.map { $0.replacingOccurrences(of: " Day", with: "") }.joined(separator: " · ")
+                )
+                .font(.custom("DMSans-Medium", size: 16))
+                .foregroundColor(.deepNavy)
+            }
+            Spacer()
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    isSessionConfigured = false
+                }
+            } label: {
+                Text("Edit")
+                    .font(.custom("DMSans-Regular", size: 14))
+                    .foregroundColor(.oceanTeal)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Color.oceanTeal.opacity(0.08))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08), lineWidth: 0.5))
     }
 
     // MARK: - Today So Far Card
@@ -509,6 +656,52 @@ struct QuickLogView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
             }
+
+            // Equipment — collapsed by default
+            Divider()
+
+            VStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) { showEquipmentPicker.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Equipment")
+                            .font(.custom("DMSans-Regular", size: 13))
+                            .foregroundColor(.gray)
+                        if !showEquipmentPicker {
+                            Text("· \(selectedEquipment)")
+                                .font(.custom("DMSans-Regular", size: 13))
+                                .foregroundColor(.oceanTeal)
+                        }
+                        Spacer()
+                        Image(systemName: showEquipmentPicker ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.gray.opacity(0.5))
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if showEquipmentPicker {
+                    HStack(spacing: 8) {
+                        ForEach(equipmentTypes, id: \.self) { type in
+                            Button {
+                                selectedEquipment = type
+                                withAnimation(.easeOut(duration: 0.2)) { showEquipmentPicker = false }
+                            } label: {
+                                Text(type)
+                                    .font(.custom("DMSans-Regular", size: 13))
+                                    .foregroundColor(selectedEquipment == type ? .white : .deepNavy)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 9)
+                                    .background(selectedEquipment == type ? Color.oceanTeal : Color.mist)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
         }
         .padding(16)
         .background(Color.white)
@@ -547,52 +740,154 @@ struct QuickLogView: View {
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.oceanTeal.opacity(0.15), lineWidth: 0.5))
     }
 
-    // MARK: - Quick Add Chips
+    // MARK: - Quick Add
 
     private var quickAddSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("QUICK ADD")
-                .font(.custom("DMSans-Medium", size: 11))
-                .foregroundColor(.gray).tracking(0.5)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("QUICK ADD")
+                    .font(.custom("DMSans-Medium", size: 11))
+                    .foregroundColor(.gray).tracking(0.5)
+                if let ex = lastLoggedExercise {
+                    Text("· \(ex)")
+                        .font(.custom("DMSans-Regular", size: 11))
+                        .foregroundColor(.gray.opacity(0.7))
+                }
+                Spacer()
+            }
 
-            HStack(spacing: 8) {
-                chipButton("Same weight +1 rep") {
-                    guard let ex = lastLoggedExercise,
-                          let reps = lastLoggedReps,
-                          let w = lastLoggedWeight else { return }
-                    let text = "\(ex) \(Int(w))x\(reps + 1)"
-                    logRawText(text)
-                    updateLastSet(exercise: ex, weight: w, reps: reps + 1)
+            HStack(alignment: .top, spacing: 12) {
+
+                // Weight column
+                VStack(spacing: 6) {
+                    Text("Weight")
+                        .font(.custom("DMSans-Medium", size: 12))
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    ForEach(weightDeltas, id: \.self) { delta in
+                        Button {
+                            quickAddWeightDelta = delta
+                            quickAddManualWeight = ""
+                        } label: {
+                            Text(delta == 0 ? "Same" : "+\(Int(delta)) lb")
+                                .font(.custom("DMSans-Regular", size: 13))
+                                .foregroundColor(quickAddWeightDelta == delta && quickAddManualWeight.isEmpty ? .white : .deepNavy)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                                .background(quickAddWeightDelta == delta && quickAddManualWeight.isEmpty ? Color.oceanTeal : Color.mist)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    TextField("Custom lb", text: $quickAddManualWeight)
+                        .font(.custom("DMSans-Regular", size: 13))
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 9).padding(.horizontal, 8)
+                        .background(!quickAddManualWeight.isEmpty ? Color.oceanTeal.opacity(0.12) : Color.mist)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(
+                            !quickAddManualWeight.isEmpty ? Color.oceanTeal.opacity(0.4) : Color.clear,
+                            lineWidth: 1
+                        ))
+                        .onChange(of: quickAddManualWeight) { _, _ in
+                            if !quickAddManualWeight.isEmpty { quickAddWeightDelta = 0 }
+                        }
                 }
-                chipButton("+5 lb same reps") {
-                    guard let ex = lastLoggedExercise,
-                          let reps = lastLoggedReps,
-                          let w = lastLoggedWeight else { return }
-                    let text = "\(ex) \(Int(w + 5))x\(reps)"
-                    logRawText(text)
-                    updateLastSet(exercise: ex, weight: w + 5, reps: reps)
-                }
-                chipButton("Finish session") {
-                    speechManager.stopListening()
-                    finishSession()
-                    dismiss()
-                    onFinish?()
+
+                // Reps column
+                VStack(spacing: 6) {
+                    Text("Reps")
+                        .font(.custom("DMSans-Medium", size: 12))
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    ForEach(repOptions, id: \.self) { rep in
+                        Button {
+                            quickAddSelectedReps = rep
+                            quickAddManualReps = ""
+                        } label: {
+                            Text("\(rep) reps")
+                                .font(.custom("DMSans-Regular", size: 13))
+                                .foregroundColor(quickAddSelectedReps == rep && quickAddManualReps.isEmpty ? .white : .deepNavy)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                                .background(quickAddSelectedReps == rep && quickAddManualReps.isEmpty ? Color.oceanTeal : Color.mist)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    TextField("Custom reps", text: $quickAddManualReps)
+                        .font(.custom("DMSans-Regular", size: 13))
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 9).padding(.horizontal, 8)
+                        .background(!quickAddManualReps.isEmpty ? Color.oceanTeal.opacity(0.12) : Color.mist)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(
+                            !quickAddManualReps.isEmpty ? Color.oceanTeal.opacity(0.4) : Color.clear,
+                            lineWidth: 1
+                        ))
+                        .onChange(of: quickAddManualReps) { _, _ in
+                            if !quickAddManualReps.isEmpty { quickAddSelectedReps = nil }
+                        }
                 }
             }
+
+            Button(action: quickLogSet) {
+                Text("Log Set")
+                    .font(.custom("DMSans-Medium", size: 15))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(Color.oceanTeal)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
         }
+        .padding(16)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.black.opacity(0.08), lineWidth: 0.5))
     }
 
-    private func chipButton(_ label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(.custom("DMSans-Regular", size: 13))
-                .foregroundColor(.deepNavy)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(Color.white)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color.black.opacity(0.08), lineWidth: 0.5))
+    private func quickLogSet() {
+        guard let exercise = lastLoggedExercise else { return }
+
+        let finalWeight: Double
+        if !quickAddManualWeight.isEmpty, let mw = Double(quickAddManualWeight) {
+            finalWeight = mw
+        } else if let lw = lastLoggedWeight {
+            finalWeight = lw + quickAddWeightDelta
+        } else {
+            return
         }
+
+        let finalReps: Int
+        if !quickAddManualReps.isEmpty, let mr = Int(quickAddManualReps) {
+            finalReps = mr
+        } else if let sr = quickAddSelectedReps {
+            finalReps = sr
+        } else if let lr = lastLoggedReps {
+            finalReps = lr
+        } else {
+            return
+        }
+
+        let rawText = "\(exercise) \(Int(finalWeight))x\(finalReps)"
+        let text = selectedEquipment == "Machine" ? "[Machine] \(rawText)" : rawText
+        logRawText(text)
+        updateLastSet(exercise: exercise, weight: finalWeight, reps: finalReps)
+
+        quickAddWeightDelta = 0
+        quickAddSelectedReps = nil
+        quickAddManualWeight = ""
+        quickAddManualReps = ""
     }
+
     // MARK: - Helpers
 
     private func cardioIcon(_ name: String) -> String {
@@ -606,12 +901,69 @@ struct QuickLogView: View {
         default: return "stopwatch"
         }
     }
+
+    // MARK: - Session Persistence
+
+    private func todayDateString() -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        return fmt.string(from: Date())
+    }
+
+    private func loadTodaySession() {
+        let storedDate = UserDefaults.standard.string(forKey: kWorkoutDayDate)
+        guard storedDate == todayDateString(),
+              let types = UserDefaults.standard.array(forKey: kWorkoutDayTypes) as? [String],
+              !types.isEmpty else {
+            return
+        }
+        selectedDayTypes = types
+        isSessionConfigured = true
+        rebuildSessionTitle()
+    }
+
+    private func saveTodaySession() {
+        UserDefaults.standard.set(todayDateString(), forKey: kWorkoutDayDate)
+        UserDefaults.standard.set(selectedDayTypes, forKey: kWorkoutDayTypes)
+    }
+
+    private func startSession() {
+        if !customDayType.isEmpty && !selectedDayTypes.contains(customDayType) {
+            selectedDayTypes.append(customDayType)
+            customDayType = ""
+        }
+        saveTodaySession()
+        rebuildSessionTitle()
+        withAnimation(.easeOut(duration: 0.2)) {
+            isSessionConfigured = true
+        }
+    }
+
+    private func rebuildSessionTitle() {
+        let dateStr = Date().formatted(.dateTime.month(.abbreviated).day())
+        if !selectedDayTypes.isEmpty {
+            let label = selectedDayTypes.map { $0.replacingOccurrences(of: " Day", with: "") }.joined(separator: " + ")
+            sessionTitle = "\(label) · \(dateStr)"
+        } else {
+            sessionTitle = WorkoutSessionManager.sessionTitle()
+        }
+        if let memory = todayWorkoutMemory {
+            var lines = memory.text.components(separatedBy: "\n")
+            if !lines.isEmpty {
+                lines[0] = sessionTitle
+                memory.text = lines.joined(separator: "\n")
+                memory.updatedAt = Date()
+            }
+        }
+    }
+
     // MARK: - Log Entry
 
     private func logEntry() {
         speechManager.stopListening()
-        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        let raw = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return }
+        let text = selectedEquipment == "Machine" ? "[Machine] \(raw)" : raw
         logRawText(text)
         inputText = ""
         speechManager.transcribedText = ""
@@ -633,7 +985,6 @@ struct QuickLogView: View {
         loggedSets.append(loggedSet)
         appendToMemory(text: text)
 
-        // Update priorExercises to reflect the newly added set
         if let existing = todayWorkoutMemory {
             let parsed = WorkoutParser.shared.parse(text: existing.text)
             priorExercises = parsed.exercises
@@ -689,7 +1040,9 @@ struct QuickLogView: View {
                 modelContext.delete(ping)
                 Task { await SupabaseSyncService.shared.deletePing(id: ping.id) }
             }
+            let memoryId = memory.id
             modelContext.delete(memory)
+            SupabaseSyncService.shared.scheduleDelete(id: memoryId)
             loggedSets = []
             priorExercises = []
         } else {

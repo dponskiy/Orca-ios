@@ -14,6 +14,8 @@ struct CalendarTabView: View {
     @Query(sort: \Memory.createdAt, order: .reverse) private var memories: [Memory]
     @Query private var pings: [Ping]
     @Query private var echos: [Echo]
+    @Query private var allSharedSpaces: [SharedSpace]
+    @Query private var allSharedEvents: [SharedEvent]
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthService.self) private var authService
 
@@ -24,6 +26,7 @@ struct CalendarTabView: View {
     @State private var snoozeMemory: Memory?
     @State private var showSnoozeSheet = false
     @State private var showWeatherDetail = false
+    @State private var showSharedSpaces = false
     @StateObject private var weatherService = WeatherService.shared
     @StateObject private var locationService = LocationService.shared
 
@@ -179,6 +182,34 @@ struct CalendarTabView: View {
         }
     }
 
+    private func sharedEventCoversDate(_ event: SharedEvent, date: Date) -> Bool {
+        guard let start = event.date else { return false }
+        if let end = event.endDate {
+            return date >= calendar.startOfDay(for: start) && date <= calendar.startOfDay(for: end)
+        }
+        return calendar.isDate(start, inSameDayAs: date)
+    }
+
+    private func hasSharedEvents(for date: Date) -> Bool {
+        let userId = authService.userId?.uuidString ?? ""
+        let mySpaceIds = Set(allSharedSpaces.filter {
+            $0.createdByUserId == userId || $0.invitedUserId == userId
+        }.map { $0.id })
+        return allSharedEvents.contains {
+            mySpaceIds.contains($0.spaceId) && sharedEventCoversDate($0, date: date)
+        }
+    }
+
+    private var selectedDateSharedEvents: [SharedEvent] {
+        let userId = authService.userId?.uuidString ?? ""
+        let mySpaceIds = Set(allSharedSpaces.filter {
+            $0.createdByUserId == userId || $0.invitedUserId == userId
+        }.map { $0.id })
+        return allSharedEvents.filter {
+            mySpaceIds.contains($0.spaceId) && sharedEventCoversDate($0, date: selectedDate)
+        }.sorted { ($0.date ?? $0.createdAt) < ($1.date ?? $1.createdAt) }
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -208,6 +239,7 @@ struct CalendarTabView: View {
             .sheet(item: $editingMemory) { memory in MemoryEditView(memory: memory) }
             .sheet(isPresented: $showWeatherDetail) { WeatherDetailView() }
             .sheet(item: $detailMemory) { memory in MemoryDetailView(memory: memory) }
+            .sheet(isPresented: $showSharedSpaces) { SharedSpacesHubView() }
             .sheet(isPresented: $showSnoozeSheet) {
                 if let memory = snoozeMemory {
                     SnoozeSheet(memory: memory) {
@@ -344,6 +376,8 @@ struct CalendarTabView: View {
         let heatColor = echoName.map { EchoColors.color(for: $0) }
         let heatOpacity = echoName != nil ? EchoColors.heatmapOpacity(for: count) : 0.0
 
+        let hasShared = hasSharedEvents(for: date)
+
         let hasPings = pings.contains { ping in
             guard ping.isActive else { return false }
             guard let _ = memories.first(where: { $0.id == ping.memoryId }) else { return false }
@@ -393,6 +427,9 @@ struct CalendarTabView: View {
                     }
                     if hasMemories && !hasActionable && !hasPings {
                         Circle().fill(isSelected ? Color.white.opacity(0.5) : Color.seafoam).frame(width: 4, height: 4)
+                    }
+                    if hasShared {
+                        Circle().fill(isSelected ? Color.white.opacity(0.8) : Color(red: 0.47, green: 0.34, blue: 0.78)).frame(width: 4, height: 4)
                     }
                 }
                 .frame(height: 4)
@@ -444,7 +481,7 @@ struct CalendarTabView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                let total = selectedDateMemories.count + selectedDatePings.count
+                let total = selectedDateMemories.count + selectedDatePings.count + selectedDateSharedEvents.count
                 if total > 0 {
                     Text("\(total) \(total == 1 ? "item" : "items")")
                         .font(.custom("DMMono-Regular", size: 13))
@@ -455,7 +492,7 @@ struct CalendarTabView: View {
             .padding(.top, 16)
             .padding(.bottom, 8)
 
-            if selectedDateMemories.isEmpty && selectedDatePings.isEmpty {
+            if selectedDateMemories.isEmpty && selectedDatePings.isEmpty && selectedDateSharedEvents.isEmpty {
                 VStack(spacing: 12) {
                     Spacer().frame(height: 20)
                     Image(systemName: "calendar")
@@ -485,7 +522,7 @@ struct CalendarTabView: View {
                                         }
                                         modelContext.delete(memory)
                                         SpotlightService.shared.removeMemory(id: id)
-                                        Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+                                        SupabaseSyncService.shared.scheduleDelete(id: id)
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
@@ -510,12 +547,54 @@ struct CalendarTabView: View {
                                     }
                                     modelContext.delete(memory)
                                     SpotlightService.shared.removeMemory(id: id)
-                                    Task { await SupabaseSyncService.shared.deleteMemory(id: id) }
+                                    SupabaseSyncService.shared.scheduleDelete(id: id)
                                 } label: {
                                     Label("Delete", systemImage: "trash")
                                 }
                                 .tint(.red)
                             }
+                    }
+
+                    ForEach(selectedDateSharedEvents) { event in
+                        let space = allSharedSpaces.first { $0.id == event.spaceId }
+                        let partnerName = space.flatMap { $0.spaceName.isEmpty ? nil : $0.spaceName } ?? "Shared Space"
+                        Button { showSharedSpaces = true } label: {
+                            HStack(spacing: 0) {
+                                Rectangle()
+                                    .fill(Color(red: 0.47, green: 0.34, blue: 0.78))
+                                    .frame(width: 3)
+                                HStack(spacing: 12) {
+                                    Image(systemName: "person.2.fill")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(Color(red: 0.47, green: 0.34, blue: 0.78))
+                                        .frame(width: 24)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(event.title)
+                                            .font(.custom("DMSans-Regular", size: 15))
+                                            .foregroundColor(.deepNavy)
+                                            .lineLimit(1)
+                                        Text("Shared · \(partnerName)")
+                                            .font(.custom("DMSans-Regular", size: 12))
+                                            .foregroundColor(.gray)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.gray.opacity(0.4))
+                                }
+                                .padding(12)
+                            }
+                            .background(Color.white)
+                            .clipShape(UnevenRoundedRectangle(
+                                topLeadingRadius: 2, bottomLeadingRadius: 2,
+                                bottomTrailingRadius: 12, topTrailingRadius: 12
+                            ))
+                            .shadow(color: .black.opacity(0.03), radius: 4, y: 2)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 20, bottom: 4, trailing: 20))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                     }
                 }
                 .listStyle(.plain)

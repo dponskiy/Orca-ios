@@ -23,6 +23,9 @@ struct AddGiftItemView: View {
     @State private var url = ""
     @State private var selectedMemoryId: UUID? = nil
     @State private var showMemoryPicker = false
+    @State private var fetchedImageURL: URL? = nil
+    @State private var isFetchingURL = false
+    @State private var urlFetchTask: Task<Void, Never>? = nil
 
     var isEditing: Bool { existingItem != nil }
     var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -80,13 +83,45 @@ struct AddGiftItemView: View {
 
                     // Product URL
                     fieldCard {
-                        fieldLabel("PRODUCT LINK (OPTIONAL)")
-                        TextField("https://amazon.com/...", text: $url)
+                        HStack {
+                            fieldLabel("PRODUCT LINK (OPTIONAL)")
+                            Spacer()
+                            if isFetchingURL {
+                                ProgressView().scaleEffect(0.7).tint(.oceanTeal)
+                            } else if fetchedImageURL != nil {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.oceanTeal)
+                            }
+                        }
+                        TextField("Paste a link to auto-fill name & price", text: $url)
                             .font(.custom("DMSans-Regular", size: 14))
                             .foregroundColor(.deepNavy)
                             .keyboardType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .onChange(of: url) { _, newURL in
+                                urlFetchTask?.cancel()
+                                fetchedImageURL = nil
+                                guard !newURL.isEmpty, newURL.hasPrefix("http") else { return }
+                                urlFetchTask = Task {
+                                    try? await Task.sleep(nanoseconds: 800_000_000)
+                                    guard !Task.isCancelled else { return }
+                                    await fetchOGData(from: newURL)
+                                }
+                            }
+
+                        if let imgURL = fetchedImageURL {
+                            AsyncImage(url: imgURL) { phase in
+                                if case .success(let img) = phase {
+                                    img.resizable().aspectRatio(contentMode: .fill)
+                                        .frame(maxWidth: .infinity).frame(height: 120)
+                                        .clipped()
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .padding(.top, 8)
+                                } else { EmptyView() }
+                            }
+                        }
                     }
 
                     // Memory link
@@ -218,6 +253,56 @@ struct AddGiftItemView: View {
         status = item.status
         url = item.url ?? ""
         selectedMemoryId = item.linkedMemoryId
+        fetchedImageURL = item.imageURL.flatMap { URL(string: $0) }
+    }
+
+    @MainActor
+    private func fetchOGData(from urlString: String) async {
+        guard let url = URL(string: urlString) else { return }
+        isFetchingURL = true
+        defer { isFetchingURL = false }
+
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 8
+
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
+              let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
+        else { return }
+
+        // Extract OG meta tags
+        let ogTitle = ogMetaContent(html: html, property: "og:title")
+        let ogImage = ogMetaContent(html: html, property: "og:image")
+        let ogPrice = ogMetaContent(html: html, property: "og:price:amount")
+            ?? ogMetaContent(html: html, property: "product:price:amount")
+            ?? ogMetaContent(html: html, property: "twitter:data1")
+
+        if let img = ogImage, let imgURL = URL(string: img) {
+            fetchedImageURL = imgURL
+        }
+        if name.trimmingCharacters(in: .whitespaces).isEmpty, let title = ogTitle {
+            name = title
+        }
+        if priceText.isEmpty, let rawPrice = ogPrice {
+            // strip currency symbols, keep digits and decimal
+            let cleaned = rawPrice.components(separatedBy: CharacterSet(charactersIn: "0123456789.").inverted).joined()
+            if !cleaned.isEmpty { priceText = cleaned }
+        }
+    }
+
+    private func ogMetaContent(html: String, property: String) -> String? {
+        let patterns = [
+            "property=\"\(property)\"[^>]*content=\"([^\"]+)\"",
+            "content=\"([^\"]+)\"[^>]*property=\"\(property)\""
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+               let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+               let range = Range(match.range(at: 1), in: html) {
+                return String(html[range])
+            }
+        }
+        return nil
     }
 
     private func infoCard(label: String, value: String) -> some View {
@@ -270,12 +355,14 @@ struct AddGiftItemView: View {
             item.price = Double(priceText)
             item.status = status
             item.url = url.isEmpty ? nil : url
+            item.imageURL = fetchedImageURL?.absoluteString
             item.linkedMemoryId = selectedMemoryId
         } else {
             let item = GiftItem(personId: person.id, name: trimmed, occasion: occasion)
             item.price = Double(priceText)
             item.status = status
             item.url = url.isEmpty ? nil : url
+            item.imageURL = fetchedImageURL?.absoluteString
             item.linkedMemoryId = selectedMemoryId
             modelContext.insert(item)
         }
