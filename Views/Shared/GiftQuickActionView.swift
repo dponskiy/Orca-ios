@@ -22,6 +22,7 @@ struct GiftQuickActionView: View {
     @State private var newPersonName = ""
     @FocusState private var newPersonFocused: Bool
     @FocusState private var searchFocused: Bool
+    @AppStorage("infoBannerDismissed_gifts") private var bannerDismissed = false
 
     private var inGiftList: Bool { selectedPerson != nil || isMyWishlist }
 
@@ -64,8 +65,32 @@ struct GiftQuickActionView: View {
 
     // MARK: - Person Picker
 
+    private var giftsInfoBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 13))
+                .foregroundColor(.oceanTeal.opacity(0.7))
+                .padding(.top, 1)
+            Text("Track gift ideas, budgets, and wishlists for the people in your life. Tap a person to manage their list, or open your own wishlist.")
+                .font(.custom("DMSans-Regular", size: 12))
+                .foregroundColor(.gray)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button { withAnimation { bannerDismissed = true } } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.gray.opacity(0.5))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.mist.opacity(0.6))
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
     private var personPickerView: some View {
         VStack(spacing: 0) {
+            if !bannerDismissed { giftsInfoBanner; Divider() }
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14))

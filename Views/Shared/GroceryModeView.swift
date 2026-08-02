@@ -92,6 +92,7 @@ struct GroceryModeView: View {
     @State private var speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     @State private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     @State private var recognitionTask: SFSpeechRecognitionTask?
+    @AppStorage("infoBannerDismissed_shopping") private var bannerDismissed = false
 
     private let knownCompounds: Set<String> = [
         "olive oil", "greek yogurt", "plain yogurt", "whole milk", "skim milk", "oat milk",
@@ -927,8 +928,32 @@ struct GroceryModeView: View {
 
     // MARK: - Selection View
 
+    private var shoppingInfoBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 13))
+                .foregroundColor(.oceanTeal.opacity(0.7))
+                .padding(.top, 1)
+            Text("Import recipes from URLs or cookbooks — ingredients auto-import and are organized by aisle so you can shop faster.")
+                .font(.custom("DMSans-Regular", size: 12))
+                .foregroundColor(.gray)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button { withAnimation { bannerDismissed = true } } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.gray.opacity(0.5))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.mist.opacity(0.6))
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
     private var selectionView: some View {
         VStack(spacing: 0) {
+            if !bannerDismissed { shoppingInfoBanner; Divider() }
             shoppingTabPicker
 
             if shoppingTab == .discover {
@@ -1163,11 +1188,6 @@ struct GroceryModeView: View {
                                     .font(.system(size: 15))
                                 Text(canStartShopping ? "Start Shopping" : "Add items to start")
                                     .font(.custom("DMSans-Medium", size: 16))
-                                if canStartShopping && totalItems > 0 {
-                                    Text("· \(totalItems)")
-                                        .font(.custom("DMMono-Regular", size: 13))
-                                        .opacity(0.75)
-                                }
                             }
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)

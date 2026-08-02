@@ -771,7 +771,12 @@ struct DashboardView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Spacer().frame(height: 40)
-            FinIcon().fill(Color.seafoam.opacity(0.3)).frame(width: 60, height: 72)
+            Image("OrcaLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .opacity(0.5)
             Text("Drop your first memory").font(.custom("DMSans-Medium", size: 18)).foregroundColor(.deepNavy)
             Text("Tap the fin button below to get started").font(.custom("DMSans-Regular", size: 14)).foregroundColor(.gray)
         }

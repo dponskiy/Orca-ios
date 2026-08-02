@@ -602,8 +602,24 @@ class SonarEngine {
             return results
         }
 
-        // Only keep items that start with an action verb or are short enough to be a clear task
-        let filtered = rawItems.filter { item in
+        // For items that don't start with a verb (e.g. "tomorrow at 4pm call the vet"),
+        // extract the verb-starting portion so the task isn't lost to a date prefix.
+        let rescued = rawItems.flatMap { item -> [String] in
+            let itemLower = item.lowercased()
+            if actionVerbs.contains(where: { itemLower.hasPrefix($0) }) {
+                return [item]
+            }
+            for verb in sortedVerbs {
+                if let range = item.range(of: " \(verb)", options: .caseInsensitive) {
+                    let extracted = String(item[item.index(after: range.lowerBound)...]).trimmingCharacters(in: .whitespaces)
+                    if !extracted.isEmpty { return [extracted] }
+                }
+            }
+            return []
+        }
+
+        // Only keep items that start with an action verb and are short enough to be a clear task
+        let filtered = rescued.filter { item in
             let itemLower = item.lowercased()
             let startsWithVerb = actionVerbs.contains { itemLower.hasPrefix($0) }
             let isShortTask = item.split(separator: " ").count <= 8

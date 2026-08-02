@@ -23,6 +23,7 @@ struct WatchModeView: View {
     @State private var detailBookCoverURL: URL? = nil
     @State private var selectedGenre: TMDBService.DiscoverGenre? = nil
     @State private var completedTypeFilter: String? = nil
+    @AppStorage("infoBannerDismissed_media") private var bannerDismissed = false
 
     enum Tab { case queue, completed, discover }
 
@@ -58,6 +59,7 @@ struct WatchModeView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 tabPicker
+                if !bannerDismissed { mediaInfoBanner }
 
                 if selectedTab == .queue {
                     queueContent
@@ -144,6 +146,31 @@ struct WatchModeView: View {
                 existingPosterURL: item.posterURL ?? detailBookCoverURL
             )
         }
+    }
+
+    // MARK: - Info Banner
+
+    private var mediaInfoBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 13))
+                .foregroundColor(.oceanTeal.opacity(0.7))
+                .padding(.top, 1)
+            Text("Queue movies, shows, and books you want to watch or read. Rate them when you're done to build your history.")
+                .font(.custom("DMSans-Regular", size: 12))
+                .foregroundColor(.gray)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button { withAnimation { bannerDismissed = true } } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.gray.opacity(0.5))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.mist.opacity(0.6))
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     // MARK: - Tab Picker

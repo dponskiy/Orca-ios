@@ -30,12 +30,14 @@ struct CollectiblesView: View {
     @State private var showSetBrowser = false
     @State private var triggerPokemonShare = false
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("infoBannerDismissed_collectibles") private var bannerDismissed = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {
                     categoryPicker
+                    if !bannerDismissed { collectiblesInfoBanner }
                     tapHintBanner
 
                     switch selectedCategory {
@@ -73,6 +75,31 @@ struct CollectiblesView: View {
             .sheet(isPresented: $showSetBrowser) { TCGSetBrowserView() }
             .sheet(isPresented: $showSearch) { TCGSearchView() }
         }
+    }
+
+    // MARK: - Info Banner
+
+    private var collectiblesInfoBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 13))
+                .foregroundColor(.oceanTeal.opacity(0.7))
+                .padding(.top, 1)
+            Text("Track your Pokémon cards, Lego sets, Smiski, and more. See your collection's estimated value all in one place.")
+                .font(.custom("DMSans-Regular", size: 12))
+                .foregroundColor(.gray)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button { withAnimation { bannerDismissed = true } } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.gray.opacity(0.5))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.mist.opacity(0.6))
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     // MARK: - Tap hint

@@ -218,10 +218,12 @@ struct SettingsView: View {
                     HStack {
                         Spacer()
                         VStack(spacing: 4) {
-                            FinIcon()
-                                .fill(Color.seafoam.opacity(0.4))
-                                .frame(width: 24, height: 28)
-                            Text("Orca v2.8")
+                            Image("OrcaLogo")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 32, height: 32)
+                                .clipShape(RoundedRectangle(cornerRadius: 7))
+                            Text("Orca v2.8.1")
                                 .font(.custom("DMMono-Regular", size: 12))
                                 .foregroundColor(.gray)
                             Text("\(memories.count) memories saved")

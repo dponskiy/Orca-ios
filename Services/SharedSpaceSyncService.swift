@@ -117,10 +117,11 @@ class SharedSpaceSyncService {
                 .value
 
             for row in pending {
-                // Accept invite — link our userId
+                // Accept invite — link our userId and bump updated_at so creator's realtime fires
+                let now = ISO8601DateFormatter().string(from: Date())
                 try await supabase
                     .from("shared_spaces")
-                    .update(["invited_user_id": userId.uuidString, "status": "active"])
+                    .update(["invited_user_id": userId.uuidString, "status": "active", "updated_at": now])
                     .eq("id", value: row.id.uuidString)
                     .execute()
 
@@ -135,6 +136,10 @@ class SharedSpaceSyncService {
                     space.createdAt = row.created_at
                     space.updatedAt = Date()
                     context.insert(space)
+                } else if let local = existingById[row.id] {
+                    local.invitedUserId = userId.uuidString
+                    local.status = .active
+                    local.updatedAt = Date()
                 }
             }
         }

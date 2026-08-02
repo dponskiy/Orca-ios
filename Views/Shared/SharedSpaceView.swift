@@ -323,6 +323,7 @@ struct AddSharedEventView: View {
     @State private var hasTime = false
     @State private var startTime = Date()
     @State private var isLoading = false
+    @State private var saveError: String? = nil
     @FocusState private var titleFocused: Bool
 
     var body: some View {
@@ -403,6 +404,14 @@ struct AddSharedEventView: View {
             .onAppear { titleFocused = true }
         }
         .presentationDetents([.medium])
+        .alert("Couldn't Add Event", isPresented: Binding(
+            get: { saveError != nil },
+            set: { if !$0 { saveError = nil } }
+        )) {
+            Button("OK", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "")
+        }
     }
 
     private func combine(date: Date, time: Date) -> Date {
@@ -421,13 +430,14 @@ struct AddSharedEventView: View {
         let finalStartDate = hasTime ? combine(date: startDate, time: startTime) : Calendar.current.startOfDay(for: startDate)
 
         Task {
-            if let event = try? await SharedSpaceSyncService.shared.createEvent(
-                spaceId: space.id,
-                title: title.trimmingCharacters(in: .whitespaces),
-                date: hasDate ? finalStartDate : nil,
-                endDate: (hasDate && hasEndDate) ? endDate : nil,
-                userId: userId
-            ) {
+            do {
+                let event = try await SharedSpaceSyncService.shared.createEvent(
+                    spaceId: space.id,
+                    title: title.trimmingCharacters(in: .whitespaces),
+                    date: hasDate ? finalStartDate : nil,
+                    endDate: (hasDate && hasEndDate) ? endDate : nil,
+                    userId: userId
+                )
                 // Shared space events — add if sync enabled, or trigger one-time prompt
                 if hasDate {
                     if CalendarService.shared.syncEnabled && CalendarService.shared.isAuthorized {
@@ -438,7 +448,6 @@ struct AddSharedEventView: View {
                             isAllDay: !hasTime
                         )
                     } else if !CalendarService.shared.promptShown {
-                        // First time seeing any date-based item — fire the prompt
                         NotificationCenter.default.post(
                             name: .calendarSyncCheck,
                             object: nil,
@@ -448,13 +457,15 @@ struct AddSharedEventView: View {
                 }
                 await MainActor.run {
                     dismiss()
-                    // Small delay so the sheet dismiss animates before detail opens
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                         onCreated?(event)
                     }
                 }
-            } else {
-                await MainActor.run { isLoading = false }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    saveError = "Couldn't add event. The shared space may still be syncing — try again in a moment."
+                }
             }
         }
     }

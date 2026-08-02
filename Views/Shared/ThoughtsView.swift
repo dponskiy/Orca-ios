@@ -29,6 +29,7 @@ struct ThoughtsView: View {
     /// One-time swipe hint: shows a brief label the first time the list has entries
     @AppStorage("thoughtsSwipeHintShown") private var swipeHintShown = false
     @State private var showSwipeHint = false
+    @AppStorage("infoBannerDismissed_thoughts") private var bannerDismissed = false
 
     private let speechManager = ThoughtsSpeechManager()
 
@@ -76,8 +77,7 @@ struct ThoughtsView: View {
             VStack(spacing: 0) {
                 tabStrip
                 Divider()
-                thoughtsInfoBanner
-                Divider()
+                if !bannerDismissed { thoughtsInfoBanner; Divider() }
 
                 if entriesForSelectedTab.isEmpty {
                     emptyState
@@ -213,14 +213,21 @@ struct ThoughtsView: View {
     // MARK: - Thoughts Info Banner
 
     private var thoughtsInfoBanner: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: "info.circle")
                 .font(.system(size: 13))
                 .foregroundColor(.oceanTeal.opacity(0.7))
+                .padding(.top, 1)
             Text("Thoughts is your free-form notebook. Notes here aren't categorized into Echoes or turned into reminders — just write freely.")
                 .font(.custom("DMSans-Regular", size: 12))
                 .foregroundColor(.gray)
                 .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button { withAnimation { bannerDismissed = true } } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.gray.opacity(0.5))
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
