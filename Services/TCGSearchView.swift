@@ -36,7 +36,7 @@ struct TCGSearchView: View {
                         .focused($searchFocused)
                         .onSubmit { Task { await service.search(query: query) } }
                         .onChange(of: query) { _, val in
-                            if val.isEmpty { service.searchResults = [] }
+                            if val.isEmpty { service.clearSearch() }
                         }
                     if service.isSearching {
                         ProgressView().scaleEffect(0.8).tint(.oceanTeal)
@@ -53,17 +53,65 @@ struct TCGSearchView: View {
                 .padding(16)
                 .submitLabel(.search)
 
-                if service.searchResults.isEmpty && !service.isSearching {
+                if service.isSearching {
+                    Spacer()
+                    ProgressView().tint(.oceanTeal).scaleEffect(1.3)
+                    Spacer()
+                } else if service.searchFailed {
+                    searchError
+                } else if query.isEmpty || service.searchResults.isEmpty && service.lastSearchQuery.isEmpty {
                     emptySearch
+                } else if service.searchResults.isEmpty {
+                    noResults
                 } else {
                     ScrollView {
                         LazyVGrid(columns: columns, spacing: 12) {
                             ForEach(service.searchResults) { card in
                                 searchCard(card)
+                                    .onAppear {
+                                        // Start fetching next page when within 6 cards of the end
+                                        let results = service.searchResults
+                                        if let idx = results.firstIndex(where: { $0.id == card.id }),
+                                           idx >= results.count - 6,
+                                           results.count < service.searchTotalCount {
+                                            Task { await service.searchMore() }
+                                        }
+                                    }
                             }
                         }
                         .padding(.horizontal, 16)
-                        .padding(.bottom, 30)
+
+                        // Bottom indicator — always tappable when cards remain, so a
+                        // failed page fetch can be retried. Auto-scroll can't recover
+                        // on its own: the cards that trigger it are already on screen.
+                        if service.isLoadingMore {
+                            ProgressView()
+                                .tint(.oceanTeal)
+                                .padding(.vertical, 20)
+                        } else if service.searchResults.count < service.searchTotalCount {
+                            let remaining = service.searchTotalCount - service.searchResults.count
+                            Button {
+                                Task { await service.searchMore() }
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: service.loadMoreFailed
+                                          ? "arrow.clockwise" : "chevron.down")
+                                        .font(.system(size: 10, weight: .semibold))
+                                    Text(service.loadMoreFailed
+                                         ? "Couldn't load — tap to retry"
+                                         : "Load \(remaining) more")
+                                        .font(.custom("DMSans-Medium", size: 13))
+                                }
+                                .foregroundColor(service.loadMoreFailed ? .coral : .oceanTeal)
+                                .padding(.horizontal, 18).padding(.vertical, 9)
+                                .background((service.loadMoreFailed ? Color.coral : Color.oceanTeal).opacity(0.1))
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.vertical, 16)
+                        }
+
+                        Spacer().frame(height: 16)
                     }
                 }
             }
@@ -166,6 +214,7 @@ struct TCGSearchView: View {
             rarity: card.rarity
         )
         tcgCard.statusRaw = status
+        tcgCard.types = card.types
         tcgCard.marketPrice = card.marketPrice
         tcgCard.lowPrice = card.lowPrice
         tcgCard.highPrice = card.highPrice
@@ -175,7 +224,7 @@ struct TCGSearchView: View {
         if let userId = authService.userId { Task { await SupabaseSyncService.shared.pushTCGCard(tcgCard, userId: userId) } }
     }
 
-    // MARK: - Empty State
+    // MARK: - States
 
     private var emptySearch: some View {
         VStack(spacing: 16) {
@@ -189,6 +238,49 @@ struct TCGSearchView: View {
             Text("Try \"Charizard\", \"Pikachu\", or a set name")
                 .font(.custom("DMSans-Regular", size: 14))
                 .foregroundColor(.gray)
+            Spacer()
+        }
+    }
+
+    private var noResults: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 36))
+                .foregroundColor(.gray.opacity(0.3))
+            Text("No cards found")
+                .font(.custom("DMSans-Medium", size: 17))
+                .foregroundColor(.deepNavy)
+            Text("Try a different name or spelling")
+                .font(.custom("DMSans-Regular", size: 14))
+                .foregroundColor(.gray)
+            Spacer()
+        }
+    }
+
+    private var searchError: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 36))
+                .foregroundColor(.gray.opacity(0.3))
+            Text("Search failed")
+                .font(.custom("DMSans-Medium", size: 17))
+                .foregroundColor(.deepNavy)
+            Text("Check your connection and try again")
+                .font(.custom("DMSans-Regular", size: 14))
+                .foregroundColor(.gray)
+            Button {
+                Task { await service.search(query: query) }
+            } label: {
+                Text("Retry")
+                    .font(.custom("DMSans-Medium", size: 15))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 11)
+                    .background(Color.oceanTeal)
+                    .clipShape(Capsule())
+            }
             Spacer()
         }
     }

@@ -71,7 +71,82 @@ class TMDBService {
     var isGenreLoading = false
 
     // keyed by "title|||type" → poster URL (nil = not found, absent = not fetched yet)
-    var posterCache: [String: URL?] = [:]
+    var posterCache: [String: URL?] = [:] {
+        didSet { schedulePosterCacheSave() }
+    }
+
+    // User-chosen posters ("title|||type" → URL) always win over search results.
+    // Title search takes the first hit, which is wrong for remakes and generic
+    // titles; nothing can detect that automatically, so this is the manual override.
+    private(set) var posterOverrides: [String: URL] = [:]
+
+    func setPosterOverride(title: String, type: String, url: URL) {
+        posterOverrides[cacheKey(title: title, type: type)] = url
+        savePosterCache()
+    }
+
+    func clearPosterOverride(title: String, type: String) {
+        posterOverrides.removeValue(forKey: cacheKey(title: title, type: type))
+        savePosterCache()
+    }
+
+    // MARK: - Poster cache persistence
+    //
+    // Kept in a local file rather than on WatchlistItem: no schema/sync migration,
+    // and a bad match never propagates to the user's other devices. Only resolved
+    // posters are written — "not found" stays unsaved so a dropped connection
+    // doesn't blank an item permanently.
+
+    private var posterCacheSaveTask: Task<Void, Never>?
+
+    private static var cacheFileURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("orca_poster_cache.json")
+    }
+
+    private struct PosterCacheFile: Codable {
+        var posters: [String: String]
+        var overrides: [String: String]
+    }
+
+    func loadPosterCache() {
+        guard let url = Self.cacheFileURL,
+              let data = try? Data(contentsOf: url),
+              let file = try? JSONDecoder().decode(PosterCacheFile.self, from: data) else { return }
+        var restored: [String: URL?] = [:]
+        for (key, value) in file.posters {
+            if let u = URL(string: value) { restored[key] = u }
+        }
+        posterOverrides = file.overrides.compactMapValues { URL(string: $0) }
+        posterCache = restored   // assigned last; its didSet reschedules a harmless save
+    }
+
+    private func schedulePosterCacheSave() {
+        // Coalesce — ensurePosters writes many entries in a burst
+        posterCacheSaveTask?.cancel()
+        posterCacheSaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.savePosterCache() }
+        }
+    }
+
+    private func savePosterCache() {
+        guard let url = Self.cacheFileURL else { return }
+        // Only persist hits — misses retry on next launch
+        var posters: [String: String] = [:]
+        for (key, value) in posterCache {
+            if let v = value { posters[key] = v.absoluteString }
+        }
+        let file = PosterCacheFile(
+            posters: posters,
+            overrides: posterOverrides.mapValues { $0.absoluteString }
+        )
+        guard let data = try? JSONEncoder().encode(file) else { return }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: url, options: .atomic)
+    }
 
     // keyed by book title → cover URL for discover cards that had no cover_i
     var bookCoverCache: [String: URL?] = [:]
@@ -118,7 +193,7 @@ class TMDBService {
     private func fetchTrendingBooks() async -> [TrendingBook] {
         guard let url = URL(string: "https://openlibrary.org/trending/weekly.json?limit=12") else { return [] }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let data = await timedData(from: url) else { return [] }
             let response = try JSONDecoder().decode(OLTrendingResponse.self, from: data)
             return response.works.compactMap { work in
                 guard let title = work.title else { return nil }
@@ -173,10 +248,45 @@ class TMDBService {
     }
 
     func posterURL(title: String, type: String) -> URL?? {
-        posterCache[cacheKey(title: title, type: type)]
+        let key = cacheKey(title: title, type: type)
+        if let override = posterOverrides[key] { return override }
+        return posterCache[key]
+    }
+
+    // All candidate posters for a title — powers the "change poster" picker
+    func posterOptions(title: String, type: String) async -> [URL] {
+        guard type != "book" else { return [] }
+        let endpoint = type == "movie" ? "search/movie" : "search/tv"
+        var components = URLComponents(string: "\(baseURL)/\(endpoint)")
+        components?.queryItems = [
+            URLQueryItem(name: "query", value: cleanTitle(title)),
+            URLQueryItem(name: "page", value: "1")
+        ]
+        guard let url = components?.url else { return [] }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(Config.tmdbReadToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "accept")
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
+              let response = try? JSONDecoder().decode(TMDBResponse.self, from: data) else { return [] }
+        return response.results.compactMap { item in
+            item.poster_path.flatMap { URL(string: "https://image.tmdb.org/t/p/w342\($0)") }
+        }
     }
 
     private func cacheKey(title: String, type: String) -> String { "\(title)|||\(type)" }
+
+    // MARK: - Timed fetch
+    //
+    // Book sources (Open Library, Google Books) go down or throttle without warning.
+    // ensurePosters resolves covers sequentially, so one unreachable host would stall
+    // every remaining item behind it. Fail fast instead.
+    private func timedData(from url: URL, timeout: TimeInterval = 6) async -> Data? {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        guard let (data, response) = try? await URLSession.shared.data(for: request) else { return nil }
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) { return nil }
+        return data
+    }
 
     private func cleanTitle(_ title: String) -> String {
         var s = title
@@ -203,11 +313,14 @@ class TMDBService {
     private func searchBookCover(title: String) async -> URL? {
         let cleaned = cleanTitle(title)
 
-        // Try Google Books first (no printType filter — covers audiobooks too)
-        if let url = await googleBookscover(query: cleaned) { return url }
-
-        // Fallback: Open Library
-        return await openLibraryCover(query: cleaned)
+        // Both sources in parallel, Open Library preferred when both answer — that
+        // matches fetchBookDetail, so the thumbnail and the detail agree. Running
+        // them concurrently means a host that's down (either has been) costs one
+        // timeout total rather than delaying the other.
+        async let openLibrary = openLibraryCover(query: cleaned)
+        async let googleBooks = googleBookscover(query: cleaned)
+        let (ol, gb) = await (openLibrary, googleBooks)
+        return ol ?? gb
     }
 
     private func googleBookscover(query: String) async -> URL? {
@@ -219,7 +332,7 @@ class TMDBService {
         guard let url = components?.url else { return nil }
 
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let data = await timedData(from: url) else { return nil }
             let response = try JSONDecoder().decode(GoogleBooksResponse.self, from: data)
             // pick first result that actually has a cover
             guard let thumbnail = response.items?.compactMap({ $0.volumeInfo.imageLinks?.thumbnail }).first
@@ -247,7 +360,7 @@ class TMDBService {
             guard let url = components?.url else { continue }
 
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
+                guard let data = await timedData(from: url) else { continue }
                 let response = try JSONDecoder().decode(OpenLibraryResponse.self, from: data)
                 if let coverId = response.docs?.compactMap({ $0.cover_i }).first {
                     return URL(string: "https://covers.openlibrary.org/b/id/\(coverId)-M.jpg")
@@ -285,7 +398,8 @@ class TMDBService {
             let (data, _) = try await URLSession.shared.data(for: request)
             let response = try JSONDecoder().decode(TMDBResponse.self, from: data)
             guard let first = response.results.first, let path = first.poster_path else { return nil }
-            return URL(string: "https://image.tmdb.org/t/p/w200\(path)")
+            // w342, not w200 — gallery cases render ~128pt wide, so w200 is visibly soft
+            return URL(string: "https://image.tmdb.org/t/p/w342\(path)")
         } catch {
             return nil
         }
@@ -326,7 +440,7 @@ class TMDBService {
               let url = URL(string: "https://openlibrary.org/subjects/\(subject).json?limit=12")
         else { return [] }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let data = await timedData(from: url) else { return [] }
             let response = try JSONDecoder().decode(OLSubjectResponse.self, from: data)
             return response.works.compactMap { work in
                 let coverURL = work.cover_id.map { URL(string: "https://covers.openlibrary.org/b/id/\($0)-M.jpg") } ?? nil
@@ -351,7 +465,16 @@ class TMDBService {
 
         if type == "book" {
             let detail = await fetchBookDetail(title: title)
-            if let detail { detailCache[key] = detail }
+            if let detail {
+                detailCache[key] = detail
+                // Book covers resolve in opposite source order on the two paths —
+                // the thumbnail tries Google Books first, this tries Open Library
+                // first — so one finds art the other misses. Let the detail fill in.
+                let posterKey = cacheKey(title: title, type: type)
+                if posterOverrides[posterKey] == nil, let resolved = detail.posterURL {
+                    posterCache[posterKey] = resolved
+                }
+            }
             return detail
         }
 
@@ -418,6 +541,15 @@ class TMDBService {
             externalURL: nil
         )
         detailCache[key] = detail
+
+        // The thumbnail and the detail resolve the title independently, so they can
+        // disagree (list shows one film, detail shows another). The detail lookup is
+        // the more thorough one, so let it correct the cached thumbnail — opening an
+        // item once fixes its artwork everywhere. A user override still wins.
+        let posterKey = cacheKey(title: title, type: type)
+        if posterOverrides[posterKey] == nil, let resolved = posterURL {
+            posterCache[posterKey] = resolved
+        }
         return detail
     }
 
@@ -466,7 +598,7 @@ class TMDBService {
         var overview = ""
         if let key = doc.key,
            let worksURL = URL(string: "https://openlibrary.org\(key).json"),
-           let (worksData, _) = try? await URLSession.shared.data(from: worksURL),
+           let worksData = await timedData(from: worksURL),
            let worksResponse = try? JSONDecoder().decode(OLWorksResponse.self, from: worksData) {
             overview = worksResponse.descriptionText ?? ""
         }

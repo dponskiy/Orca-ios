@@ -24,6 +24,10 @@ struct GroceryModeView: View {
     @State private var loadingMealCategory: String? = nil
     @Query(sort: \GroceryList.createdAt, order: .reverse) private var savedLists: [GroceryList]
     @Query(sort: \SubTask.sortOrder) private var allSubTasks: [SubTask]
+    @Query private var sharedSpaces: [SharedSpace]
+    @Query private var sharedMembers: [SharedSpaceMember]
+    @Query private var sharedGroceryItems: [SharedGroceryItem]
+    @State private var householdSpace: SharedSpace? = nil
 
     enum ShoppingTab { case myLists, saved, discover }
 
@@ -65,9 +69,12 @@ struct GroceryModeView: View {
     @State private var newItemText: String = ""
     @State private var shoppingNewItemText: String = ""
     @State private var shopping = false
+    @State private var suppressNextRestore = false
     @State private var showSaveSheet = false
     @State private var saveListName = ""
-    @State private var groupByAisle = false
+    enum ShoppingViewMode: String { case recipes, sections }
+    @State private var shoppingViewMode: ShoppingViewMode = .recipes
+    @State private var expandedMergedKeys: Set<String> = []
     @State private var isRecording = false
     @State private var currentTranscription = ""
     @State private var aiAisleOverrides: [String: String] = [:]
@@ -266,52 +273,8 @@ struct GroceryModeView: View {
 
     // MARK: - Pantry Staples
 
-    /// Items almost everyone already has at home.
-    /// Pepper spices are listed explicitly to avoid matching produce (bell pepper etc.)
-    private let pantryStapleTerms: [String] = [
-        // Pepper — spice only (NOT bell pepper / jalapeño / red pepper produce)
-        "black pepper", "white pepper", "ground pepper", "cracked pepper",
-        "peppercorn", "pepper flake", "cayenne pepper", "freshly ground pepper",
-        // Oils — all common cooking oils
-        "olive oil", "extra virgin olive oil", "vegetable oil", "canola oil",
-        "sunflower oil", "cooking spray", "neutral oil", "avocado oil",
-        "sesame oil", "coconut oil",
-        // Basic sweeteners
-        "granulated sugar", "white sugar", "caster sugar", "brown sugar",
-        "powdered sugar", "confectioners sugar",
-        // Flour / Baking
-        "all-purpose flour", "all purpose flour", "plain flour",
-        "baking powder", "baking soda", "bicarbonate of soda",
-        // Extracts & basics
-        "vanilla extract", "pure vanilla",
-        // Common pantry acids
-        "white vinegar", "apple cider vinegar",
-        // Dry staples most people stock
-        "dried oregano", "dried thyme", "dried basil", "dried rosemary",
-        "garlic powder", "onion powder", "paprika", "cumin", "turmeric",
-        "red pepper flakes", "chili flakes", "italian seasoning",
-    ]
-
-    /// Water phrases confirming the item is water, not watermelon / water chestnut etc.
-    private let waterPhrases: [String] = [
-        "cold water", "warm water", "hot water", "boiling water",
-        "ice water", "room temperature water", "lukewarm water",
-        "cups of water", "cup of water", "tablespoons of water",
-        "tablespoon of water", "liters of water", "ml of water",
-        "ounces of water", "oz water",
-    ]
-
     private func isPantryStaple(_ text: String) -> Bool {
-        let lower = text.lowercased()
-        if pantryStapleTerms.contains(where: { lower.contains($0) }) { return true }
-        // Salt — catches "kosher salt", "sea salt", "1 tsp salt", etc.
-        // Safe in a recipe context; "assault" won't appear as an ingredient.
-        if lower.contains("salt") { return true }
-        // Water — only match as a standalone ingredient, not inside other words
-        if lower == "water" || lower.hasPrefix("water ") || lower.hasPrefix("water,")
-            || lower.hasSuffix(" water") { return true }
-        if waterPhrases.contains(where: { lower.contains($0) }) { return true }
-        return false
+        PantryStaples.matches(text)
     }
 
     func checkPantryStaples() {
@@ -445,7 +408,7 @@ struct GroceryModeView: View {
                                     activeCustomListId = nil
                                     selectedMemoryIds = []
                                     extraItems = []
-                                    groupByAisle = false
+                                    shoppingViewMode = .recipes
                                     restoreToday()
                                 }
                             } label: {
@@ -471,7 +434,7 @@ struct GroceryModeView: View {
                                     activeCustomListId = list.id
                                     extraItems = list.extraItems
                                     selectedMemoryIds = []
-                                    groupByAisle = false
+                                    shoppingViewMode = .recipes
                                 }
                             } label: {
                                 Text(list.name)
@@ -503,6 +466,16 @@ struct GroceryModeView: View {
                     .padding(.horizontal, 16).padding(.bottom, 12)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            if !myHouseholds.isEmpty {
+                Divider().padding(.leading, 16)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(myHouseholds) { space in householdCard(space) }
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                }
             }
 
             // Saved lists row — collapsible, only when lists exist
@@ -598,6 +571,35 @@ struct GroceryModeView: View {
         guard let base64 = payload.toBase64(),
               let encoded = base64.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
         return URL(string: "orca://recipe?data=\(encoded)")
+    }
+
+    // MARK: - Household lists
+
+    private var myHouseholds: [SharedSpace] {
+        let me = authService.userId?.uuidString ?? ""
+        let mine = Set(sharedMembers.filter { $0.userId == me }.map { $0.spaceId })
+        return sharedSpaces.filter { mine.contains($0.id) }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private func householdCard(_ space: SharedSpace) -> some View {
+        let remaining = sharedGroceryItems.filter { $0.spaceId == space.id && !$0.isChecked }.count
+        return Button { householdSpace = space } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "person.2.fill").font(.system(size: 12))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(space.spaceName.isEmpty ? "Household" : space.spaceName)
+                        .font(.custom("DMSans-Medium", size: 13))
+                    Text(remaining == 0 ? "shared list" : "\(remaining) to get")
+                        .font(.custom("DMSans-Regular", size: 10)).opacity(0.7)
+                }
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(Color.oceanTeal)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private func savedListCard(_ list: GroceryList) -> some View {
@@ -1217,7 +1219,7 @@ struct GroceryModeView: View {
                                 activeCustomListId = nil
                                 selectedMemoryIds = []
                                 extraItems = []
-                                groupByAisle = false
+                                shoppingViewMode = .recipes
                                 restoreToday()
                             }
                         } label: {
@@ -1232,7 +1234,7 @@ struct GroceryModeView: View {
                                     activeCustomListId = list.id
                                     extraItems = list.extraItems
                                     selectedMemoryIds = []
-                                    groupByAisle = false
+                                    shoppingViewMode = .recipes
                                     shoppingTab = .myLists
                                 }
                             } label: {
@@ -1447,6 +1449,9 @@ struct GroceryModeView: View {
             }
         }
         .sheet(isPresented: $showRecipeBuilder) { RecipeBuilderView() }
+        .sheet(item: $householdSpace) { space in
+            NavigationStack { SharedGroceryView(space: space) }
+        }
         .fullScreenCover(isPresented: $showPhotoCapture) {
             PhotoCaptureView(isPresented: $showPhotoCapture) { memory in
                 selectedMemoryIds.insert(memory.id)
@@ -1499,9 +1504,9 @@ struct GroceryModeView: View {
 
         return VStack(spacing: 0) {
             if !isCustomActive && total > 0 {
-                Picker("View", selection: $groupByAisle) {
-                    Text(listType == .grocery ? "By recipe" : "By item").tag(false)
-                    Text("By section").tag(true)
+                Picker("View", selection: $shoppingViewMode) {
+                    Text(listType == .grocery ? "By recipe" : "By item").tag(ShoppingViewMode.recipes)
+                    Text("By section").tag(ShoppingViewMode.sections)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 20).padding(.vertical, 10)
@@ -1509,10 +1514,13 @@ struct GroceryModeView: View {
             }
 
             List {
-                if groupByAisle && !isCustomActive {
-                    aisleGroupedView
-                } else {
+                if isCustomActive {
                     recipeGroupedView
+                } else {
+                    switch shoppingViewMode {
+                    case .recipes: recipeGroupedView
+                    case .sections: aisleGroupedView
+                    }
                 }
             }
             .listStyle(.insetGrouped)
@@ -1592,7 +1600,7 @@ struct GroceryModeView: View {
                     Button {
                         withAnimation(.spring(duration: 0.3)) {
                             shopping = false
-                            hiddenIngredients = []; groupByAisle = false
+                            hiddenIngredients = []; shoppingViewMode = .recipes
                         }
                         clearChecksAndPersist()
                     } label: {
@@ -1623,8 +1631,8 @@ struct GroceryModeView: View {
             }
         }
         // AI resolves "Other" items when user switches to By Section
-        .onChange(of: groupByAisle) { _, isGrouped in
-            guard isGrouped else { return }
+        .onChange(of: shoppingViewMode) { _, newMode in
+            guard newMode == .sections else { return }
             let otherItems = extraItems.filter { item in
                 guard aiAisleOverrides[item] == nil else { return false }
                 let lower = item.lowercased()
@@ -1686,19 +1694,21 @@ struct GroceryModeView: View {
 
     // MARK: - Aisle Grouped View
 
+    // Sections are the smart store view: duplicates across recipes arrive merged
+    // (with summed quantities), then land in their aisle
     @ViewBuilder
     private var aisleGroupedView: some View {
-        let allItems = aisleGroupedItems()
+        let mergedByAisle = mergedItemsByAisle()
         let order = aisleOrderForType
 
-        ForEach(order.filter { allItems[$0] != nil }, id: \.self) { aisle in
-            if let items = allItems[aisle] {
+        ForEach(order.filter { mergedByAisle[$0] != nil }, id: \.self) { aisle in
+            if let items = mergedByAisle[aisle] {
                 Section {
-                    ForEach(items, id: \.id) { item in aisleItemRow(item: item) }
+                    ForEach(items.sorted { !isMergedChecked($0) && isMergedChecked($1) }) { item in
+                        mergedItemRow(item)
+                    }
                 } header: {
-                    let checkedInAisle = items.filter { item in
-                        item.isExtra ? checkedExtras.contains(item.text) : checkedItems.contains(item.subtaskId ?? UUID())
-                    }.count
+                    let checkedInAisle = items.filter { isMergedChecked($0) }.count
                     HStack {
                         Text(aisle).font(.custom("DMSans-Medium", size: 14)).foregroundColor(.deepNavy).textCase(nil)
                         Spacer()
@@ -1857,93 +1867,219 @@ struct GroceryModeView: View {
         }
     }
 
-    private func aisleItemRow(item: AisleItem) -> some View {
-        let isChecked = item.isExtra ? checkedExtras.contains(item.text) : checkedItems.contains(item.subtaskId ?? UUID())
-        return Button {
-            let generator = UIImpactFeedbackGenerator(style: .light)
-            generator.impactOccurred()
-            withAnimation(.spring(duration: 0.2)) {
-                if item.isExtra {
-                    if isChecked { checkedExtras.remove(item.text) } else { checkedExtras.insert(item.text) }
-                } else if let id = item.subtaskId {
-                    if isChecked { checkedItems.remove(id) } else { checkedItems.insert(id) }
-                }
-            }
-            persistChecks()
-        } label: {
-            HStack(spacing: 12) {
-                let color: Color = item.isExtra ? itemAccentColor : .oceanTeal
-                ZStack {
-                    Circle().stroke(color.opacity(0.4), lineWidth: 1.5).frame(width: 22, height: 22)
-                    if isChecked {
-                        Circle().fill(color).frame(width: 22, height: 22)
-                        Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.text).font(.custom("DMSans-Regular", size: 15))
-                        .foregroundColor(isChecked ? .gray : .deepNavy).strikethrough(isChecked)
-                    if let recipe = item.recipeName {
-                        Text(recipe).font(.custom("DMSans-Regular", size: 11)).foregroundColor(.gray)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Text(item.isExtra ? "added" : "recipe")
-                    .font(.custom("DMSans-Regular", size: 10))
-                    .foregroundColor(item.isExtra ? itemAccentColor : .oceanTeal)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background((item.isExtra ? itemAccentColor : Color.oceanTeal).opacity(0.1))
-                    .clipShape(Capsule())
-            }
-            .padding(.vertical, 2)
+    // MARK: - Ingredient Combining
+
+    struct MergedItem: Identifiable {
+        let id: String                      // normalized merge key
+        let displayName: String
+        let quantitySummary: String?        // "5 cloves", "1 cup + 2 tbsp + more"
+        let subtaskIds: [UUID]
+        let extraTexts: [String]
+        let sources: [MergedSource]
+        var sourceCount: Int { sources.count }
+    }
+
+    struct MergedSource: Identifiable {
+        let id = UUID()
+        let label: String                   // recipe title or "Added by you"
+        let line: String                    // original ingredient line
+    }
+
+    private func buildMergedItems() -> [MergedItem] {
+        struct Bucket {
+            var displayName: String
+            var amounts: [(value: Double?, unit: String?)] = []
+            var subtaskIds: [UUID] = []
+            var extraTexts: [String] = []
+            var sources: [MergedSource] = []
+            var order: Int
         }
-        .buttonStyle(.plain)
-        .swipeActions(edge: .trailing) {
-            if item.isExtra {
-                Button(role: .destructive) {
-                    withAnimation { extraItems.removeAll { $0 == item.text }; checkedExtras.remove(item.text); autoSaveToday() }
-                } label: { Label("Delete", systemImage: "trash") }
-            } else if let id = item.subtaskId {
-                Button {
-                    withAnimation { hiddenIngredients.insert(id); checkedItems.remove(id) }
-                } label: { Label("Remove", systemImage: "minus.circle") }
-                .tint(.orange)
+        var buckets: [String: Bucket] = [:]
+        var nextOrder = 0
+
+        func add(text: String, subtaskId: UUID?, extraText: String?, label: String) {
+            let parsed = IngredientParser.parse(text)
+            let key = parsed.key.isEmpty ? text.lowercased() : parsed.key
+            if buckets[key] == nil {
+                buckets[key] = Bucket(displayName: parsed.displayName.isEmpty ? text : parsed.displayName, order: nextOrder)
+                nextOrder += 1
             }
+            buckets[key]?.amounts.append((parsed.value, parsed.unit))
+            if let subtaskId { buckets[key]?.subtaskIds.append(subtaskId) }
+            if let extraText { buckets[key]?.extraTexts.append(extraText) }
+            buckets[key]?.sources.append(MergedSource(label: label, line: text))
+        }
+
+        for memory in selectedMemories {
+            let title = memory.text.components(separatedBy: "\n").first ?? memory.text
+            for subTask in visibleSubTasks(for: memory) {
+                add(text: subTask.text, subtaskId: subTask.id, extraText: nil, label: title)
+            }
+        }
+        for extra in extraItems {
+            add(text: extra, subtaskId: nil, extraText: extra, label: "Added by you")
+        }
+
+        return buckets
+            .sorted { $0.value.order < $1.value.order }
+            .map { key, bucket in
+                MergedItem(
+                    id: key,
+                    displayName: bucket.displayName,
+                    quantitySummary: IngredientParser.summarize(bucket.amounts),
+                    subtaskIds: bucket.subtaskIds,
+                    extraTexts: bucket.extraTexts,
+                    sources: bucket.sources
+                )
+            }
+    }
+
+    /// Which recipe(s) an item came from. Items you typed in yourself say so
+    /// rather than showing nothing.
+    private func recipeOrigin(_ item: MergedItem) -> String? {
+        let recipeNames = Array(Set(item.sources.map { $0.label }.filter { $0 != "Added by you" }))
+        if recipeNames.isEmpty { return item.extraTexts.isEmpty ? nil : "added by you" }
+        if recipeNames.count == 1 { return recipeNames[0] }
+        return "\(recipeNames.count) recipes"
+    }
+
+    private func isMergedChecked(_ item: MergedItem) -> Bool {
+        item.subtaskIds.allSatisfy { checkedItems.contains($0) } &&
+        item.extraTexts.allSatisfy { checkedExtras.contains($0) }
+    }
+
+    private func isMergedPartiallyChecked(_ item: MergedItem) -> Bool {
+        let anyChecked = item.subtaskIds.contains { checkedItems.contains($0) } ||
+                         item.extraTexts.contains { checkedExtras.contains($0) }
+        return anyChecked && !isMergedChecked(item)
+    }
+
+    private func toggleMerged(_ item: MergedItem) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.spring(duration: 0.2)) {
+            if isMergedChecked(item) {
+                for id in item.subtaskIds { checkedItems.remove(id) }
+                for text in item.extraTexts { checkedExtras.remove(text) }
+            } else {
+                for id in item.subtaskIds { checkedItems.insert(id) }
+                for text in item.extraTexts { checkedExtras.insert(text) }
+            }
+        }
+        persistChecks()
+    }
+
+    // MARK: - Merged items by aisle
+
+    private func mergedItemsByAisle() -> [String: [MergedItem]] {
+        var grouped: [String: [MergedItem]] = [:]
+        for item in buildMergedItems() {
+            grouped[mergedAisleCategory(for: item), default: []].append(item)
+        }
+        return grouped
+    }
+
+    // Aisle for a merged item: an AI override on any source line wins, then
+    // keyword category of the combined display name
+    private func mergedAisleCategory(for item: MergedItem) -> String {
+        for source in item.sources {
+            if let override = aiAisleOverrides[source.line] {
+                return aisleDisplayLabel(for: override)
+            }
+        }
+        return aisleCategory(for: item.displayName)
+    }
+
+    private func mergedItemRow(_ item: MergedItem) -> some View {
+        let isChecked = isMergedChecked(item)
+        let isPartial = isMergedPartiallyChecked(item)
+        let isExpanded = expandedMergedKeys.contains(item.id)
+
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                toggleMerged(item)
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().stroke(Color.oceanTeal.opacity(0.4), lineWidth: 1.5).frame(width: 22, height: 22)
+                        if isChecked {
+                            Circle().fill(Color.oceanTeal).frame(width: 22, height: 22)
+                            Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                        } else if isPartial {
+                            Circle().fill(Color.oceanTeal.opacity(0.35)).frame(width: 10, height: 10)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.displayName).font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(isChecked ? .gray : .deepNavy).strikethrough(isChecked)
+                        // Quantity and which recipe it came from, on one line —
+                        // standing in an aisle, "whose garlic is this" matters.
+                        HStack(spacing: 5) {
+                            if let summary = item.quantitySummary {
+                                Text(summary).font(.custom("DMSans-Regular", size: 11))
+                                    .foregroundColor(isChecked ? .gray.opacity(0.6) : .oceanTeal)
+                            }
+                            if let origin = recipeOrigin(item) {
+                                if item.quantitySummary != nil {
+                                    Text("·").font(.system(size: 10)).foregroundColor(.gray.opacity(0.4))
+                                }
+                                Text(origin).font(.custom("DMSans-Regular", size: 11))
+                                    .foregroundColor(.gray)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if item.sourceCount > 1 {
+                        Button {
+                            withAnimation(.spring(duration: 0.25)) {
+                                if isExpanded { expandedMergedKeys.remove(item.id) }
+                                else { expandedMergedKeys.insert(item.id) }
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text("×\(item.sourceCount)").font(.custom("DMSans-Medium", size: 11))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                            }
+                            .foregroundColor(.oceanTeal)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Color.oceanTeal.opacity(0.1)).clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded && item.sourceCount > 1 {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(item.sources) { source in
+                        HStack(spacing: 6) {
+                            Circle().fill(Color.gray.opacity(0.3)).frame(width: 3, height: 3)
+                            Text(source.label).font(.custom("DMSans-Medium", size: 11)).foregroundColor(.gray)
+                            Text(source.line).font(.custom("DMSans-Regular", size: 11))
+                                .foregroundColor(.gray.opacity(0.8)).lineLimit(1)
+                        }
+                    }
+                }
+                .padding(.leading, 34).padding(.top, 2).padding(.bottom, 4)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button {
+                withAnimation {
+                    for id in item.subtaskIds { hiddenIngredients.insert(id); checkedItems.remove(id) }
+                    for text in item.extraTexts { extraItems.removeAll { $0 == text }; checkedExtras.remove(text) }
+                    if !item.extraTexts.isEmpty { autoSaveToday() }
+                }
+            } label: { Label("Remove", systemImage: "minus.circle") }
+            .tint(.orange)
         }
     }
 
     // MARK: - Aisle Grouping
-
-    struct AisleItem: Identifiable {
-        let id = UUID()
-        let text: String
-        let isExtra: Bool
-        let subtaskId: UUID?
-        let recipeName: String?
-    }
-
-    private func aisleGroupedItems() -> [String: [AisleItem]] {
-        var grouped: [String: [AisleItem]] = [:]
-        for memory in selectedMemories {
-            let title = memory.text.components(separatedBy: "\n").first ?? memory.text
-            for subTask in visibleSubTasks(for: memory) {
-                let category = aisleCategory(for: subTask.text)
-                grouped[category, default: []].append(AisleItem(text: subTask.text, isExtra: false, subtaskId: subTask.id, recipeName: title))
-            }
-        }
-        for extra in extraItems {
-            let category = aisleCategory(for: extra)
-            grouped[category, default: []].append(AisleItem(text: extra, isExtra: true, subtaskId: nil, recipeName: nil))
-        }
-        for key in grouped.keys {
-            grouped[key] = grouped[key]?.sorted { a, b in
-                let aChecked = a.isExtra ? checkedExtras.contains(a.text) : checkedItems.contains(a.subtaskId ?? UUID())
-                let bChecked = b.isExtra ? checkedExtras.contains(b.text) : checkedItems.contains(b.subtaskId ?? UUID())
-                return !aChecked && bChecked
-            }
-        }
-        return grouped
-    }
 
     private func aisleCategory(for item: String) -> String {
         // AI override first — covers items like tofu, kimchi, tempeh
@@ -1997,80 +2133,7 @@ struct GroceryModeView: View {
     }
 
     private func groceryCategory(for lower: String) -> String {
-        let produce = ["apple", "apples", "banana", "bananas", "orange", "oranges", "lemon", "lemons", "lime", "limes", "grape", "grapes", "strawberry", "strawberries", "blueberry", "blueberries", "raspberry", "raspberries", "blackberry", "blackberries", "cranberry", "cranberries", "gooseberry", "gooseberries", "cherry", "cherries", "berry", "berries", "mango", "mangoes", "pineapple", "peach", "peaches", "pear", "pears", "plum", "plums", "watermelon", "cantaloupe", "honeydew", "kiwi", "avocado", "avocados", "tomato", "tomatoes", "cucumber", "cucumbers", "zucchini", "squash", "pepper", "peppers", "jalapen", "jalapeño", "jalapeños", "jalapeno", "jalapenos", "poblano", "serrano", "habanero", "chile", "chiles", "onion", "onions", "shallot", "shallots", "garlic", "ginger", "carrot", "carrots", "celery", "broccoli", "cauliflower", "cabbage", "kale", "spinach", "lettuce", "arugula", "romaine", "chard", "beet", "beets", "turnip", "turnips", "parsnip", "parsnips", "potato", "potatoes", "sweet potato", "sweet potatoes", "yam", "yams", "corn", "mushroom", "mushrooms", "asparagus", "artichoke", "artichokes", "brussels", "eggplant", "leek", "leeks", "fennel", "radish", "radishes", "bok choy", "daikon", "scallion", "scallions", "green onion", "green onions", "chive", "chives", "cilantro", "parsley", "basil", "mint", "thyme", "rosemary", "sage", "dill", "oregano", "herb", "herbs", "sprout", "sprouts", "snap pea", "snap peas", "green bean", "green beans", "edamame", "plantain", "plantains", "papaya", "guava", "coconut", "fig", "figs", "date", "dates", "pomegranate", "pomegranates", "persimmon", "persimmons", "lychee", "tarragon", "watercress", "endive", "radicchio", "microgreen", "microgreens", "tofu", "tempeh", "silken tofu", "firm tofu", "extra firm tofu"]
-        let meat = ["chicken", "beef", "pork", "lamb", "turkey", "veal", "duck", "bison", "venison", "steak", "ground beef", "ground turkey", "ground chicken", "breast", "thigh", "drumstick", "wing", "tenderloin", "loin", "rib", "pork chop", "lamb chop", "veal chop", "roast", "sausage", "bacon", "ham", "prosciutto", "pancetta", "guanciale", "chorizo", "bratwurst", "hot dog", "meatball", "meatloaf", "burger", "patty", "brisket", "chuck", "sirloin", "flank", "skirt steak", "ribeye", "filet", "short rib", "salami", "pepperoni", "kielbasa", "andouille"]
-        let seafood = ["fish", "salmon", "tuna", "cod", "halibut", "tilapia", "sea bass", "mahi", "snapper", "trout", "sardine", "anchovy", "herring", "mackerel", "shrimp", "prawn", "lobster", "crab", "scallop", "clam", "mussel", "oyster", "squid", "octopus", "calamari", "seafood", "lox", "branzino", "swordfish", "catfish", "pollock", "sole", "flounder", "monkfish", "ahi"]
-        let dairy = ["milk", "oat milk", "almond milk", "soy milk", "cream", "half and half", "heavy cream", "sour cream", "cream cheese", "butter", "ghee", "yogurt", "greek yogurt", "kefir", "cheese", "cheddar", "mozzarella", "parmesan", "parmigiano", "pecorino", "brie", "gouda", "gruyere", "swiss", "provolone", "feta", "ricotta", "cottage cheese", "egg", "whipped cream", "creme fraiche", "dairy", "manchego", "havarti", "colby", "monterey jack", "pepper jack", "asiago", "romano", "camembert", "gorgonzola", "burrata"]
-        let deli = ["deli", "lunch meat", "pastrami", "corned beef", "mortadella", "bologna", "rotisserie", "sushi", "hummus", "tzatziki", "guacamole", "pate", "smoked salmon", "charcuterie", "prepared food", "ready to eat"]
-        let bakery = ["bread", "sourdough", "baguette", "ciabatta", "focaccia", "roll", "bun", "croissant", "bagel", "english muffin", "pita", "naan", "flatbread", "tortilla", "wrap", "muffin", "scone", "danish", "brownie", "donut", "doughnut", "pretzel bread", "challah", "rye bread", "brioche", "pumpernickel", "multigrain"]
-        let frozen = ["frozen", "ice cream", "gelato", "sorbet", "popsicle", "frozen pizza", "frozen meal", "frozen vegetable", "frozen fruit", "frozen shrimp", "frozen fish", "frozen chicken", "frozen waffle", "frozen burrito", "frozen dumpling", "acai pack"]
-        let canned = ["canned", "can of", "jar", "tomato sauce", "tomato paste", "crushed tomato", "diced tomato", "whole tomato", "pasta sauce", "marinara", "arrabiata", "chickpea", "lentil", "black bean", "kidney bean", "pinto bean", "white bean", "cannellini", "garbanzo", "butter bean", "butter beans", "navy bean", "great northern bean", "chicken broth", "beef broth", "vegetable broth", "stock", "coconut milk can", "artichoke heart", "roasted pepper", "roasted red pepper", "canned olive", "pickle", "capers", "pumpkin puree", "applesauce", "soup can", "sardine can", "tuna can", "anchovy can"]
-        let pasta = ["pasta", "spaghetti", "penne", "rigatoni", "fettuccine", "linguine", "tagliatelle", "farfalle", "fusilli", "rotini", "orzo", "lasagna", "macaroni", "gnocchi", "ramen noodle", "rice noodle", "udon", "soba", "vermicelli", "white rice", "brown rice", "basmati", "jasmine rice", "arborio", "wild rice", "quinoa", "farro", "barley", "couscous", "bulgur", "millet", "polenta", "grits", "oat", "oatmeal", "rolled oat", "steel cut", "panko", "breadcrumb", "buckwheat", "amaranth", "teff", "spelt"]
-        let breakfast = ["cereal", "granola", "muesli", "instant oatmeal", "pancake mix", "waffle mix", "maple syrup", "honey", "jam", "jelly", "peanut butter", "almond butter", "nutella", "protein bar", "granola bar", "pop tart"]
-        let snacks = ["chip", "crisp", "cracker", "pretzel", "popcorn", "trail mix", "jerky", "rice cake", "pita chip", "tortilla chip", "nacho", "cookie", "candy", "chocolate bar", "dark chocolate", "gummy", "fruit snack", "nut mix", "snack", "almond", "cashew", "walnut", "pecan", "pistachio", "peanut", "macadamia", "pine nut", "hazelnut", "brazil nut", "sunflower seed", "pumpkin seed", "mixed nuts", "dried mango", "dried cranberry", "raisin", "dried apricot", "prune"]
-        let beverages = ["water bottle", "sparkling water", "seltzer", "orange juice", "apple juice", "cranberry juice", "kombucha", "iced tea", "cold brew", "matcha drink", "lemonade", "soda", "energy drink", "sports drink", "coconut water", "smoothie drink", "juice box", "gatorade", "powerade", "coffee", "espresso", "coffee bean", "ground coffee", "instant coffee", "tea bag", "loose leaf tea", "green tea", "black tea", "herbal tea", "chamomile", "chai", "la croix", "pellegrino", "perrier"]
-        let alcohol = ["beer", "wine", "red wine", "white wine", "rose", "champagne", "prosecco", "cava", "vodka", "whiskey", "bourbon", "gin", "rum", "tequila", "mezcal", "sake", "hard cider", "hard seltzer", "white claw", "truly", "spirits", "six pack", "ipa", "lager", "stout", "porter"]
-        let condiments = ["ketchup", "mustard", "mayo", "mayonnaise", "hot sauce", "sriracha", "tabasco", "soy sauce", "tamari", "worcestershire", "fish sauce", "oyster sauce", "hoisin", "teriyaki", "salad dressing", "vinaigrette", "ranch", "caesar dressing", "balsamic glaze", "bbq sauce", "buffalo sauce", "salsa", "pesto", "tahini", "miso", "harissa", "gochujang", "kochujang", "chili paste", "chili sauce", "steak sauce", "horseradish", "relish", "aioli", "coconut aminos", "ponzu", "sambal", "kimchi", "ssamjang", "doenjang", "fermented bean", "bean paste", "doubanjiang", "XO sauce", "black bean sauce", "hoisin sauce", "plum sauce", "sweet soy", "ketjap manis"]
-        let oils = ["olive oil", "extra virgin", "vegetable oil", "canola oil", "coconut oil", "avocado oil", "sesame oil", "peanut oil", "grape seed oil", "sunflower oil", "vinegar", "balsamic", "apple cider vinegar", "rice vinegar", "white vinegar", "red wine vinegar", "sherry vinegar", "truffle oil"]
-        let baking = ["sugar", "brown sugar", "powdered sugar", "baking powder", "baking soda", "yeast", "vanilla", "vanilla extract", "cocoa", "cocoa powder", "chocolate chip", "salt", "black pepper", "cumin", "paprika", "turmeric", "cinnamon", "nutmeg", "cardamom", "coriander", "cayenne", "red pepper flake", "chili powder", "curry powder", "garam masala", "italian seasoning", "bay leaf", "clove", "allspice", "star anise", "fennel seed", "poppy seed", "sesame seed", "sesame seeds", "toasted sesame", "flax seed", "flaxseed", "chia seed", "chia seeds", "hemp seed", "hemp seeds", "cornstarch", "arrowroot", "gelatin", "cream of tartar", "shortening", "lard", "cooking spray", "saffron", "sumac"]
-        let supplements = ["vitamin", "supplement", "protein powder", "whey protein", "collagen", "probiotic", "omega", "fish oil", "multivitamin", "magnesium", "zinc", "iron supplement", "b12", "vitamin d", "melatonin", "creatine", "bcaa", "pre workout", "electrolyte", "ashwagandha", "spirulina", "greens powder"]
-        let bodycare = ["shampoo", "conditioner", "body wash", "hand soap", "face wash", "toothpaste", "toothbrush", "floss", "mouthwash", "deodorant", "lotion", "moisturizer", "sunscreen", "razor", "shaving cream", "hair mask", "dry shampoo", "chapstick", "lip balm", "cotton swab", "cotton ball", "bandage", "ibuprofen", "tylenol", "advil", "allergy", "cold medicine"]
-        let household = ["paper towel", "toilet paper", "tissue", "trash bag", "garbage bag", "zip lock", "ziploc", "foil", "aluminum foil", "plastic wrap", "parchment paper", "dish soap", "dishwasher pod", "laundry detergent", "fabric softener", "bleach", "sponge", "cleaning spray", "windex", "lysol", "hand sanitizer", "candle", "batteries", "light bulb", "dryer sheet", "dish tab"]
-        let pet = ["dog food", "cat food", "pet food", "dog treat", "cat treat", "kibble", "cat litter", "dog toy", "pet supplement", "flea treatment", "heartworm", "puppy", "kitten food", "wet food pet", "pee pad", "catnip"]
-
-        // Flour must be checked before pasta/grains to prevent "all purpose flour" matching grains
-        let flourOverrides = ["all purpose flour", "all-purpose flour", "bread flour", "whole wheat flour", "almond flour", "coconut flour", "cake flour", "self rising flour", "cornmeal", "corn meal", "corn starch", "cornstarch", "rice flour", "oat flour", "rye flour", "spelt flour", "plain flour"]
-        if flourOverrides.contains(where: { lower.contains($0) }) { return "🧂 Baking & Spices" }
-
-        // Spice compounds must be checked before produce to prevent "garlic", "onion", "pepper" matching produce
-        let spiceOverrides = ["black pepper", "white pepper", "garlic powder", "onion powder", "garlic salt", "onion salt", "chili powder", "red pepper flake", "pepper flake", "cayenne pepper", "crushed red pepper", "crushed pepper"]
-        if spiceOverrides.contains(where: { lower.contains($0) }) { return "🧂 Baking & Spices" }
-
-        // "1 tsp pepper" = spice; "1 pepper" or "2 red peppers" = produce.
-        // If a measurement unit is present alongside "pepper"/"garlic"/"ginger"/"onion", treat as spice.
-        let measurementUnits = ["tsp", "teaspoon", "tbsp", "tablespoon", "cup", " oz ", "ounce", " g ", "gram", "ml", "pinch", "dash", "lb ", "pound"]
-        let hasMeasurement = measurementUnits.contains(where: { lower.contains($0) })
-        if hasMeasurement {
-            let spiceProduceWords = ["pepper", "garlic", "ginger", "onion"]
-            if spiceProduceWords.contains(where: { lower.contains($0) }) { return "🧂 Baking & Spices" }
-        }
-
-        // Cheese compounds must be checked before produce to prevent "pepper" matching produce
-        let dairyOverrides = ["pepper jack", "monterey jack", "string cheese"]
-        if dairyOverrides.contains(where: { lower.contains($0) }) { return "🥛 Dairy & Eggs" }
-
-        // Canned compounds must be checked before produce to prevent "corn" matching produce
-        let cannedOverrides = ["creamed corn", "cream corn"]
-        if cannedOverrides.contains(where: { lower.contains($0) }) { return "🥫 Canned & Jarred" }
-
-        // Vinegar/oil must be checked before meat — "champagne" contains substring "ham"
-        // and generic "oil" (neutral oil, grapeseed oil, etc.) won't match specific oil names
-        if lower.contains("vinegar") { return "🫒 Oils & Vinegars" }
-        if lower.hasSuffix("oil") && !lower.contains("fish oil") && !lower.contains("cod liver") { return "🫒 Oils & Vinegars" }
-
-        // Frozen and canned must be checked before produce to prevent "tomato", "corn", etc. matching produce
-        if frozen.contains(where: { lower.contains($0) }) { return "❄️ Frozen" }
-        if canned.contains(where: { lower.contains($0) }) { return "🥫 Canned & Jarred" }
-
-        if produce.contains(where: { lower.contains($0) }) { return "🥬 Produce" }
-        if meat.contains(where: { lower.contains($0) }) { return "🥩 Meat" }
-        if seafood.contains(where: { lower.contains($0) }) { return "🐟 Seafood" }
-        if dairy.contains(where: { lower.contains($0) }) { return "🥛 Dairy & Eggs" }
-        if deli.contains(where: { lower.contains($0) }) { return "🧀 Deli & Prepared" }
-        if bakery.contains(where: { lower.contains($0) }) { return "🍞 Bakery & Bread" }
-        if oils.contains(where: { lower.contains($0) }) { return "🫒 Oils & Vinegars" }
-        if pasta.contains(where: { lower.contains($0) }) { return "🌾 Pasta, Rice & Grains" }
-        if breakfast.contains(where: { lower.contains($0) }) { return "🥣 Breakfast" }
-        if snacks.contains(where: { lower.contains($0) }) { return "🍿 Snacks" }
-        if alcohol.contains(where: { lower.contains($0) }) { return "🍷 Beer, Wine & Spirits" }
-        if beverages.contains(where: { lower.contains($0) }) { return "🥤 Beverages" }
-        if condiments.contains(where: { lower.contains($0) }) { return "🫙 Condiments & Sauces" }
-        if baking.contains(where: { lower.contains($0) }) { return "🧂 Baking & Spices" }
-        if supplements.contains(where: { lower.contains($0) }) { return "💊 Supplements" }
-        if bodycare.contains(where: { lower.contains($0) }) { return "🧴 Body Care" }
-        if household.contains(where: { lower.contains($0) }) { return "🏠 Household" }
-        if pet.contains(where: { lower.contains($0) }) { return "🐾 Pet" }
-        return "📦 Other"
+        GroceryAisles.category(for: lower)
     }
 
     private func hardwareCategory(for lower: String) -> String {
@@ -2277,6 +2340,7 @@ struct GroceryModeView: View {
     }
 
     private func restoreToday() {
+        if suppressNextRestore { suppressNextRestore = false; return }
         guard !isCustomActive else { return }
         guard let today = savedLists.first(where: { $0.name == "Today's list" && $0.listType == listType.rawValue }) else { return }
         selectedMemoryIds = Set(today.memoryUUIDs.filter { id in recipeMemories.contains { $0.id == id } })
@@ -2323,6 +2387,7 @@ struct GroceryModeView: View {
         autoSaveToday()
     }
     private func loadList(_ list: GroceryList) {
+        suppressNextRestore = true
         if let type = ListType(rawValue: list.listType) { listType = type }
         selectedMemoryIds = Set(list.memoryUUIDs.filter { id in recipeMemories.contains { $0.id == id } })
         extraItems = list.extraItems
@@ -2431,6 +2496,9 @@ struct GroceryModeView: View {
         MealCategory(name: "Vegan",        emoji: "🌱", mealDBParam: (query: "c", value: "Vegan")),
     ]
 }
+
+// MARK: - Ingredient Parser (quantity + name normalization for combining)
+
 
 // MARK: - Share Sheet
 

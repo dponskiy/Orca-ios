@@ -72,6 +72,7 @@ class SupabaseSyncService {
             try await syncTCGCards(userId: userId, context: context)
             try await syncSmiskiItems(userId: userId, context: context)
             try await syncLegoSets(userId: userId, context: context)
+            try await syncGameItems(userId: userId, context: context)
             lastSyncDate = Date()
         } catch {
             syncError = error.localizedDescription
@@ -156,6 +157,12 @@ class SupabaseSyncService {
         for set in allLegoSets {
             if seenLegoIds.contains(set.id) { context.delete(set) }
             else { seenLegoIds.insert(set.id) }
+        }
+        let allGameItems = try context.fetch(FetchDescriptor<GameItem>())
+        var seenGameIds = Set<UUID>()
+        for game in allGameItems {
+            if seenGameIds.contains(game.id) { context.delete(game) }
+            else { seenGameIds.insert(game.id) }
         }
         try context.save()
         print("✅ Local deduplication complete")
@@ -304,6 +311,7 @@ class SupabaseSyncService {
                 is_actionable: memory.isActionable,
                 is_completed: memory.isCompleted,
                 completed_at: memory.completedAt.map { ISO8601DateFormatter().string(from: $0) },
+                recurring_completed_dates: memory.recurringCompletedDates,
                 was_edited: memory.wasEdited,
                 created_at: ISO8601DateFormatter().string(from: memory.createdAt),
                 updated_at: ISO8601DateFormatter().string(from: memory.updatedAt),
@@ -359,6 +367,7 @@ class SupabaseSyncService {
             memory.dateConfidence = remote.date_confidence
             memory.isActionable = remote.is_actionable
             memory.isCompleted = remote.is_completed
+            memory.recurringCompletedDates = remote.recurring_completed_dates ?? []
             memory.wasEdited = remote.was_edited
             memory.locationName = remote.location_name
             memory.locationAddress = remote.location_address
@@ -734,6 +743,7 @@ class SupabaseSyncService {
             is_actionable: memory.isActionable,
             is_completed: memory.isCompleted,
             completed_at: memory.completedAt.map { ISO8601DateFormatter().string(from: $0) },
+            recurring_completed_dates: memory.recurringCompletedDates,
             was_edited: memory.wasEdited,
             created_at: ISO8601DateFormatter().string(from: memory.createdAt),
             updated_at: ISO8601DateFormatter().string(from: memory.updatedAt),
@@ -1077,6 +1087,69 @@ class SupabaseSyncService {
         print("✅ Lego sets synced")
     }
 
+    // MARK: - Sync Game Items
+
+    private func syncGameItems(userId: UUID, context: ModelContext) async throws {
+        let localGames = try context.fetch(FetchDescriptor<GameItem>())
+        let rows = localGames.reduce(into: [GameItemRow]()) { result, game in
+            guard !result.contains(where: { $0.id == game.id.uuidString }) else { return }
+            result.append(GameItemRow(
+                id: game.id.uuidString,
+                user_id: userId.uuidString,
+                igdb_id: game.igdbId,
+                name: game.name,
+                cover_url: game.coverURL,
+                genre_names: game.genreNames,
+                platform_names: game.platformNames,
+                rating: game.rating,
+                release_year: game.releaseYear,
+                summary: game.summary,
+                is_owned: game.isOwned,
+                primary_platform: game.primaryPlatform,
+                added_at: ISO8601DateFormatter().string(from: game.addedAt)
+            ))
+        }
+        if !rows.isEmpty {
+            try await supabase.from("game_items").upsert(rows, onConflict: "id").execute()
+        }
+        let localIds = Set(localGames.map { $0.id.uuidString.lowercased() })
+        let remoteGames: [GameItemRow] = try await supabase
+            .from("game_items").select().eq("user_id", value: userId.uuidString).execute().value
+        for remote in remoteGames {
+            guard !localIds.contains(remote.id.lowercased()), let remoteId = UUID(uuidString: remote.id) else { continue }
+            let game = GameItem(igdbId: remote.igdb_id, name: remote.name,
+                                coverURL: remote.cover_url ?? "",
+                                genreNames: remote.genre_names, platformNames: remote.platform_names,
+                                rating: remote.rating, releaseYear: remote.release_year,
+                                summary: remote.summary, isOwned: remote.is_owned,
+                                primaryPlatform: remote.primary_platform ?? "")
+            game.id = remoteId
+            if let a = remote.added_at { game.addedAt = ISO8601DateFormatter().date(from: a) ?? Date() }
+            context.insert(game)
+        }
+        print("✅ Game items synced")
+    }
+
+    // MARK: - Push Single Game Item
+
+    func pushGameItem(_ game: GameItem, userId: UUID) async {
+        let row = GameItemRow(
+            id: game.id.uuidString, user_id: userId.uuidString, igdb_id: game.igdbId,
+            name: game.name, cover_url: game.coverURL, genre_names: game.genreNames,
+            platform_names: game.platformNames, rating: game.rating,
+            release_year: game.releaseYear, summary: game.summary,
+            is_owned: game.isOwned, primary_platform: game.primaryPlatform,
+            added_at: ISO8601DateFormatter().string(from: game.addedAt)
+        )
+        do { try await supabase.from("game_items").upsert(row, onConflict: "id").execute() }
+        catch { print("❌ Failed to push game item: \(error)") }
+    }
+
+    func deleteGameItem(id: UUID) async {
+        do { try await supabase.from("game_items").delete().eq("id", value: id.uuidString).execute() }
+        catch { print("❌ Failed to delete game item: \(error)") }
+    }
+
     // MARK: - Push Single TCG Card
 
     func pushTCGCard(_ card: TCGCard, userId: UUID) async {
@@ -1195,6 +1268,9 @@ struct MemoryRow: Codable {
     let is_actionable: Bool
     let is_completed: Bool
     let completed_at: String?
+    // Local-day keys ("2026-08-07") for recurring-task completions. Opaque strings —
+    // written in the completing device's local day, never timezone-converted.
+    let recurring_completed_dates: [String]?
     let was_edited: Bool
     let created_at: String?
     let updated_at: String?
@@ -1314,5 +1390,21 @@ struct LegoSetRow: Codable {
     let num_parts: Int?
     let image_url: String?
     let status: String
+    let added_at: String?
+}
+
+struct GameItemRow: Codable {
+    let id: String
+    let user_id: String
+    let igdb_id: Int
+    let name: String
+    let cover_url: String?
+    let genre_names: [String]
+    let platform_names: [String]
+    let rating: Double?
+    let release_year: Int?
+    let summary: String?
+    let is_owned: Bool
+    let primary_platform: String?
     let added_at: String?
 }

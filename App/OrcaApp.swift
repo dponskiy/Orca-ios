@@ -125,7 +125,7 @@ struct OrcaApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     let modelContainer: ModelContainer = {
-        guard let container = try? ModelContainer(for: Memory.self, Echo.self, Ping.self, SubTask.self, GroceryList.self, Person.self, GiftItem.self, WatchlistItem.self, SharedSpace.self, SharedEvent.self, SharedChecklistItem.self, ThoughtTab.self, TCGCard.self, SmiskiItem.self, LegoSet.self) else {
+        guard let container = try? ModelContainer(for: Memory.self, Echo.self, Ping.self, SubTask.self, GroceryList.self, Person.self, GiftItem.self, WatchlistItem.self, SharedSpace.self, SharedSpaceMember.self, SharedEvent.self, SharedChecklistItem.self, SharedRecipe.self, SharedGroceryItem.self, ThoughtTab.self, TCGCard.self, SmiskiItem.self, LegoSet.self, GameItem.self) else {
             fatalError("Failed to create ModelContainer")
         }
         return container
@@ -192,6 +192,7 @@ struct OrcaApp: App {
             .preferredColorScheme(.light)
             .onAppear {
                 AnalyticsService.shared.initialize()
+                TMDBService.shared.loadPosterCache()
                 requestNotificationPermission()
                 LocationService.shared.requestLocation()
                 let context = modelContainer.mainContext
@@ -251,7 +252,11 @@ struct OrcaApp: App {
 
     private func handleIncomingURL(_ url: URL) {
         // orca://recipe?url=<encoded-source-url>  OR  orca://recipe?data=<base64-json>
-        if url.scheme == "orca", url.host == "recipe",
+        // https://links.orcadrop.app/recipe?url=...  OR  https://links.orcadrop.app/recipe?data=...
+        let isOrcaRecipe = url.scheme == "orca" && url.host == "recipe"
+        let isUniversalRecipe = url.host == "links.orcadrop.app" &&
+            url.pathComponents.count >= 2 && url.pathComponents[1] == "recipe"
+        if isOrcaRecipe || isUniversalRecipe,
            let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
             if let sourceURL = components.queryItems?.first(where: { $0.name == "url" })?.value,
                !sourceURL.isEmpty {

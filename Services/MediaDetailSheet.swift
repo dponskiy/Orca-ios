@@ -4,15 +4,23 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct MediaDetailSheet: View {
     let title: String
     let type: String  // "movie", "tv", "book"
     let existingPosterURL: URL?
+    // Supplied when opened from a shelf or list — enables the status controls.
+    // Nil when opened from Discover, where there's nothing to update yet.
+    var item: WatchlistItem? = nil
+    // Host fires the rating prompt; this sheet only moves the status.
+    var onCompleted: ((WatchlistItem) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var detail: MediaDetail? = nil
     @State private var isLoading = true
+    @State private var showPosterPicker = false
 
     private let tmdb = TMDBService.shared
 
@@ -33,12 +41,29 @@ struct MediaDetailSheet: View {
                     Button("Done") { dismiss() }
                         .foregroundColor(.oceanTeal)
                 }
+                // Posters are matched by title search, which guesses wrong on
+                // remakes and generic titles. Nothing detects that automatically —
+                // this is the manual correction.
+                if type != "book" {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showPosterPicker = true
+                        } label: {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .font(.system(size: 15))
+                                .foregroundColor(.oceanTeal)
+                        }
+                    }
+                }
             }
         }
         .task {
             let tmdbType = type == "show" ? "tv" : type
             detail = await tmdb.fetchDetail(title: title, type: tmdbType)
             isLoading = false
+        }
+        .sheet(isPresented: $showPosterPicker) {
+            PosterPickerSheet(title: title, type: type == "show" ? "tv" : type)
         }
     }
 
@@ -52,6 +77,8 @@ struct MediaDetailSheet: View {
 
                 // Content
                 VStack(alignment: .leading, spacing: 20) {
+                    statusSection
+
                     // Title + meta
                     VStack(alignment: .leading, spacing: 6) {
                         Text(detail.title)
@@ -311,5 +338,197 @@ struct MediaDetailSheet: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.pearl)
+    }
+
+    // MARK: - Status
+    //
+    // Shelves have no rows to swipe, so changing where something lives happens here.
+
+    private struct StatusOption: Identifiable {
+        let id: String        // stored WatchlistItem.status value
+        let label: String
+        let icon: String
+    }
+
+    private var statusOptions: [StatusOption] {
+        let isBook = type == "book"
+        return [
+            StatusOption(id: "queued",    label: "Up next",  icon: "bookmark"),
+            StatusOption(id: "watching",  label: isBook ? "Reading" : "Watching", icon: "play.circle"),
+            StatusOption(id: "completed", label: "Finished", icon: "checkmark.circle")
+        ]
+    }
+
+    @ViewBuilder
+    private var statusSection: some View {
+        if let item {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("STATUS")
+                    .font(.custom("DMSans-Medium", size: 11))
+                    .foregroundColor(.gray)
+                    .tracking(0.5)
+
+                HStack(spacing: 8) {
+                    ForEach(statusOptions) { option in
+                        let active = item.status.lowercased() == option.id
+                        Button {
+                            setStatus(option.id, on: item)
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: option.icon).font(.system(size: 14))
+                                Text(option.label).font(.custom("DMSans-Medium", size: 12))
+                            }
+                            .foregroundColor(active ? .white : .oceanTeal)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(active ? Color.oceanTeal : Color.oceanTeal.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if (item.rating ?? 0) > 0 || !(item.comment ?? "").isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let rating = item.rating, rating > 0 {
+                            HStack(spacing: 3) {
+                                ForEach(0..<min(rating, 5), id: \.self) { _ in
+                                    Image(systemName: "star.fill")
+                                        .font(.system(size: 11)).foregroundColor(.coral)
+                                }
+                                Text("your rating")
+                                    .font(.custom("DMSans-Regular", size: 11)).foregroundColor(.gray)
+                                    .padding(.leading, 4)
+                            }
+                        }
+                        if let comment = item.comment, !comment.isEmpty {
+                            Text(comment)
+                                .font(.custom("DMSans-Regular", size: 14))
+                                .foregroundColor(.deepNavy)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.coral.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
+        }
+    }
+
+    private func setStatus(_ newStatus: String, on item: WatchlistItem) {
+        guard item.status.lowercased() != newStatus else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.spring(duration: 0.25)) {
+            item.status = newStatus
+            item.completedAt = (newStatus == "completed") ? Date() : nil
+            if newStatus != "completed" { item.rating = nil; item.comment = nil }
+            item.updatedAt = Date()
+        }
+        try? modelContext.save()
+        if newStatus == "completed" {
+            // Host owns the rating prompt — dismiss first so sheets don't stack
+            let finished = item
+            dismiss()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { onCompleted?(finished) }
+        }
+    }
+}
+
+// MARK: - Poster Picker
+//
+// Shows every poster TMDB returns for the title so a wrong first-result match
+// can be corrected. The choice is stored locally (never synced), so a bad guess
+// is always fixable and never propagates to the user's other devices.
+
+struct PosterPickerSheet: View {
+    let title: String
+    let type: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var tmdb = TMDBService.shared
+    @State private var options: [URL] = []
+    @State private var isLoading = true
+
+    private let columns = [GridItem(.flexible(), spacing: 12),
+                           GridItem(.flexible(), spacing: 12),
+                           GridItem(.flexible(), spacing: 12)]
+
+    private var currentURL: URL? { tmdb.posterURL(title: title, type: type) ?? nil }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading {
+                    VStack { Spacer(); ProgressView().tint(.oceanTeal); Spacer() }
+                } else if options.isEmpty {
+                    VStack(spacing: 10) {
+                        Spacer()
+                        Image(systemName: "photo.badge.exclamationmark")
+                            .font(.system(size: 34)).foregroundColor(.gray.opacity(0.35))
+                        Text("No other posters found")
+                            .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy)
+                        Text("TMDB only has one image for this title")
+                            .font(.custom("DMSans-Regular", size: 13)).foregroundColor(.gray)
+                        Spacer()
+                    }
+                } else {
+                    ScrollView {
+                        Text("Tap the poster that matches")
+                            .font(.custom("DMSans-Regular", size: 13))
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16).padding(.top, 12)
+
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(options, id: \.absoluteString) { url in
+                                let isCurrent = url == currentURL
+                                Button {
+                                    tmdb.setPosterOverride(title: title, type: type, url: url)
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    dismiss()
+                                } label: {
+                                    AsyncImage(url: url) { phase in
+                                        if case .success(let img) = phase {
+                                            img.resizable().scaledToFit()
+                                        } else {
+                                            ZStack { Color.mist; ProgressView().scaleEffect(0.6) }
+                                                .aspectRatio(0.667, contentMode: .fit)
+                                        }
+                                    }
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(isCurrent ? Color.oceanTeal : Color.clear, lineWidth: 2.5)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(16)
+                    }
+                }
+            }
+            .background(Color.pearl.ignoresSafeArea())
+            .navigationTitle("Choose Poster")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.foregroundColor(.gray)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Reset") {
+                        tmdb.clearPosterOverride(title: title, type: type)
+                        dismiss()
+                    }
+                    .foregroundColor(.oceanTeal)
+                }
+            }
+        }
+        .task {
+            options = await tmdb.posterOptions(title: title, type: type)
+            isLoading = false
+        }
     }
 }

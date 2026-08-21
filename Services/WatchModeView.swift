@@ -12,8 +12,9 @@ struct WatchModeView: View {
     @Environment(AuthService.self) private var authService
     @Query(sort: \WatchlistItem.createdAt, order: .reverse) private var items: [WatchlistItem]
 
-    @State private var selectedTab: Tab = .queue
+    @State private var selectedTab: Tab = .shelf
     @State private var showAddSheet = false
+    @State private var showMediaGallery = false
     @State private var ratingItem: WatchlistItem? = nil
     @State private var editItem: WatchlistItem? = nil
     @State private var addedToast = false
@@ -22,20 +23,36 @@ struct WatchModeView: View {
     @State private var detailTMDBItem: TMDBItem? = nil
     @State private var detailBookCoverURL: URL? = nil
     @State private var selectedGenre: TMDBService.DiscoverGenre? = nil
-    @State private var completedTypeFilter: String? = nil
+    @State private var typeFilter: String? = nil   // nil = all; "movie"/"show"/"book"
     @AppStorage("infoBannerDismissed_media") private var bannerDismissed = false
 
-    enum Tab { case queue, completed, discover }
+    enum Tab { case shelf, discover }
 
-    private var watchingItems: [WatchlistItem] { items.filter { $0.status == "watching" } }
-    private var queuedItems: [WatchlistItem]   { items.filter { $0.status == "queued" } }
+    /// Resolved poster URLs, built here so the cache read is tracked by this view.
+    /// Without that the shelves keep rendering blank covers after posters resolve.
+    private var posterMap: [UUID: URL] {
+        var map: [UUID: URL] = [:]
+        for item in items { if let url = tmdbPosterURL(for: item) { map[item.id] = url } }
+        return map
+    }
+
+    /// The type filter applies to every shelf, not just Finished.
+    private var visibleItems: [WatchlistItem] {
+        guard let typeFilter else { return items }
+        return items.filter { $0.itemType == typeFilter }
+    }
+
+    private var watchingItems: [WatchlistItem] { visibleItems.filter { $0.status == "watching" } }
+    private var queuedItems: [WatchlistItem]   { visibleItems.filter { $0.status == "queued" } }
     private var completedItems: [WatchlistItem] {
-        items.filter { $0.status == "completed" }
+        visibleItems.filter { $0.status == "completed" }
             .sorted { ($0.completedAt ?? $0.createdAt) > ($1.completedAt ?? $1.createdAt) }
     }
-    private var filteredCompletedItems: [WatchlistItem] {
-        guard let filter = completedTypeFilter else { return completedItems }
-        return completedItems.filter { $0.itemType == filter }
+    private var filteredCompletedItems: [WatchlistItem] { completedItems }
+
+    /// Year-in-review counts stay unfiltered — they're a summary, not a view of the list
+    private var allCompletedItems: [WatchlistItem] {
+        items.filter { $0.status == "completed" }
     }
 
     private var queuedShows: [WatchlistItem]  { queuedItems.filter { $0.itemType == "show" } }
@@ -44,7 +61,7 @@ struct WatchModeView: View {
 
     private var currentYear: Int { Calendar.current.component(.year, from: Date()) }
     private var completedThisYear: [WatchlistItem] {
-        completedItems.filter {
+        allCompletedItems.filter {
             guard let d = $0.completedAt else { return false }
             return Calendar.current.component(.year, from: d) == currentYear
         }
@@ -61,10 +78,8 @@ struct WatchModeView: View {
                 tabPicker
                 if !bannerDismissed { mediaInfoBanner }
 
-                if selectedTab == .queue {
-                    queueContent
-                } else if selectedTab == .completed {
-                    completedContent
+                if selectedTab == .shelf {
+                    shelfContent
                 } else {
                     discoverContent
                 }
@@ -136,7 +151,14 @@ struct WatchModeView: View {
             MediaDetailSheet(
                 title: item.title,
                 type: item.itemType,
-                existingPosterURL: tmdbPosterURL(for: item)
+                existingPosterURL: tmdbPosterURL(for: item),
+                item: item,
+                onCompleted: { finished in
+                    if let userId = authService.userId {
+                        Task { await SupabaseSyncService.shared.pushWatchlistItem(finished, userId: userId) }
+                    }
+                    ratingItem = finished
+                }
             )
         }
         .sheet(item: $detailTMDBItem) { item in
@@ -177,16 +199,32 @@ struct WatchModeView: View {
 
     private var tabPicker: some View {
         HStack(spacing: 0) {
-            tabButton(label: "Queue", icon: "bookmark.fill",
-                      count: watchingItems.count + queuedItems.count, tab: .queue)
-            tabButton(label: "Done", icon: "checkmark.circle.fill",
-                      count: completedItems.count, tab: .completed)
+            tabButton(label: "Your Shelf", icon: "books.vertical.fill",
+                      count: watchingItems.count + queuedItems.count, tab: .shelf)
             tabButton(label: "Discover", icon: "sparkles", count: 0, tab: .discover)
         }
         .padding(3)
         .background(Color.mist)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(Color.white)
+    }
+
+    private var galleryButton: some View {
+        Button {
+            showMediaGallery = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "square.grid.2x2.fill").font(.system(size: 13))
+                Text("Gallery").font(.custom("DMSans-Medium", size: 15))
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity).padding(.vertical, 13)
+            .background(Color.oceanTeal)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
         .background(Color.white)
     }
 
@@ -217,110 +255,109 @@ struct WatchModeView: View {
     // MARK: - Queue Content
 
     @ViewBuilder
-    private var queueContent: some View {
-        if watchingItems.isEmpty && queuedItems.isEmpty {
-            emptyState(icon: "🎬", title: "Nothing queued yet",
+    private var shelfContent: some View {
+        if items.isEmpty {
+            emptyState(icon: "🎬", title: "Nothing on the shelf yet",
                        subtitle: "Tap Add Media to add a show, movie or book")
         } else {
-            List {
-                // Now Watching — pinned at top
-                if !watchingItems.isEmpty {
-                    Section {
-                        ForEach(watchingItems) { item in watchingRow(item: item) }
-                    } header: {
-                        Label("NOW WATCHING", systemImage: "play.circle.fill")
-                            .font(.custom("DMSans-Medium", size: 11))
-                            .foregroundColor(.coral)
-                            .textCase(nil)
-                    }
-                }
+            shelfBackground {
+                LazyVStack(alignment: .leading, spacing: 30) {
+                    typeFilterRow
 
-                // Queue by type
-                if !queuedShows.isEmpty {
-                    Section {
-                        ForEach(queuedShows) { item in queueRow(item: item) }
-                    } header: {
-                        Text("📺  SHOWS")
-                            .font(.custom("DMSans-Medium", size: 11)).foregroundColor(.gray).textCase(nil)
-                    }
+                    // All three shelves stay put even when a filter empties them —
+                    // a section vanishing reads as things being lost.
+                    MediaShelf(label: "Currently watching", caption: "no rush",
+                               items: watchingItems,
+                               posters: posterMap,
+                               emptyMessage: emptyLine(.watching),
+                               onTap: { detailItem = $0 })
+
+                    MediaShelf(label: "Up next", caption: "when you get to it",
+                               items: queuedItems,
+                               posters: posterMap,
+                               emptyMessage: emptyLine(.queued),
+                               onTap: { detailItem = $0 })
+
+                    // Finished sits at the bottom — the archive, not the agenda
+                    MediaShelf(label: "Finished", caption: "things you've been through",
+                               items: filteredCompletedItems,
+                               posters: posterMap,
+                               emptyMessage: emptyLine(.watched),
+                               accessory: AnyView(statsStrip),
+                               onTap: { detailItem = $0 })
+                        .padding(.top, 6)
                 }
-                if !queuedMovies.isEmpty {
-                    Section {
-                        ForEach(queuedMovies) { item in queueRow(item: item) }
-                    } header: {
-                        Text("🎬  MOVIES")
-                            .font(.custom("DMSans-Medium", size: 11)).foregroundColor(.gray).textCase(nil)
-                    }
-                }
-                if !queuedBooks.isEmpty {
-                    Section {
-                        ForEach(queuedBooks) { item in queueRow(item: item) }
-                    } header: {
-                        Text("📚  BOOKS")
-                            .font(.custom("DMSans-Medium", size: 11)).foregroundColor(.gray).textCase(nil)
-                    }
-                }
+                .padding(.top, 14)
+                .padding(.bottom, 60)
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(Color.pearl)
         }
     }
 
-    // MARK: - Now Watching Row
+    // MARK: - Type filter
 
-    private func watchingRow(item: WatchlistItem) -> some View {
-        HStack(spacing: 12) {
-            posterThumbnail(url: tmdbPosterURL(for: item), type: item.itemType) { detailItem = item }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
-                    .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy).lineLimit(2)
-                HStack(spacing: 6) {
-                    if let service = item.streamingService { streamingPill(service: service) }
-                    if let s = item.season { seasonBadge(s) }
-                }
+    private var typeFilterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                filterChip("All", type: nil)
+                filterChip("Movies", type: "movie")
+                filterChip("Shows", type: "show")
+                filterChip("Books", type: "book")
             }
-            Spacer()
-
-            Button {
-                withAnimation(.spring(duration: 0.3)) {
-                    item.status = "completed"
-                    item.completedAt = Date()
-                    item.updatedAt = Date()
-                }
-                if let userId = authService.userId {
-                    Task { await SupabaseSyncService.shared.pushWatchlistItem(item, userId: userId) }
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { ratingItem = item }
-            } label: {
-                ZStack {
-                    Circle().fill(Color.coral.opacity(0.15)).frame(width: 32, height: 32)
-                    Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)).foregroundColor(.coral)
-                }
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.vertical, 6)
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                let id = item.id
-                modelContext.delete(item)
-                Task { await SupabaseSyncService.shared.deleteWatchlistItem(id: id) }
-            } label: { Label("Delete", systemImage: "trash") }
-
-            Button {
-                item.status = "queued"
-                item.updatedAt = Date()
-                if let userId = authService.userId {
-                    Task { await SupabaseSyncService.shared.pushWatchlistItem(item, userId: userId) }
-                }
-            } label: { Label("Back to Queue", systemImage: "arrow.uturn.left") }
-            .tint(.oceanTeal)
+            .padding(.horizontal, 20)
         }
     }
 
-    // MARK: - Queue Row
+    private func filterChip(_ label: String, type: String?) -> some View {
+        let active = typeFilter == type
+        return Button {
+            withAnimation(.easeOut(duration: 0.2)) { typeFilter = type }
+        } label: {
+            Text(label)
+                .font(.custom("DMSans-Regular", size: 13))
+                .foregroundColor(active ? inkPrimary : inkMuted)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(active ? shelfWood.opacity(0.35) : Color.clear)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private enum ShelfKind { case watching, queued, watched }
+
+    /// Empty-shelf line, keyed to both the shelf and the filter. Name the place
+    /// rather than the status — "nothing on the nightstand" reads warmer than
+    /// "no books in progress", so the rest follow suit.
+    private func emptyLine(_ kind: ShelfKind) -> String {
+        switch (kind, typeFilter) {
+        case (.watching, "book"):  return "nothing on the nightstand"
+        case (.watching, "movie"): return "the screen's dark"
+        case (.watching, "show"):  return "between seasons"
+        case (.watching, _):       return "nothing on the go"
+
+        case (.queued, "book"):    return "get to reading!"
+        case (.queued, "movie"):   return "nothing for movie night"
+        case (.queued, "show"):    return "nothing to binge"
+        case (.queued, _):         return "nothing lined up"
+
+        case (.watched, "book"):   return "no books closed yet"
+        case (.watched, "movie"):  return "no credits rolled yet"
+        case (.watched, "show"):   return "no finales yet"
+        case (.watched, _):        return "nothing finished yet"
+        }
+    }
+
+    // The shelves live in the same warm room as the standalone gallery
+    private func shelfBackground<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ZStack {
+            cafeBg.ignoresSafeArea()
+            RadialGradient(colors: [lampGlow.opacity(0.10), .clear],
+                           center: UnitPoint(x: 0.92, y: 0.06),
+                           startRadius: 4, endRadius: 320)
+                .ignoresSafeArea().allowsHitTesting(false)
+            FilmGrain().ignoresSafeArea()
+            ScrollView { content() }
+        }
+    }
 
     private func queueRow(item: WatchlistItem) -> some View {
         HStack(spacing: 12) {
@@ -367,30 +404,6 @@ struct WatchModeView: View {
     // MARK: - Completed Content
 
     @ViewBuilder
-    private var completedContent: some View {
-        if completedItems.isEmpty {
-            emptyState(icon: "✅", title: "Nothing completed yet",
-                       subtitle: "Mark items as done to see them here")
-        } else {
-            List {
-                // Stats strip
-                Section {
-                    statsStrip
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                }
-
-                Section {
-                    ForEach(filteredCompletedItems) { item in completedRow(item: item) }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(Color.pearl)
-        }
-    }
-
     private var statsStrip: some View {
         let shows  = completedThisYear.filter { $0.itemType == "show" }.count
         let movies = completedThisYear.filter { $0.itemType == "movie" }.count
@@ -400,15 +413,15 @@ struct WatchModeView: View {
             HStack(spacing: 10) {
                 if shows > 0 {
                     statPill(emoji: "📺", value: "\(shows)", label: shows == 1 ? "show" : "shows",
-                             type: "show", isActive: completedTypeFilter == "show")
+                             type: "show", isActive: typeFilter == "show")
                 }
                 if movies > 0 {
                     statPill(emoji: "🎬", value: "\(movies)", label: movies == 1 ? "movie" : "movies",
-                             type: "movie", isActive: completedTypeFilter == "movie")
+                             type: "movie", isActive: typeFilter == "movie")
                 }
                 if books > 0 {
                     statPill(emoji: "📚", value: "\(books)", label: books == 1 ? "book" : "books",
-                             type: "book", isActive: completedTypeFilter == "book")
+                             type: "book", isActive: typeFilter == "book")
                 }
                 if let avg = avgRating {
                     statPill(emoji: "⭐", value: String(format: "%.1f", avg), label: "avg rating",
@@ -420,32 +433,22 @@ struct WatchModeView: View {
     }
 
     private func statPill(emoji: String, value: String, label: String, type: String?, isActive: Bool) -> some View {
-        Button {
-            guard let type else { return }
-            withAnimation(.easeOut(duration: 0.18)) {
-                completedTypeFilter = completedTypeFilter == type ? nil : type
-            }
-        } label: {
+        Group {
             HStack(spacing: 6) {
-                Text(emoji).font(.system(size: 14))
+                Text(emoji).font(.system(size: 12))
                 VStack(alignment: .leading, spacing: 0) {
                     Text(value)
-                        .font(.custom("DMSans-Medium", size: 15))
+                        .font(.custom("DMSans-Medium", size: 13))
                         .foregroundColor(isActive ? .white : .deepNavy)
                     Text(label)
-                        .font(.custom("DMSans-Regular", size: 11))
+                        .font(.custom("DMSans-Regular", size: 10))
                         .foregroundColor(isActive ? .white.opacity(0.8) : .gray)
                 }
-                if isActive {
-                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white.opacity(0.7))
-                        .padding(.leading, 2)
-                }
             }
-            .padding(.horizontal, 14).padding(.vertical, 10)
+            .padding(.horizontal, 11).padding(.vertical, 7)
             .background(isActive ? Color.oceanTeal : Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(
                 isActive ? Color.oceanTeal : Color.black.opacity(0.07), lineWidth: isActive ? 0 : 0.5))
             .shadow(color: isActive ? Color.oceanTeal.opacity(0.25) : .clear, radius: 4, y: 2)
         }

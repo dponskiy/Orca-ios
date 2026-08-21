@@ -37,7 +37,7 @@ struct MemoryDetailView: View {
         echo?.name.lowercased().contains("cook") == true
     }
 
-    /// Builds a shareable `orca://` deep link for any cooking recipe — URL-sourced or OCR/manual.
+    /// Builds a shareable universal link for any cooking recipe — URL-sourced or OCR/manual.
     private var recipeShareURL: URL? {
         // Prefer the original source URL (smaller link)
         if let sourceURL = memory.url, !sourceURL.isEmpty,

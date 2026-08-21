@@ -21,6 +21,10 @@ enum Config {
     // Rebrickable (free key at rebrickable.com/api/)
     static let rebrickableApiKey = "055d3136d0609c700bfbdc2bba30096b"
 
+    // IGDB (via Twitch — dev.twitch.tv/console/apps)
+    static let igdbClientId     = "smxjmt8r5ugkdsoymgmrdm0n4aqnq1"
+    static let igdbClientSecret = "0hgnyxxdfgtr7zdjly4qbymp8323sn"
+
     // App
     static let privacyURL = "https://orcadrop.app/privacy"
     static let termsURL = "https://orcadrop.app/terms"

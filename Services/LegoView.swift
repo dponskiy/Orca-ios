@@ -14,6 +14,7 @@ struct LegoCollectionContent: View {
     @State private var service = RebrickableService.shared
     @State private var showBrowser = false
     @State private var showSearch = false
+    @State private var showGallery = false
     @State private var setToRemove: LegoSet? = nil
     @State private var detailSet: LegoSet? = nil
 
@@ -27,14 +28,18 @@ struct LegoCollectionContent: View {
     }
 
     var body: some View {
-        Group {
+        // VStack (not Group) is a stable anchor — sheet modifiers stay on the same
+        // view even when the conditional content inside changes entirely (e.g. first
+        // insert going from emptyState → stats+collection). Group distributes modifiers
+        // to each child, so a content swap re-anchors the sheet and resets nav state.
+        VStack(spacing: 0) {
             if !service.hasApiKey {
                 apiKeyPrompt
             } else {
                 if !allSets.isEmpty { legoStatsStrip }
+                if allSets.isEmpty { emptyState } else { legoBrowseButtons }
                 if !ownedSets.isEmpty { legoCollectionSection }
                 if !wantedSets.isEmpty { wantListSection }
-                if allSets.isEmpty { emptyState } else { legoActionButtons }
             }
         }
         .sheet(isPresented: $showBrowser) { LegoThemeBrowserView() }
@@ -184,28 +189,42 @@ struct LegoCollectionContent: View {
         }
     }
 
-    private var legoActionButtons: some View {
-        HStack(spacing: 12) {
-            Button { showSearch = true } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                    Text("Search Sets").font(.custom("DMSans-Medium", size: 14))
+    private var legoBrowseButtons: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Button { showSearch = true } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "rectangle.grid.2x2")
+                        Text("Browse Sets").font(.custom("DMSans-Medium", size: 15))
+                    }
+                    .foregroundColor(.oceanTeal)
+                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                    .background(Color.oceanTeal.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
-                .foregroundColor(.deepNavy)
-                .frame(maxWidth: .infinity).padding(.vertical, 13)
-                .background(Color.mist)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            Button { showBrowser = true } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "rectangle.grid.2x2")
-                    Text("By Theme").font(.custom("DMSans-Medium", size: 14))
+                Button { showBrowser = true } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "list.bullet")
+                        Text("Browse Themes").font(.custom("DMSans-Medium", size: 15))
+                    }
+                    .foregroundColor(.oceanTeal)
+                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                    .background(Color.oceanTeal.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
-                .foregroundColor(.oceanTeal)
-                .frame(maxWidth: .infinity).padding(.vertical, 13)
-                .background(Color.oceanTeal.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
+
+            Button { showGallery = true } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.grid.2x2.fill")
+                    Text("Gallery").font(.custom("DMSans-Medium", size: 15))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.oceanTeal)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .fullScreenCover(isPresented: $showGallery) { CollectionShowcaseView(category: .lego) }
         }
         .padding(.horizontal, 20).padding(.top, 20)
     }
@@ -259,6 +278,7 @@ struct LegoThemeBrowserView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var service = RebrickableService.shared
     @State private var searchText = ""
+    @State private var navigationPath = NavigationPath()
 
     private var filteredThemes: [RBTheme] {
         guard !searchText.isEmpty else { return service.parentThemes }
@@ -266,7 +286,7 @@ struct LegoThemeBrowserView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             Group {
                 if service.isFetchingThemes {
                     VStack(spacing: 16) {
@@ -278,7 +298,7 @@ struct LegoThemeBrowserView: View {
                 } else {
                     List {
                         ForEach(filteredThemes) { theme in
-                            NavigationLink(destination: LegoSetBrowserView(theme: theme)) {
+                            NavigationLink(value: theme) {
                                 HStack {
                                     Image(systemName: "cube.box")
                                         .font(.system(size: 14))
@@ -295,6 +315,9 @@ struct LegoThemeBrowserView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .navigationDestination(for: RBTheme.self) { theme in
+                        LegoSetBrowserView(theme: theme)
+                    }
                 }
             }
             .background(Color.pearl.ignoresSafeArea())
@@ -320,11 +343,18 @@ struct LegoSetBrowserView: View {
     @Environment(AuthService.self) private var authService
     @Query private var allLegoSets: [LegoSet]
     @State private var service = RebrickableService.shared
+    // nil = not in collection, "owned", "want", "" = locally removed
+    @State private var localStatus: [String: String] = [:]
 
     private var sets: [RBSet] { service.themeSets[theme.id] ?? [] }
     private var isLoading: Bool { service.fetchingThemeIds.contains(theme.id) }
-    private var ownedNums: Set<String> { Set(allLegoSets.filter { $0.isOwned }.map { $0.setNum }) }
-    private var wantedNums: Set<String> { Set(allLegoSets.filter { !$0.isOwned }.map { $0.setNum }) }
+
+    private func effectiveStatus(for setNum: String) -> String? {
+        if let local = localStatus[setNum] { return local.isEmpty ? nil : local }
+        if allLegoSets.first(where: { $0.setNum == setNum && $0.isOwned }) != nil { return "owned" }
+        if allLegoSets.first(where: { $0.setNum == setNum && !$0.isOwned }) != nil { return "want" }
+        return nil
+    }
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
@@ -360,31 +390,39 @@ struct LegoSetBrowserView: View {
     }
 
     private func setCard(set: RBSet) -> some View {
-        let isOwned = ownedNums.contains(set.setNum)
-        let isWanted = wantedNums.contains(set.setNum)
+        let status = effectiveStatus(for: set.setNum)
+        let isOwned = status == "owned"
+        let accent: Color = isOwned ? .oceanTeal : .coral
 
         return VStack(spacing: 0) {
-            AsyncImage(url: set.imageURL) { phase in
-                switch phase {
-                case .success(let img):
-                    img.resizable().aspectRatio(contentMode: .fill)
-                case .empty:
-                    ZStack { Color.mist; ProgressView().scaleEffect(0.5) }
-                default:
-                    ZStack { Color.mist; Image(systemName: "cube.box").foregroundColor(.gray.opacity(0.3)) }
-                }
-            }
-            .frame(maxWidth: .infinity).frame(height: 100)
-            .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                Group {
-                    if isOwned {
-                        RoundedRectangle(cornerRadius: 10).stroke(Color.oceanTeal, lineWidth: 2)
-                    } else if isWanted {
-                        RoundedRectangle(cornerRadius: 10).stroke(Color.coral, lineWidth: 2)
+            ZStack(alignment: .topTrailing) {
+                AsyncImage(url: set.imageURL) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img.resizable().aspectRatio(contentMode: .fill)
+                    case .empty:
+                        ZStack { Color.mist; ProgressView().scaleEffect(0.5) }
+                    default:
+                        ZStack { Color.mist; Image(systemName: "cube.box").foregroundColor(.gray.opacity(0.3)) }
                     }
                 }
+                .frame(maxWidth: .infinity).frame(height: 100)
+                .clipped()
+
+                if status != nil {
+                    Image(systemName: isOwned ? "checkmark.circle.fill" : "heart.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(accent)
+                        .padding(5)
+                        .background(Color.white)
+                        .clipShape(Circle())
+                        .padding(5)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(status == nil ? Color.clear : accent, lineWidth: 2)
             )
 
             VStack(alignment: .leading, spacing: 3) {
@@ -396,56 +434,49 @@ struct LegoSetBrowserView: View {
                     Text("\(set.numParts) pcs").font(.custom("DMMono-Regular", size: 9)).foregroundColor(.gray)
                 }
                 Text("\(set.year)").font(.custom("DMMono-Regular", size: 9)).foregroundColor(.gray)
-
-                if isOwned || isWanted {
-                    Text(isOwned ? "✓ Owned" : "♥ Wanted")
-                        .font(.custom("DMSans-Medium", size: 10))
-                        .foregroundColor(isOwned ? .oceanTeal : .coral)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
-                        .background((isOwned ? Color.oceanTeal : Color.coral).opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                } else {
-                    HStack(spacing: 6) {
-                        addButton(label: "Own", color: .oceanTeal) { addSet(set, status: "owned") }
-                        addButton(label: "Want", color: .coral) { addSet(set, status: "want") }
-                    }
-                }
             }
-            .padding(.horizontal, 8).padding(.vertical, 6)
+            .padding(.horizontal, 8).padding(.vertical, 8)
         }
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+        .onTapGesture { cycleSet(set) }
     }
 
-    private func addButton(label: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(.custom("DMSans-Medium", size: 10))
-                .foregroundColor(color)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 5)
-                .background(color.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-        }
-    }
-
-    private func addSet(_ set: RBSet, status: String) {
-        let legoSet = LegoSet(
-            setNum: set.setNum,
-            name: set.name,
-            year: set.year,
-            themeId: theme.id,
-            themeName: theme.name,
-            numParts: set.numParts,
-            imageURL: set.imageURL?.absoluteString ?? ""
-        )
-        legoSet.statusRaw = status
-        modelContext.insert(legoSet)
-        try? modelContext.save()
-        if let userId = authService.userId {
-            Task { await SupabaseSyncService.shared.pushLegoSet(legoSet, userId: userId) }
+    private func cycleSet(_ set: RBSet) {
+        let current = effectiveStatus(for: set.setNum)
+        switch current {
+        case nil:
+            // Not in collection → Owned
+            localStatus[set.setNum] = "owned"
+            let legoSet = LegoSet(setNum: set.setNum, name: set.name, year: set.year,
+                                  themeId: theme.id, themeName: theme.name,
+                                  numParts: set.numParts, imageURL: set.imageURL?.absoluteString ?? "")
+            legoSet.statusRaw = "owned"
+            modelContext.insert(legoSet)
+            try? modelContext.save()
+            if let userId = authService.userId {
+                Task { await SupabaseSyncService.shared.pushLegoSet(legoSet, userId: userId) }
+            }
+        case "owned":
+            // Owned → Want
+            localStatus[set.setNum] = "want"
+            if let existing = allLegoSets.first(where: { $0.setNum == set.setNum }) {
+                existing.isOwned = false
+                try? modelContext.save()
+                if let userId = authService.userId {
+                    Task { await SupabaseSyncService.shared.pushLegoSet(existing, userId: userId) }
+                }
+            }
+        default:
+            // Want → Remove
+            localStatus[set.setNum] = ""
+            if let existing = allLegoSets.first(where: { $0.setNum == set.setNum }) {
+                let id = existing.id
+                modelContext.delete(existing)
+                try? modelContext.save()
+                Task { await SupabaseSyncService.shared.deleteLegoSet(id: id) }
+            }
         }
     }
 }
@@ -454,6 +485,9 @@ struct LegoSetBrowserView: View {
 
 struct LegoSetDetailSheet: View {
     let set: LegoSet
+    // Set when shown as an in-place overlay instead of a modal —
+    // @Environment(\.dismiss) is inert outside a presentation.
+    var onClose: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -532,7 +566,7 @@ struct LegoSetDetailSheet: View {
                 modelContext.delete(set)
                 try? modelContext.save()
                 Task { await SupabaseSyncService.shared.deleteLegoSet(id: id) }
-                dismiss()
+                close()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -551,6 +585,10 @@ struct LegoSetDetailSheet: View {
             .background(active ? color : color.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
+    }
+
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
     }
 }
 
@@ -664,7 +702,9 @@ struct LegoSearchView: View {
             Text(label).font(.custom("DMSans-Medium", size: 10)).foregroundColor(color)
                 .frame(maxWidth: .infinity).padding(.vertical, 5)
                 .background(color.opacity(0.1)).clipShape(RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 
     private func addSet(_ set: RBSet, status: String) {

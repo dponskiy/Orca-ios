@@ -450,7 +450,9 @@ struct GiftListView: View {
         let echoId = echos.first { $0.name == "Gifts" }?.id ?? echos.first?.id ?? UUID()
         let memText = isWishlist ? "Wishlist: \(trimmed)" : "Gift for \(person?.name ?? ""): \(trimmed)"
         let memory = Memory(text: memText, echoId: echoId, captureType: .typed)
-        memory.isActionable = true
+        // A gift for someone else is something to go buy — a task. Your own wishlist
+        // is a record of what you'd like to receive, so it shouldn't join your tasks.
+        memory.isActionable = !isWishlist
         gift.linkedMemoryId = memory.id
         modelContext.insert(memory)
 

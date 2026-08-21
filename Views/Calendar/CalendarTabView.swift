@@ -38,6 +38,7 @@ struct CalendarTabView: View {
     private func isoDateKey(_ date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
+        formatter.timeZone = .current  // default is GMT — evening completions would land on tomorrow's key
         return formatter.string(from: date)
     }
 
@@ -62,6 +63,7 @@ struct CalendarTabView: View {
         } else {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withFullDate]
+            formatter.timeZone = .current
             memory.completedAt = memory.recurringCompletedDates
                 .compactMap { formatter.date(from: $0) }
                 .max()

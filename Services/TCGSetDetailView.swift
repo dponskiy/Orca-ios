@@ -324,6 +324,7 @@ struct TCGSetDetailView: View {
             rarity: card.rarity
         )
         tcgCard.statusRaw = status
+        tcgCard.types = card.types
         tcgCard.marketPrice = card.marketPrice
         tcgCard.lowPrice = card.lowPrice
         tcgCard.highPrice = card.highPrice

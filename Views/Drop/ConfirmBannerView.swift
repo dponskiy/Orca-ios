@@ -17,6 +17,9 @@ struct ConfirmBannerView: View {
     var onEchoChanged: ((UUID) -> Void)? = nil
     var onRecipeFetched: ((RecipeResult) -> Void)? = nil
     var onEdit: (() -> Void)? = nil
+    // Fired when the inline text was changed: carries the edited text plus a fresh
+    // SonarResult so the host can update the memory's date/pings/tags to match.
+    var onTextEdited: ((String, SonarResult) -> Void)? = nil
     var onLocationSet: ((String, String?, Double, Double) -> Void)? = nil
     var onGroceryHint: (() -> Void)? = nil
     var onAddToWatchlist: ((String, String, String?) -> Void)? = nil
@@ -32,6 +35,11 @@ struct ConfirmBannerView: View {
     @State private var recipeFetchError: String? = nil
     @State private var recipeFetchSuccess = false
     @State private var wasCancelled = false
+    @State private var didComplete = false
+    // Sonar re-run bookkeeping: don't clobber choices the user made by hand
+    @State private var userPickedEcho = false
+    @State private var userToggledTask = false
+    @State private var lastSonarText = ""
     @State private var locationName: String? = nil
     @State private var locationAddress: String? = nil
     @State private var latitude: Double? = nil
@@ -75,6 +83,59 @@ struct ConfirmBannerView: View {
         return nil
     }
 
+    /// Sonar wasn't confident about the echo and the user hasn't overridden it.
+    private var isUncertain: Bool {
+        guard let result = sonarResult, !userPickedEcho else { return false }
+        return result.echoConfidence < 0.7
+    }
+
+    /// One quiet line saying where it landed and when — replaces the chip row.
+    private func summaryLine(echoName: String) -> String {
+        var parts: [String] = [echoName]
+        if let date = sonarResult?.detectedDate {
+            if let end = sonarResult?.endDate {
+                parts.append("\(date.formatted(.dateTime.month(.abbreviated).day()))–\(end.formatted(.dateTime.month(.abbreviated).day()))")
+            } else {
+                let comps = Calendar.current.dateComponents([.hour, .minute], from: date)
+                let hasTime = (comps.hour ?? 0) != 0 || (comps.minute ?? 0) != 0
+                // Always name the date — "Thu 3:00 PM" is ambiguous past this week
+                parts.append(hasTime
+                    ? date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+                    : date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+            }
+        }
+        parts.append(contentsOf: reminderPart())
+        return parts.joined(separator: " · ")
+    }
+
+    /// When the reminder actually fires. "reminder set" alongside a 7pm event hides
+    /// the fact that the ping is at 6 — which is exactly the detail worth confirming.
+    private func reminderPart() -> [String] {
+        guard sonarResult?.shouldCreatePing == true,
+              let suggestion = sonarResult?.pingSuggestions.first else { return [] }
+
+        let cal = Calendar.current
+        let event = sonarResult?.detectedDate
+        // Mirrors how the notification is scheduled: day from fireDate, time from fireTime
+        guard let daySource = suggestion.fireDate ?? event else { return ["reminder set"] }
+        let timeSource = suggestion.fireTime ?? suggestion.fireDate ?? daySource
+        var comps = cal.dateComponents([.year, .month, .day], from: daySource)
+        let t = cal.dateComponents([.hour, .minute], from: timeSource)
+        comps.hour = t.hour; comps.minute = t.minute
+        guard let firesAt = cal.date(from: comps) else { return ["reminder set"] }
+
+        let recurrence = suggestion.recurrence
+        if recurrence != .none {
+            return ["reminds \(recurrence.rawValue) \(firesAt.formatted(.dateTime.hour().minute()))"]
+        }
+        // Same moment as the event — no need to repeat it
+        if let event, abs(firesAt.timeIntervalSince(event)) < 60 { return ["reminder set"] }
+        if let event, cal.isDate(firesAt, inSameDayAs: event) {
+            return ["reminder \(firesAt.formatted(.dateTime.hour().minute()))"]
+        }
+        return ["reminder \(firesAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"]
+    }
+
     private func extractRestaurantName(from text: String) -> String {
         let commonWords = Set(["the","a","an","for","at","in","on","to","of","and","with","from","by","i","we","my","our","is","are","was","were","tomorrow","today","tonight","dinner","lunch","brunch","breakfast","monday","tuesday","wednesday","thursday","friday","saturday","sunday","pm","am","next","this","going","want","lets","let","have","had"])
         let words = text.components(separatedBy: .whitespaces)
@@ -110,13 +171,15 @@ struct ConfirmBannerView: View {
 
             // MARK: - Main banner
             VStack(spacing: 0) {
-                // Progress bar
+                // Auto-dismiss indicator, deliberately quiet. A bold teal countdown
+                // turned a confirmation into a timed test; this still signals "this
+                // will close itself" without making it feel like a clock.
                 GeometryReader { geo in
                     Rectangle()
-                        .fill(Color.oceanTeal)
-                        .frame(width: geo.size.width * countdown, height: 3)
+                        .fill(Color.gray.opacity(0.18))
+                        .frame(width: geo.size.width * countdown, height: 2)
                 }
-                .frame(height: 3)
+                .frame(height: 2)
 
                 VStack(spacing: 10) {
                     let echoName = echos.first { $0.id == selectedEchoId }?.name
@@ -124,9 +187,15 @@ struct ConfirmBannerView: View {
                     let echoEmoji = echos.first { $0.id == selectedEchoId }?.emoji
                         ?? echos.first { $0.name == sonarResult?.echoName }?.emoji ?? "📝"
 
-                    // MARK: - Top row
-                    HStack(alignment: .top, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 3) {
+                    // MARK: - What happened
+                    //
+                    // The banner's job is to say "got it", not to run a form. Chips
+                    // are an admission of uncertainty, so they only appear when
+                    // Sonar actually is uncertain. Everything else moved to the
+                    // memory detail, where there's no clock running.
+
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 5) {
                             if isEditingText {
                                 TextField("Edit memory...", text: $editedText, axis: .vertical)
                                     .font(.custom("DMSans-Regular", size: 15))
@@ -137,10 +206,10 @@ struct ConfirmBannerView: View {
                                     .background(Color.pearl)
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.oceanTeal, lineWidth: 1.5))
-
                                 Button {
                                     isEditingText = false
                                     textFieldFocused = false
+                                    reRunSonarIfNeeded()
                                 } label: {
                                     Text("Done editing")
                                         .font(.custom("DMSans-Medium", size: 12))
@@ -151,312 +220,47 @@ struct ConfirmBannerView: View {
                                 Text(editedText)
                                     .font(.custom("DMSans-Medium", size: 15))
                                     .foregroundColor(.deepNavy)
-                                    .lineLimit(3)
+                                    .lineLimit(2)
                                     .onTapGesture {
                                         isPaused = true
                                         isEditingText = true
                                         textFieldFocused = true
                                     }
 
-                                HStack(spacing: 6) {
-                                    Text("tap to edit")
-                                        .font(.custom("DMSans-Regular", size: 11))
-                                        .foregroundColor(.gray)
-                                    Text("·")
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.gray)
-                                    Button {
-                                        isPaused = true
-                                        onEdit?()
-                                    } label: {
-                                        Text("full edit")
-                                            .font(.custom("DMSans-Regular", size: 11))
-                                            .foregroundColor(.oceanTeal)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        VStack(spacing: 6) {
-                            Button {
-                                wasCancelled = true
-                                onUndo()
-                            } label: {
-                                Text("Undo")
-                                    .font(.custom("DMSans-Medium", size: 13))
-                                    .foregroundColor(.deepNavy)
-                                    .padding(.horizontal, 14).padding(.vertical, 6)
-                                    .overlay(Capsule().stroke(Color.gray.opacity(0.3), lineWidth: 1))
-                            }
-
-                            Button {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                let echoId = selectedEchoId ?? echos.first { $0.name == sonarResult?.echoName }?.id
-                                if let echoId, let confirmedEcho = echos.first(where: { $0.id == echoId }) {
-                                    SonarEngine.learnKeywords(from: editedText, echo: confirmedEcho)
-                                }
-                                onDone(isTask, effectiveDuration)
-                            } label: {
-                                Text("Done")
-                                    .font(.custom("DMSans-Medium", size: 13))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 14).padding(.vertical, 6)
-                                    .background(Color.oceanTeal)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .fixedSize()
-                    }
-
-                    // MARK: - Chips hint row
-                    HStack {
-                        Text("Wrong echo? Tap to change")
-                            .font(.custom("DMSans-Regular", size: 11))
-                            .foregroundColor(.gray)
-                        Spacer()
-                        Button {
-                            isPaused = true
-                            withAnimation(.spring(duration: 0.3)) { showTipOverlay = true }
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "questionmark.circle").font(.system(size: 11))
-                                Text("Show tips").font(.custom("DMSans-Regular", size: 11))
-                            }
-                            .foregroundColor(.gray.opacity(0.5))
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // MARK: - Chip scroll view
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 7) {
-                            if let result = sonarResult {
-
-                                // Echo chip
+                                // One quiet line saying where it went
                                 Button {
                                     isPaused = true
                                     withAnimation(.easeOut(duration: 0.2)) { showEchoPicker.toggle() }
                                 } label: {
-                                    HStack(spacing: 4) {
-                                        Text(echoEmoji).font(.system(size: 13))
-                                        Text(echoName)
-                                            .font(.custom("DMSans-Medium", size: 13))
-                                            .foregroundColor(.deepNavy)
+                                    HStack(spacing: 5) {
+                                        Text(echoEmoji).font(.system(size: 11))
+                                        Text(summaryLine(echoName: echoName))
+                                            .font(.custom("DMSans-Regular", size: 12))
+                                            .foregroundColor(isUncertain ? .coral : .gray)
+                                            .lineLimit(1)
                                         Image(systemName: "chevron.down")
-                                            .font(.system(size: 9, weight: .bold)).foregroundColor(.gray)
-                                        if result.echoConfidence < 0.7 {
-                                            Text("?")
-                                                .font(.custom("DMSans-Bold", size: 11)).foregroundColor(.white)
-                                                .frame(width: 16, height: 16).background(Color.coral).clipShape(Circle())
-                                        }
-                                    }
-                                    .padding(.horizontal, 10).padding(.vertical, 6)
-                                    .background(Color.mist).clipShape(Capsule())
-                                }
-
-                                // Date chip
-                                if let date = result.detectedDate {
-                                    HStack(spacing: 4) {
-                                        Text("📅").font(.system(size: 13))
-                                        if let endDate = result.endDate {
-                                            Text("\(date.formatted(.dateTime.month(.abbreviated).day())) – \(endDate.formatted(.dateTime.month(.abbreviated).day()))")
-                                                .font(.custom("DMSans-Medium", size: 13))
-                                                .foregroundColor(.deepNavy)
-                                        } else {
-                                            Text(date, format: .dateTime.month(.abbreviated).day())
-                                                .font(.custom("DMSans-Medium", size: 13))
-                                                .foregroundColor(.deepNavy)
-                                        }
-                                    }
-                                    .padding(.horizontal, 10).padding(.vertical, 6)
-                                    .background(Color.mist).clipShape(Capsule())
-                                }
-
-                                // Add to Calendar chip — only for date-bearing memories
-                                if let date = result.detectedDate {
-                                    Button {
-                                        guard !addedToCalendar else { return }
-                                        Task {
-                                            let granted = CalendarService.shared.isAuthorized
-                                                ? true
-                                                : await CalendarService.shared.requestAccess()
-                                            if granted {
-                                                CalendarService.shared.addEvent(
-                                                    title: editedText.isEmpty ? transcription : editedText,
-                                                    startDate: date,
-                                                    endDate: result.endDate
-                                                )
-                                                await MainActor.run {
-                                                    withAnimation(.spring(duration: 0.2)) { addedToCalendar = true }
-                                                }
-                                            }
-                                        }
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: addedToCalendar ? "calendar.badge.checkmark" : "calendar.badge.plus")
-                                                .font(.system(size: 12))
-                                                .foregroundColor(addedToCalendar ? .white : .deepNavy)
-                                            Text(addedToCalendar ? "Added ✓" : "Add to Calendar")
-                                                .font(.custom("DMSans-Medium", size: 13))
-                                                .foregroundColor(addedToCalendar ? .white : .deepNavy)
-                                        }
-                                        .padding(.horizontal, 10).padding(.vertical, 6)
-                                        .background(addedToCalendar ? Color.oceanTeal : Color.mist)
-                                        .clipShape(Capsule())
+                                            .font(.system(size: 7, weight: .bold))
+                                            .foregroundColor(isUncertain ? .coral.opacity(0.7) : .gray.opacity(0.5))
                                     }
                                 }
-
-                                // Ping chip
-                                if result.shouldCreatePing {
-                                    HStack(spacing: 4) {
-                                        Text("🔔").font(.system(size: 13))
-                                        Text(result.pingRecurrence == .none ? "Ping" : result.pingRecurrence.rawValue.capitalized)
-                                            .font(.custom("DMSans-Medium", size: 13))
-                                            .foregroundColor(.deepNavy)
-                                    }
-                                    .padding(.horizontal, 10).padding(.vertical, 6)
-                                    .background(Color.mist).clipShape(Capsule())
-                                }
-
-                                // Duration chip
-                                if let mins = effectiveDuration, mins > 0 {
-                                    HStack(spacing: 4) {
-                                        Text("⏱").font(.system(size: 13))
-                                        Text(DurationParser.shared.format(mins))
-                                            .font(.custom("DMSans-Medium", size: 13))
-                                            .foregroundColor(.deepNavy)
-                                        if selectedDuration != nil {
-                                            Image(systemName: "xmark")
-                                                .font(.system(size: 9, weight: .medium))
-                                                .foregroundColor(.gray)
-                                                .onTapGesture { selectedDuration = nil }
-                                        }
-                                    }
-                                    .padding(.horizontal, 10).padding(.vertical, 6)
-                                    .background(Color.mist).clipShape(Capsule())
-                                }
-
-                                // Location chip
-                                if isDiningOrEvents {
-                                    Button {
-                                        isPaused = true
-                                        showLocationSearch = true
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: locationName != nil ? "mappin.circle.fill" : "mappin.circle")
-                                                .font(.system(size: 13))
-                                                .foregroundColor(locationName != nil ? .oceanTeal : .secondary)
-                                            Text(locationName ?? "Add location")
-                                                .font(.custom("DMSans-Medium", size: 13))
-                                                .foregroundColor(locationName != nil ? .deepNavy : .secondary)
-                                        }
-                                        .padding(.horizontal, 10).padding(.vertical, 6)
-                                        .background(Color.mist).clipShape(Capsule())
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-
-                                // Task chip
-                                Button {
-                                    isPaused = true
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                    withAnimation(.spring(duration: 0.2)) { isTask.toggle() }
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: isTask ? "checkmark.circle.fill" : "circle")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(isTask ? .white : .gray)
-                                        Text("Task")
-                                            .font(.custom("DMSans-Medium", size: 13))
-                                            .foregroundColor(isTask ? .white : .gray)
-                                    }
-                                    .padding(.horizontal, 10).padding(.vertical, 6)
-                                    .background(isTask ? Color.oceanTeal : Color.mist)
-                                    .clipShape(Capsule())
-                                }
-
-                                // Watchlist chip
-                                let currentEchoName = (echos.first { $0.id == selectedEchoId }?.name ?? sonarResult?.echoName ?? "").lowercased()
-                                let isWatchable = currentEchoName.contains("movie") || currentEchoName.contains("book") || currentEchoName.contains("show")
-
-                                if isWatchable {
-                                    Button {
-                                        guard !addedToWatchlist else { return }
-                                        isPaused = true
-                                        let itemType = currentEchoName.contains("book") ? "book" : currentEchoName.contains("movie") ? "movie" : "show"
-                                        let service = SonarEngine.detectStreamingService(from: transcription)
-                                        Task {
-                                            let title = await AppleIntelligenceService.shared.extractMediaTitle(from: editedText)
-                                            await MainActor.run {
-                                                onAddToWatchlist?(title ?? editedText, itemType, service)
-                                                withAnimation(.spring(duration: 0.2)) { addedToWatchlist = true }
-                                            }
-                                        }
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: addedToWatchlist ? "checkmark.circle.fill" : "plus.circle")
-                                                .font(.system(size: 12))
-                                                .foregroundColor(addedToWatchlist ? .white : .deepNavy)
-                                            Text(addedToWatchlist ? "Added ✓" : currentEchoName.contains("book") ? "Add to reading list" : "Add to watch list")
-                                                .font(.custom("DMSans-Medium", size: 13))
-                                                .foregroundColor(addedToWatchlist ? .white : .deepNavy)
-                                        }
-                                        .padding(.horizontal, 10).padding(.vertical, 6)
-                                        .background(addedToWatchlist ? Color.coral : Color.mist)
-                                        .clipShape(Capsule())
-                                    }
-                                } // end if isWatchable
-
-                            } // end if let result
-                        } // end HStack
-                    } // end ScrollView
-
-                    // MARK: - Duration quick-pick row
-                    if showDurationRow {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Divider()
-                            Text("How long?")
-                                .font(.custom("DMSans-Regular", size: 12))
-                                .foregroundColor(.gray)
-                            HStack(spacing: 7) {
-                                ForEach([15, 30, 60, 120], id: \.self) { mins in
-                                    Button {
-                                        withAnimation(.spring(duration: 0.2)) {
-                                            selectedDuration = mins
-                                            isPaused = true
-                                        }
-                                    } label: {
-                                        Text(DurationParser.shared.format(mins))
-                                            .font(.custom("DMSans-Medium", size: 13))
-                                            .foregroundColor(.deepNavy)
-                                            .padding(.horizontal, 12).padding(.vertical, 6)
-                                            .background(Color.mist)
-                                            .clipShape(Capsule())
-                                    }
-                                }
-                                Button {
-                                    withAnimation(.spring(duration: 0.2)) { selectedDuration = -1 }
-                                } label: {
-                                    Text("Skip")
-                                        .font(.custom("DMSans-Medium", size: 13))
-                                        .foregroundColor(.gray)
-                                        .padding(.horizontal, 12).padding(.vertical, 6)
-                                        .background(Color.mist)
-                                        .clipShape(Capsule())
-                                }
+                                .buttonStyle(.plain)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
                     }
 
-                    // MARK: - Echo picker expanded
+                    // MARK: - Adaptive row
+                    //
+                    // Shown only when there's a real decision to make.
+
                     if showEchoPicker {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) {
                                 ForEach(echos.sorted { $0.sortOrder < $1.sortOrder }, id: \.id) { echo in
                                     Button {
                                         selectedEchoId = echo.id
+                                        userPickedEcho = true
                                         onEchoChanged?(echo.id)
                                         withAnimation(.easeOut(duration: 0.2)) { showEchoPicker = false }
                                     } label: {
@@ -473,97 +277,95 @@ struct ConfirmBannerView: View {
                                 }
                             }
                         }
-                    }
-
-                    // MARK: - Person suggestion
-                    let isTravelEcho = sonarResult?.echoName.lowercased().contains("travel") == true
-                    let commonNonNames = Set(["january","february","march","april","may","june","july","august","september","october","november","december","monday","tuesday","wednesday","thursday","friday","saturday","sunday","day","eve","birthday","christmas","holiday","anniversary","halloween","thanksgiving","today","tomorrow","tonight","morning","afternoon","evening","get","got","getting","buy","bought","buying","remind","remember","call","need","want","make","take","send","find","pick","grab","order","ordered","check","set","ask","tell","show","xbox","playstation","nintendo","apple","google","amazon","samsung","microsoft","sony","meta","tesla","netflix","spotify","airpods","iphone","ipad","macbook","android","nike","adidas","lululemon","zara","gucci","prada","controller","headphones","keyboard","monitor","laptop","tablet","new","the","a","an","for","with","from","just","also"])
-                    let personIndicators = Set(["for","with","tell","ask","remind","call","text","email","invite","get","buy","give","send","show"])
-                    let words = editedText.components(separatedBy: .whitespaces)
-                    let textScannedPeople: [String] = words.enumerated().compactMap { i, word in
-                        let clean = word.trimmingCharacters(in: .punctuationCharacters)
-                        guard clean.count > 2, clean.first?.isUppercase == true, !commonNonNames.contains(clean.lowercased()) else { return nil }
-                        guard i > 0 else { return nil }
-                        let prevWord = words[i - 1].trimmingCharacters(in: .punctuationCharacters).lowercased()
-                        guard personIndicators.contains(prevWord) else { return nil }
-                        return clean
-                    }
-                    let nlpPeople = sonarResult?.detectedPeople ?? []
-                    let allDetectedPeople = Array(Set(
-                        nlpPeople.map { n in n.hasSuffix("'s") ? String(n.dropLast(2)).capitalized : n.capitalized } +
-                        textScannedPeople.map { n in n.hasSuffix("'s") ? String(n.dropLast(2)) : n }
-                    ))
-
-                    if !allDetectedPeople.isEmpty && !isTravelEcho {
-                        let unmatched = allDetectedPeople.filter { detectedName in
-                            !persons.contains { person in
-                                let firstName = person.name.split(separator: " ").first.map(String.init) ?? person.name
-                                return firstName.lowercased() == detectedName.lowercased()
+                    } else {
+                        HStack(spacing: 18) {
+                            Button {
+                                wasCancelled = true
+                                onUndo()
+                            } label: {
+                                Text("Undo")
+                                    .font(.custom("DMSans-Medium", size: 13))
+                                    .foregroundColor(.gray)
                             }
-                        }
-                        if let firstUnmatched = unmatched.first {
+                            .buttonStyle(.plain)
+
                             Button {
                                 isPaused = true
-                                personToCreate = firstUnmatched
-                                showAddPerson = true
+                                onEdit?()
                             } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "person.crop.circle.badge.plus")
-                                        .font(.system(size: 15)).foregroundColor(.oceanTeal)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text("Create \(firstUnmatched)'s profile")
-                                            .font(.custom("DMSans-Medium", size: 13)).foregroundColor(.deepNavy)
-                                        Text("Save birthday, gifts & more")
-                                            .font(.custom("DMSans-Regular", size: 11)).foregroundColor(.gray)
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 11)).foregroundColor(.gray.opacity(0.4))
+                                Text("Edit")
+                                    .font(.custom("DMSans-Medium", size: 13))
+                                    .foregroundColor(.oceanTeal)
+                            }
+                            .buttonStyle(.plain)
+
+                            Spacer()
+
+                            // The one edit people make constantly
+                            Button {
+                                isPaused = true
+                                userToggledTask = true
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                withAnimation(.spring(duration: 0.2)) { isTask.toggle() }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: isTask ? "checkmark.circle.fill" : "circle")
+                                        .font(.system(size: 12))
+                                    Text("Task").font(.custom("DMSans-Medium", size: 13))
                                 }
-                                .padding(10)
-                                .background(Color.oceanTeal.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.oceanTeal.opacity(0.15), lineWidth: 0.5))
+                                .foregroundColor(isTask ? .oceanTeal : .gray.opacity(0.6))
                             }
                             .buttonStyle(.plain)
                         }
                     }
 
-                    // MARK: - Recipe fetch
+                    // The only thing you have to hit, so it gets the full width
+                    Button {
+                        guard !didComplete else { return }
+                        didComplete = true
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        reRunSonarIfNeeded()
+                        let echoId = selectedEchoId ?? echos.first { $0.name == sonarResult?.echoName }?.id
+                        if let echoId, let confirmedEcho = echos.first(where: { $0.id == echoId }) {
+                            SonarEngine.learnKeywords(from: editedText, echo: confirmedEcho)
+                        }
+                        onDone(isTask, effectiveDuration)
+                    } label: {
+                        Text("Looks good!")
+                            .font(.custom("DMSans-Medium", size: 16))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.oceanTeal)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .padding(.top, 2)
+
+                    // Recipe fetch stays — it's only relevant right now, while the
+                    // link is fresh, and it does real work rather than adjusting a field
                     if sonarResult?.shouldOfferRecipeFetch == true {
                         Button { fetchRecipe() } label: {
                             HStack(spacing: 8) {
                                 if isFetchingRecipe {
-                                    ProgressView().scaleEffect(0.75).tint(.white)
+                                    ProgressView().scaleEffect(0.7).tint(.white)
                                 } else {
-                                    Image(systemName: recipeFetchSuccess ? "checkmark" : "fork.knife").font(.system(size: 13))
+                                    Image(systemName: recipeFetchSuccess ? "checkmark" : "fork.knife")
+                                        .font(.system(size: 12))
                                 }
-                                Text(isFetchingRecipe ? "Fetching recipe..." : recipeFetchSuccess ? "Recipe imported!" : "🍳 Fetch recipe from link")
+                                Text(isFetchingRecipe ? "Fetching recipe..."
+                                     : recipeFetchSuccess ? "Recipe imported" : "Fetch recipe from link")
                                     .font(.custom("DMSans-Medium", size: 13))
                             }
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
+                            .padding(.vertical, 9)
                             .background(Color.oceanTeal)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
                         .disabled(isFetchingRecipe)
 
                         if let error = recipeFetchError {
-                            HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.circle").font(.system(size: 11)).foregroundColor(.coral)
-                                Text(error).font(.custom("DMSans-Regular", size: 12)).foregroundColor(.coral)
-                            }
-                        }
-
-                        Button {
-                            isPaused = true
-                            showRecipeBuilder = true
-                        } label: {
-                            Text("Don't have a URL? Build your own")
-                                .font(.custom("DMSans-Medium", size: 13))
-                                .foregroundColor(.oceanTeal)
-                                .frame(maxWidth: .infinity)
+                            Text(error).font(.custom("DMSans-Regular", size: 11)).foregroundColor(.coral)
                         }
                     }
 
@@ -581,6 +383,7 @@ struct ConfirmBannerView: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .onAppear {
             editedText = transcription
+            lastSonarText = transcription
             isTask = sonarResult?.isActionable ?? false
             selectedEchoId = echos.first { $0.name == sonarResult?.echoName }?.id
             if let date = sonarResult?.detectedDate {
@@ -626,6 +429,13 @@ struct ConfirmBannerView: View {
                 }
             }
         }
+        // Full edit (MemoryEditView) syncs back through `transcription` — refresh the
+        // inline draft so a later Done can't overwrite the full edit with stale text,
+        // and treat the synced text as already-processed so we don't re-run over it.
+        .onChange(of: transcription) { _, newValue in
+            if !isEditingText { editedText = newValue }
+            lastSonarText = newValue
+        }
         .sheet(isPresented: $showAddPerson) {
             AddPersonView(suggestedName: personToCreate, suggestedBirthday: sonarResult?.detectedDate)
         }
@@ -656,7 +466,11 @@ struct ConfirmBannerView: View {
     private func startCountdown() {
         withAnimation(.linear(duration: 15)) { countdown = 0 }
         DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
-            if !isPaused && !wasCancelled {
+            // didComplete guards against firing after a manual Done — otherwise this
+            // stale closure would stamp whatever memory is newest 15s later.
+            if !isPaused && !wasCancelled && !didComplete {
+                didComplete = true
+                reRunSonarIfNeeded()
                 let echoId = selectedEchoId ?? echos.first { $0.name == sonarResult?.echoName }?.id
                 if let echoId, let confirmedEcho = echos.first(where: { $0.id == echoId }) {
                     SonarEngine.learnKeywords(from: editedText, echo: confirmedEcho)
@@ -664,6 +478,26 @@ struct ConfirmBannerView: View {
                 onDone(isTask, effectiveDuration)
             }
         }
+    }
+
+    // Re-run Sonar over the edited text so the echo/date/ping chips (and, via
+    // onTextEdited, the saved memory) track what the user actually wrote — e.g.
+    // editing "4pm" to "3pm" moves the ping. Choices made by hand win: a manually
+    // picked echo and a manually toggled Task chip are never overwritten.
+    private func reRunSonarIfNeeded() {
+        guard editedText != lastSonarText,
+              !editedText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        lastSonarText = editedText
+        let newResult = SonarEngine().process(text: editedText, echos: echos)
+        if !userPickedEcho {
+            let newEchoId = newResult.echoId ?? echos.first { $0.name == newResult.echoName }?.id
+            if let newEchoId, newEchoId != selectedEchoId {
+                selectedEchoId = newEchoId
+                onEchoChanged?(newEchoId)
+            }
+        }
+        if !userToggledTask { isTask = newResult.isActionable }
+        onTextEdited?(editedText, newResult)
     }
 
     private func fetchRecipe() {

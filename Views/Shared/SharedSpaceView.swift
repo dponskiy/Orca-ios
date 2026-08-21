@@ -15,6 +15,9 @@ struct SharedSpaceView: View {
     @Query private var allItems: [SharedChecklistItem]
 
     @State private var showAddEvent = false
+    @State private var showMembers = false
+    @Query private var allMembers: [SharedSpaceMember]
+    @Query private var allGroceryItems: [SharedGroceryItem]
     @State private var selectedEvent: SharedEvent? = nil
     @State private var isRefreshing = false
     @State private var pastExpanded = false
@@ -59,6 +62,10 @@ struct SharedSpaceView: View {
                 if space.status == .pending {
                     pendingBanner
                 }
+
+                if needsName { addNameBanner }
+
+                groceryRow
 
                 // Upcoming events
                 if !upcomingEvents.isEmpty {
@@ -130,6 +137,12 @@ struct SharedSpaceView: View {
                         }
                     }
                     Button {
+                        showMembers = true
+                    } label: {
+                        Image(systemName: "person.2")
+                            .foregroundColor(.oceanTeal)
+                    }
+                    Button {
                         showAddEvent = true
                     } label: {
                         Image(systemName: "plus")
@@ -146,6 +159,83 @@ struct SharedSpaceView: View {
         .sheet(item: $selectedEvent) { event in
             SharedEventDetailView(event: event, space: space)
         }
+        .sheet(isPresented: $showMembers) {
+            SharedSpaceMembersView(space: space)
+        }
+    }
+
+    // MARK: - Grocery
+    //
+    // One row, not a second shopping screen — the list itself lives in grocery mode
+    // so it gets aisle order, combining and the rest for free.
+
+    private var groceryItemCount: Int {
+        allGroceryItems.filter { $0.spaceId == space.id && !$0.isChecked }.count
+    }
+
+    private var groceryRow: some View {
+        NavigationLink(destination: SharedGroceryView(space: space)) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(Color.oceanTeal.opacity(0.1)).frame(width: 38, height: 38)
+                    Image(systemName: "cart.fill").font(.system(size: 15)).foregroundColor(.oceanTeal)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Grocery list")
+                        .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy)
+                    Text(groceryItemCount == 0
+                         ? "Add recipes and items together"
+                         : "\(groceryItemCount) still to get")
+                        .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 12)).foregroundColor(.gray.opacity(0.3))
+            }
+            .padding(14)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.black.opacity(0.07), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Name Prompt
+    //
+    // Spaces made before membership names existed have blank names. Nudge rather
+    // than block — the space already works, it just reads as "Member" until named.
+
+    private var myMember: SharedSpaceMember? {
+        let me = authService.userId?.uuidString ?? ""
+        return allMembers.first { $0.spaceId == space.id && $0.userId == me }
+    }
+
+    private var needsName: Bool {
+        (myMember?.displayName ?? "").isEmpty
+    }
+
+    private var addNameBanner: some View {
+        Button { showMembers = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "person.crop.circle.badge.questionmark")
+                    .font(.system(size: 15)).foregroundColor(.oceanTeal)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("What should we call you?")
+                        .font(.custom("DMSans-Medium", size: 14))
+                        .foregroundColor(.deepNavy)
+                    Text("Add a name so everyone knows who's who")
+                        .font(.custom("DMSans-Regular", size: 12))
+                        .foregroundColor(.gray)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11)).foregroundColor(.gray.opacity(0.4))
+            }
+            .padding(14)
+            .background(Color.oceanTeal.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.oceanTeal.opacity(0.15), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Pending Banner

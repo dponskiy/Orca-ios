@@ -114,9 +114,17 @@ class NotificationService {
             UNUserNotificationCenter.current().add(request)
 
         case .none:
-            let trigger = UNCalendarNotificationTrigger(dateMatching: triggerComponents, repeats: false)
-            let request = UNNotificationRequest(identifier: ping.id.uuidString, content: content, trigger: trigger)
-            UNUserNotificationCenter.current().add(request)
+            // iOS silently drops one-shot calendar triggers whose date already passed
+            // (e.g. "remind me today" said at night defaults to 9am). Fire soon instead.
+            if let target = calendar.date(from: triggerComponents), target <= Date() {
+                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 120, repeats: false)
+                let request = UNNotificationRequest(identifier: ping.id.uuidString, content: content, trigger: trigger)
+                UNUserNotificationCenter.current().add(request)
+            } else {
+                let trigger = UNCalendarNotificationTrigger(dateMatching: triggerComponents, repeats: false)
+                let request = UNNotificationRequest(identifier: ping.id.uuidString, content: content, trigger: trigger)
+                UNUserNotificationCenter.current().add(request)
+            }
         }
 
         print("🔔 Scheduled notification for: \(memoryText) at \(triggerComponents)")
@@ -262,6 +270,7 @@ class NotificationService {
         // For recurring tasks, check recurringCompletedDates for today instead of isCompleted
         let todayFormatter = ISO8601DateFormatter()
         todayFormatter.formatOptions = [.withFullDate]
+        todayFormatter.timeZone = .current  // default is GMT — must match the user's day
         let todayKey = todayFormatter.string(from: now)
         let taskCount = memories.filter { memory in
             guard memory.isActionable && !memory.isCompleted else { return false }

@@ -455,12 +455,17 @@ class SonarEngine {
     func process(text: String, echos: [Echo]) -> SonarResult {
         let lower = text.lowercased()
         
+        // Parsing copy with spoken times rewritten ("eleven thirty" → "11:30 am").
+        // The memory keeps the user's original wording — only detection sees this.
+        let timeText = SonarEngine.normalizeSpokenTimes(text)
+        let timeLower = timeText.lowercased()
+
         let entities = extractEntities(text: text)
         let echoResult = assignEcho(text: lower, originalText: text, echos: echos, entities: entities)
-        let dateResults = detectDates(text: text)
+        let dateResults = detectDates(text: timeText)
         let tags = generateTags(text: text, echoName: echoResult.name, entities: entities)
         var actionable = detectAction(text: lower)
-        let pingSuggestions = buildPingSuggestions(text: lower, dates: dateResults)
+        let pingSuggestions = buildPingSuggestions(text: timeLower, dates: dateResults)
 
         // If ping was created AND text has action intent, ensure it's marked as a task
         let hasActionVerb = actionKeywords.contains { lower.contains($0) }
@@ -804,9 +809,11 @@ class SonarEngine {
         }
         // Prevent Dining from winning on chore/cleaning reminders
         // e.g. "wash water bottle", "wipe down counter", "clean the fridge"
+        // Reminder phrases ("remind me", "remember to") deliberately excluded — they
+        // aren't chores, and boosting To-Do on them steals memories from Health/Pets/etc.
         let choreActionWords = ["wash", "wipe", "scrub", "rinse", "clean", "mop", "vacuum",
                                 "sweep", "dust", "declutter", "organize", "refill", "empty",
-                                "take out", "put away", "remind me", "remember to"]
+                                "take out", "put away"]
         let hasChoreContext = choreActionWords.contains { text.contains($0) }
         if hasChoreContext {
             if let idx = scores.firstIndex(where: { $0.name == "Dining" }) {
@@ -973,6 +980,111 @@ class SonarEngine {
         return (notesEcho?.id, "Notes", 0.3)
     }
 
+    // MARK: - Testing entry point
+
+    /// What Sonar understood about *when*, in one readable shape.
+    /// Exposed so date phrasing can be tested without recording audio — this runs
+    /// the real pipeline (spoken-time normalization → detection → ping building),
+    /// not a copy of it.
+    struct DateReading {
+        let eventDate: Date?
+        let endDate: Date?
+        /// The moment the first reminder actually fires, combined the same way
+        /// NotificationService schedules it (day from fireDate, time from fireTime).
+        let reminderFiresAt: Date?
+        let recurrence: Ping.Recurrence
+    }
+
+    func readDates(_ text: String) -> DateReading {
+        let timeText = SonarEngine.normalizeSpokenTimes(text)
+        let dates = detectDates(text: timeText)
+        let suggestions = buildPingSuggestions(text: timeText.lowercased(), dates: dates)
+
+        var firesAt: Date? = nil
+        if let first = suggestions.first {
+            let cal = Calendar.current
+            if let daySource = first.fireDate ?? dates.eventDate {
+                let timeSource = first.fireTime ?? first.fireDate ?? daySource
+                var comps = cal.dateComponents([.year, .month, .day], from: daySource)
+                let t = cal.dateComponents([.hour, .minute], from: timeSource)
+                comps.hour = t.hour; comps.minute = t.minute
+                firesAt = cal.date(from: comps)
+            }
+        }
+        return DateReading(eventDate: dates.eventDate,
+                           endDate: dates.endDate,
+                           reminderFiresAt: firesAt,
+                           recurrence: suggestions.first?.recurrence ?? .none)
+    }
+
+    // MARK: - Spoken Time Normalization (runs before NSDataDetector)
+
+    // Speech transcription writes times NSDataDetector silently refuses to read:
+    // "eleven thirty", "11 30". Left alone the detector drops the time entirely and
+    // falls back to noon for the bare date, so a 11:30 appointment lands at 12:00
+    // with a 9am ping. Rewriting these to "11:30 am" first makes them parse.
+    private static let spokenHours: [(String, Int)] = [
+        ("twelve", 12), ("eleven", 11), ("ten", 10), ("nine", 9), ("eight", 8), ("seven", 7),
+        ("six", 6), ("five", 5), ("four", 4), ("three", 3), ("two", 2), ("one", 1)
+    ]
+    private static let spokenMinutes: [(String, Int)] = [
+        ("oh five", 5), ("o five", 5), ("zero five", 5), ("oh nine", 9),
+        ("twenty five", 25), ("thirty five", 35), ("forty five", 45), ("fifty five", 55),
+        ("twenty", 20), ("thirty", 30), ("forty", 40), ("fifty", 50),
+        ("fifteen", 15), ("ten", 10), ("five", 5)
+    ]
+
+    static func normalizeSpokenTimes(_ text: String) -> String {
+        var s = text
+
+        // "three o'clock" → "3:00"
+        for (word, h) in spokenHours {
+            for oc in ["o'clock", "oclock", "o clock"] {
+                s = s.replacingOccurrences(of: "\(word) \(oc)", with: "\(h):00", options: [.caseInsensitive])
+            }
+        }
+        // "eleven thirty" → "11:30" — longest minute phrases first so
+        // "twenty five" isn't consumed by "twenty"
+        let mins = spokenMinutes.sorted { $0.0.count > $1.0.count }
+        for (hw, h) in spokenHours {
+            for (mw, m) in mins {
+                s = s.replacingOccurrences(of: "\(hw) \(mw)",
+                                           with: String(format: "%d:%02d", h, m),
+                                           options: [.caseInsensitive])
+            }
+        }
+        // "at 11 30" → "at 11:30", then "at 1130" → "at 11:30". A leading preposition
+        // is required so bare quantities ("size 11 30") are never treated as times.
+        s = s.replacingOccurrences(of: #"\b(at|by|around|before|after)\s+(1[0-2]|[1-9])\s+([0-5][0-9])\b"#,
+                                   with: "$1 $2:$3", options: [.regularExpression, .caseInsensitive])
+        s = s.replacingOccurrences(of: #"\b(at|by|around|before|after)\s+(1[0-2]|[1-9])([0-5][0-9])\b"#,
+                                   with: "$1 $2:$3", options: [.regularExpression, .caseInsensitive])
+
+        // A bare "H:MM" with no am/pm is ambiguous — NSDataDetector reads "1:30" as
+        // 1:30 AM. Infer from context words, else waking hours.
+        guard let re = try? NSRegularExpression(
+            pattern: #"\b(\d{1,2}):([0-5][0-9])\b(?!\s*(am|pm|a\.m|p\.m))"#,
+            options: [.caseInsensitive]
+        ) else { return s }
+
+        let ctx = s.lowercased()
+        let eveningCtx = ["tonight", "this evening", "evening", "at night", "dinner"].contains { ctx.contains($0) }
+        let morningCtx = ["this morning", "morning", "breakfast", "sunrise"].contains { ctx.contains($0) }
+
+        var out = s
+        for m in re.matches(in: s, range: NSRange(s.startIndex..., in: s)).reversed() {
+            guard let full = Range(m.range, in: s),
+                  let hourRange = Range(m.range(at: 1), in: s),
+                  let h = Int(s[hourRange]), (1...12).contains(h) else { continue }
+            let suffix: String
+            if eveningCtx { suffix = "pm" }
+            else if morningCtx { suffix = "am" }
+            else { suffix = (h >= 7 && h <= 11) ? "am" : "pm" }
+            out.replaceSubrange(full, with: "\(s[full]) \(suffix)")
+        }
+        return out
+    }
+
     // MARK: - Relative Date Detection (runs before NSDataDetector)
 
     private func detectRelativeDate(text: String) -> Date? {
@@ -1110,6 +1222,11 @@ class SonarEngine {
         let rangeKeywords = [" through ", " until ", " thru ", " to ", " - ", "–", "—"]
         for keyword in rangeKeywords {
             guard lower.contains(keyword) else { continue }
+            // "to" is far too common to trust on its own — "September 4 to post on
+            // LinkedIn" was being read as a date range, which threw the end date a
+            // year out and lost the real time. Require a date to actually follow.
+            guard let firstHit = lower.range(of: keyword),
+                  looksLikeDateStart(String(lower[firstHit.upperBound...])) else { continue }
 
             var searchRange = lower.startIndex..<lower.endIndex
             var splitRanges: [Range<String.Index>] = []
@@ -1143,7 +1260,15 @@ class SonarEngine {
                 let dates2 = detector?.matches(in: secondHalf, range: range2).compactMap { $0.date } ?? []
 
                 if var startDate = dates1.first, var endDate = dates2.first {
-                    // Bug fix: if range spans year boundary (e.g. Dec 30 - Jan 2), bump endDate by 1 year
+                    if isForwardLooking(lower) {
+                        let rolled = rollForwardIfPast(startDate, text: text)
+                        if rolled != startDate {
+                            let span = endDate.timeIntervalSince(startDate)
+                            startDate = rolled
+                            endDate = rolled.addingTimeInterval(span)
+                        }
+                    }
+                    // Range spans a year boundary (Dec 30 → Jan 2): bump the end
                     if endDate < startDate {
                         endDate = Calendar.current.date(byAdding: .year, value: 1, to: endDate) ?? endDate
                     }
@@ -1167,12 +1292,33 @@ class SonarEngine {
 
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         let matches = detector?.matches(in: text, range: range) ?? []
-        let dates = matches.compactMap { $0.date }
+        var dates = matches.compactMap { $0.date }
+
+        // When a date and a bare time are detected separately — "September 4 … at
+        // 7 PM" — the time belongs to that date, not to today. Merge them before
+        // anything downstream treats them as two competing events.
+        if matches.count >= 2 {
+            let fragments = matches.map { String(text[Range($0.range, in: text)!]) }
+            if let timeIdx = fragments.firstIndex(where: { isTimeOnlyFragment($0) }),
+               let dateIdx = fragments.indices.first(where: { $0 != timeIdx && !isTimeOnlyFragment(fragments[$0]) }),
+               timeIdx < dates.count, dateIdx < dates.count {
+                let calendar = Calendar.current
+                var comps = calendar.dateComponents([.year, .month, .day], from: dates[dateIdx])
+                let timeComps = calendar.dateComponents([.hour, .minute], from: dates[timeIdx])
+                comps.hour = timeComps.hour
+                comps.minute = timeComps.minute
+                if let merged = calendar.date(from: comps) { dates = [merged] }
+            }
+        }
 
         let hasAbsoluteDate = text.contains(where: { $0.isNumber })
         let confidence = hasAbsoluteDate ? 0.9 : 0.6
 
         guard !dates.isEmpty else { return (nil, nil, nil, nil, nil) }
+
+        if isForwardLooking(lower) {
+            dates = dates.map { rollForwardIfPast($0, text: text) }
+        }
         
         if dates.count == 1 {
             let hasReminderPhrase = lower.contains("remind") || lower.contains("don't forget") || lower.contains("dont forget")
@@ -1196,6 +1342,38 @@ class SonarEngine {
         return (furthest, nil, confidence, nil, nil)
     }
     
+    /// A month that's already gone by means next year — "dentist March 3" said in
+    /// August is a plan, not a record. Only applied to forward-looking text, and
+    /// never when the year was stated outright.
+    private func rollForwardIfPast(_ date: Date, text: String) -> Date {
+        guard text.range(of: #"\b(19|20)\d{2}\b"#, options: .regularExpression) == nil else { return date }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        guard cal.startOfDay(for: date) < today else { return date }
+        return cal.date(byAdding: .year, value: 1, to: date) ?? date
+    }
+
+    /// Is this text about something upcoming, rather than a record of the past?
+    private func isForwardLooking(_ lower: String) -> Bool {
+        reminderKeywords.contains { lower.contains($0) } || detectAction(text: lower)
+    }
+
+    /// Does a date plausibly begin here? Guards the range-separator split.
+    private func looksLikeDateStart(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespaces).lowercased()
+        if t.range(of: #"^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)"#, options: .regularExpression) != nil { return true }
+        if t.range(of: #"^(mon|tue|wed|thu|fri|sat|sun)"#, options: .regularExpression) != nil { return true }
+        if t.range(of: #"^(the\s+)?\d"#, options: .regularExpression) != nil { return true }
+        return t.hasPrefix("next ") || t.hasPrefix("this ")
+    }
+
+    /// "7 PM" / "at 2pm" — a time with no date of its own.
+    private func isTimeOnlyFragment(_ fragment: String) -> Bool {
+        fragment.trimmingCharacters(in: .whitespaces)
+            .range(of: #"^(at\s+)?\d{1,2}(:\d{2})?\s*(am|pm)$"#,
+                   options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
     // MARK: - Relative Offset Detection
     
     private func detectRelativeOffset(text: String) -> TimeInterval? {
@@ -1263,17 +1441,25 @@ class SonarEngine {
         
         let weekdays = detectWeekdays(text: text)
         if !weekdays.isEmpty {
-            let recurrence: Ping.Recurrence = (hasEvery || weekdays.count >= 2) ? .weekly : .none
-            for weekday in weekdays {
-                let nextDate = nextOccurrence(of: weekday)
-                var fireTime = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: Date())
-                if let eventDate = dates.eventDate {
-                    let components = calendar.dateComponents([.hour, .minute], from: eventDate)
-                    if components.hour != 0 || components.minute != 0 { fireTime = eventDate }
+            // Weekday mentions alone aren't reminder intent — "gym was closed monday and
+            // tuesday" must not create recurring pings. Require an explicit signal, and
+            // only repeat weekly when the user actually said "every".
+            let hasWeekdayIntent = hasEvery ||
+                reminderKeywords.contains { text.contains($0) } ||
+                detectAction(text: text)
+            if hasWeekdayIntent {
+                let recurrence: Ping.Recurrence = hasEvery ? .weekly : .none
+                for weekday in weekdays {
+                    let nextDate = nextOccurrence(of: weekday)
+                    var fireTime = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: Date())
+                    if let eventDate = dates.eventDate {
+                        let components = calendar.dateComponents([.hour, .minute], from: eventDate)
+                        if components.hour != 0 || components.minute != 0 { fireTime = eventDate }
+                    }
+                    suggestions.append(PingSuggestion(fireDate: nextDate, fireTime: fireTime, recurrence: recurrence))
                 }
-                suggestions.append(PingSuggestion(fireDate: nextDate, fireTime: fireTime, recurrence: recurrence))
+                return suggestions
             }
-            return suggestions
         }
         
         let isAutoYearly = autoYearlyKeywords.contains { text.contains($0) }

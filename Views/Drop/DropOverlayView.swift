@@ -28,6 +28,7 @@ struct DropOverlayView: View {
     @State private var silenceTimer: Timer? = nil
     @State private var showSonarAnimation = false
     @State private var tipsActive = false
+    @State private var isProcessing = false
 
     private let sonarEngine = SonarEngine()
 
@@ -65,6 +66,76 @@ struct DropOverlayView: View {
         let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         if let last = try? modelContext.fetch(descriptor).first {
             last.estimatedMinutes = minutes
+        }
+    }
+
+    // Applies an inline banner edit: saves the new text and re-applies the fresh
+    // SonarResult so dates and pings track the edit (e.g. "4pm" → "3pm" moves the ping).
+    private func applyEditedText(_ newText: String, result: SonarResult) {
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        guard let last = try? modelContext.fetch(descriptor).first else { return }
+        last.text = newText
+        last.updatedAt = Date()
+        last.tags = result.tags
+        last.detectedDate = result.detectedDate
+        last.endDate = result.endDate
+        last.dateConfidence = result.dateConfidence
+        last.estimatedMinutes = result.estimatedMinutes
+        last.isActionable = result.isActionable
+        if let detectedURL = sonarEngine.detectURL(text: newText) { last.url = detectedURL }
+
+        // Replace pings — the old ones may point at a time the edit just changed
+        let pings = (try? modelContext.fetch(FetchDescriptor<Ping>())) ?? []
+        for ping in pings where ping.memoryId == last.id {
+            let pingId = ping.id
+            NotificationService.shared.cancelPing(pingId: pingId)
+            modelContext.delete(ping)
+            Task { await SupabaseSyncService.shared.deletePing(id: pingId) }
+        }
+        var newPings: [Ping] = []
+        for suggestion in result.pingSuggestions {
+            let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
+            let ping = Ping(memoryId: last.id, fireDate: fireDate, recurrence: suggestion.recurrence)
+            if let fireTime = suggestion.fireTime { ping.fireTime = fireTime }
+            modelContext.insert(ping)
+            NotificationService.shared.schedulePing(ping: ping, memoryText: last.text)
+            newPings.append(ping)
+        }
+        if let advancePing = NotificationService.shared.makeAdvancePing(for: last, echoName: result.echoName) {
+            modelContext.insert(advancePing)
+            NotificationService.shared.schedulePing(ping: advancePing, memoryText: "2 weeks out: \(last.text)")
+            newPings.append(advancePing)
+        }
+
+        // Refresh sonar checklist items; when the new text has none, leave existing
+        // subtasks alone (protects recipe-ingredient checklists).
+        if !result.checklistItems.isEmpty {
+            let subTasks = (try? modelContext.fetch(FetchDescriptor<SubTask>())) ?? []
+            for subTask in subTasks where subTask.memoryId == last.id {
+                let subTaskId = subTask.id
+                modelContext.delete(subTask)
+                Task { await SupabaseSyncService.shared.deleteSubTask(id: subTaskId) }
+            }
+            last.hasChecklist = true
+            for (i, item) in result.checklistItems.enumerated() {
+                modelContext.insert(SubTask(memoryId: last.id, text: item, sortOrder: i))
+            }
+        }
+
+        try? modelContext.save()
+        SpotlightService.shared.indexMemory(
+            last,
+            echoName: echos.first { $0.id == last.echoId }?.name ?? "Notes",
+            echoEmoji: echos.first { $0.id == last.echoId }?.emoji ?? "📝"
+        )
+        sonarResult = result  // banner chips refresh from this
+        if let userId = authService.userId {
+            Task { @MainActor in
+                await SupabaseSyncService.shared.pushMemory(last, userId: userId)
+                for ping in newPings {
+                    await SupabaseSyncService.shared.pushPing(ping, userId: userId)
+                }
+            }
         }
     }
 
@@ -187,6 +258,9 @@ struct DropOverlayView: View {
                         onEdit: {
                             let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
                             editMemory = try? modelContext.fetch(descriptor).first
+                        },
+                        onTextEdited: { newText, newResult in
+                            applyEditedText(newText, result: newResult)
                         },
                         onLocationSet: { name, address, lat, lng in
                             updateLastMemoryLocation(name: name, address: address, lat: lat, lng: lng)
@@ -406,6 +480,14 @@ struct DropOverlayView: View {
         .onChange(of: audioService.transcription) { _, newValue in
             if !newValue.isEmpty { cancelSilenceTimer() }
         }
+        // AudioService hard-stops at the 60s cap — without this the UI keeps
+        // "listening" while nothing is recorded. Process what was captured.
+        .onChange(of: audioService.isRecording) { wasRecording, isRec in
+            if wasRecording && !isRec && !isProcessing && !showBanner && !showSonarAnimation {
+                stopTipRotation()
+                stopAndProcess()
+            }
+        }
     }
 
     // MARK: - Permission Denied View
@@ -464,6 +546,8 @@ struct DropOverlayView: View {
     // sonar animation is still showing — no extra perceived latency.
 
     private func stopAndProcess() {
+        guard !isProcessing else { return }
+        isProcessing = true
         cancelSilenceTimer()
         audioService.stopRecording()
         savedTranscription = audioService.transcription
@@ -476,13 +560,17 @@ struct DropOverlayView: View {
         withAnimation(.easeOut(duration: 0.2)) { visibleTipIndices = [] }
         withAnimation(.easeIn(duration: 0.2)) { showSonarAnimation = true }
 
-        // Capture for use inside Task (avoids capturing self or @Query echos across actor boundaries)
-        let text = savedTranscription
         let echoSnapshot = Array(echos)
 
         Task {
             // Minimum animation duration
             try? await Task.sleep(nanoseconds: 900_000_000)
+
+            // Re-read after the delay: stopRecording() finishes recognition rather than
+            // cancelling it, so the final segment (the last words) lands during this window.
+            let latest = audioService.transcription
+            if !latest.isEmpty { savedTranscription = latest }
+            let text = savedTranscription
 
             // Sonar — synchronous, runs off main actor is fine since SonarEngine is a plain class
             let rawResult = SonarEngine().process(text: text, echos: echoSnapshot)
@@ -518,7 +606,10 @@ struct DropOverlayView: View {
             return
         }
 
-        let echoId = result.echoId ?? echos.first?.id ?? UUID()
+        let echoId = result.echoId
+            ?? echos.first { $0.name == "Notes" }?.id
+            ?? echos.first?.id
+            ?? UUID()
         let memory = Memory(text: savedTranscription, echoId: echoId)
         memory.tags = result.tags
         memory.detectedDate = result.detectedDate
@@ -583,16 +674,6 @@ struct DropOverlayView: View {
             }
         }
 
-        AnalyticsService.shared.trackMemoryDropped(
-            captureType: "voice",
-            echoName: result.echoName,
-            hasPing: result.shouldCreatePing,
-            hasDate: result.detectedDate != nil,
-            hasURL: memory.url != nil,
-            hasChecklist: memory.hasChecklist,
-            wordCount: savedTranscription.split(separator: " ").count
-        )
-
         if let detectedURL = sonarEngine.detectURL(text: savedTranscription) {
             memory.url = detectedURL
         }
@@ -604,6 +685,16 @@ struct DropOverlayView: View {
                 modelContext.insert(subTask)
             }
         }
+
+        AnalyticsService.shared.trackMemoryDropped(
+            captureType: "voice",
+            echoName: result.echoName,
+            hasPing: result.shouldCreatePing,
+            hasDate: result.detectedDate != nil,
+            hasURL: memory.url != nil,
+            hasChecklist: memory.hasChecklist,
+            wordCount: savedTranscription.split(separator: " ").count
+        )
 
         // Auto-create GiftItem
         let isGiftsEcho = result.echoName == "Gifts"
@@ -738,6 +829,28 @@ struct DropOverlayView: View {
         )
         if let last = recent?.first {
             let id = last.id
+            // Remove everything created alongside the memory — otherwise its pings
+            // still fire, and subtasks/gifts/spotlight entries are left orphaned.
+            let pings = (try? modelContext.fetch(FetchDescriptor<Ping>())) ?? []
+            for ping in pings where ping.memoryId == id {
+                let pingId = ping.id
+                NotificationService.shared.cancelPing(pingId: pingId)
+                modelContext.delete(ping)
+                Task { await SupabaseSyncService.shared.deletePing(id: pingId) }
+            }
+            let subTasks = (try? modelContext.fetch(FetchDescriptor<SubTask>())) ?? []
+            for subTask in subTasks where subTask.memoryId == id {
+                let subTaskId = subTask.id
+                modelContext.delete(subTask)
+                Task { await SupabaseSyncService.shared.deleteSubTask(id: subTaskId) }
+            }
+            let gifts = (try? modelContext.fetch(FetchDescriptor<GiftItem>())) ?? []
+            for gift in gifts where gift.linkedMemoryId == id {
+                let giftId = gift.id
+                modelContext.delete(gift)
+                Task { await SupabaseSyncService.shared.deleteGiftItem(id: giftId) }
+            }
+            SpotlightService.shared.removeMemory(id: id)
             modelContext.delete(last)
             SupabaseSyncService.shared.scheduleDelete(id: id)
         }

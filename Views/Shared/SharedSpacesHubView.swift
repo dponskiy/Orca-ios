@@ -12,6 +12,7 @@ struct SharedSpacesHubView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var allSpaces: [SharedSpace]
     @Query private var allEvents: [SharedEvent]
+    @Query private var allMembers: [SharedSpaceMember]
 
     @State private var showInvite = false
     @State private var spaceToDelete: SharedSpace? = nil
@@ -23,9 +24,16 @@ struct SharedSpacesHubView: View {
 
     private var mySpaces: [SharedSpace] {
         let userId = authService.userId?.uuidString ?? ""
+        let memberSpaceIds = Set(allMembers.filter { $0.userId == userId }.map { $0.spaceId })
         return allSpaces.filter {
-            $0.createdByUserId == userId || $0.invitedUserId == userId
+            memberSpaceIds.contains($0.id)
+                || $0.createdByUserId == userId   // legacy slots, pre-membership
+                || $0.invitedUserId == userId
         }.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    private func memberCount(_ space: SharedSpace) -> Int {
+        allMembers.filter { $0.spaceId == space.id }.count
     }
 
     var body: some View {
@@ -115,8 +123,10 @@ struct SharedSpacesHubView: View {
                 TextField("Space name", text: $renameText)
                 Button("Save") {
                     if let space = spaceToRename, !renameText.trimmingCharacters(in: .whitespaces).isEmpty {
-                        space.spaceName = renameText.trimmingCharacters(in: .whitespaces)
+                        let newName = renameText.trimmingCharacters(in: .whitespaces)
+                        space.spaceName = newName
                         try? modelContext.save()
+                        Task { try? await SharedSpaceSyncService.shared.renameSpace(space, to: newName) }
                     }
                 }
                 Button("Cancel", role: .cancel) {}
@@ -155,8 +165,16 @@ struct SharedSpacesHubView: View {
                         Text(displayName)
                             .font(.custom("DMSans-Medium", size: 15))
                             .foregroundColor(.deepNavy)
-                        if space.status == .pending {
-                            Text("Pending")
+                        let count = memberCount(space)
+                        if count > 1 {
+                            Text("\(count) people")
+                                .font(.custom("DMSans-Regular", size: 11))
+                                .foregroundColor(.gray)
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Color.mist)
+                                .clipShape(Capsule())
+                        } else {
+                            Text("Just you")
                                 .font(.custom("DMSans-Regular", size: 11))
                                 .foregroundColor(.gray)
                                 .padding(.horizontal, 7).padding(.vertical, 2)
@@ -197,7 +215,7 @@ struct SharedSpacesHubView: View {
                 .font(.system(size: 13))
                 .foregroundColor(.oceanTeal.opacity(0.7))
                 .padding(.top, 1)
-            Text("Shared Spaces let you plan events, trips, and notes with a partner, family member, or roommate — in real time. Tap **Create New** to invite someone and get started.")
+            Text("Shared Spaces let you plan events, trips, and notes with your household — up to \(SharedSpaceMember.cap) people, in real time. Tap **Create New** to start one and share the invite link.")
                 .font(.custom("DMSans-Regular", size: 12))
                 .foregroundColor(.gray)
                 .fixedSize(horizontal: false, vertical: true)

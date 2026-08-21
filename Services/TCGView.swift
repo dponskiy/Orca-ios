@@ -12,12 +12,14 @@ enum CollectibleCategory: String, CaseIterable {
     case pokemon = "Pokémon"
     case lego = "Lego"
     case smiski = "Smiski"
+    case games = "Games"
 
     var icon: String {
         switch self {
         case .pokemon: return "sparkles"
         case .lego: return "cube.box.fill"
         case .smiski: return "figure.wave"
+        case .games: return "gamecontroller.fill"
         }
     }
 }
@@ -38,7 +40,7 @@ struct CollectiblesView: View {
                 VStack(spacing: 0) {
                     categoryPicker
                     if !bannerDismissed { collectiblesInfoBanner }
-                    tapHintBanner
+                    if selectedCategory == .pokemon { tapHintBanner }
 
                     switch selectedCategory {
                     case .pokemon:
@@ -47,6 +49,8 @@ struct CollectiblesView: View {
                         LegoCollectionContent()
                     case .smiski:
                         SmiskiCollectionContent()
+                    case .games:
+                        GameCollectionContent()
                     }
 
                     Spacer().frame(height: 40)
@@ -59,8 +63,11 @@ struct CollectiblesView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }.foregroundColor(.gray)
                 }
-                if selectedCategory == .pokemon {
-                    ToolbarItem(placement: .confirmationAction) {
+                ToolbarItem(placement: .confirmationAction) {
+                    // Gallery lives on each tab's own button now — a toolbar copy
+                    // meant a second fullScreenCover in this tree, and stacked
+                    // presentation modifiers destabilise each other's state.
+                    if selectedCategory == .pokemon {
                         HStack(spacing: 16) {
                             Button { triggerPokemonShare = true } label: {
                                 Image(systemName: "square.and.arrow.up").foregroundColor(.oceanTeal)
@@ -72,9 +79,35 @@ struct CollectiblesView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showSetBrowser) { TCGSetBrowserView() }
-            .sheet(isPresented: $showSearch) { TCGSearchView() }
+            // One sheet, not two siblings — see activeSheet
+            .sheet(item: activeSheet) { which in
+                switch which {
+                case .setBrowser: TCGSetBrowserView()
+                case .search:     TCGSearchView()
+                }
+            }
         }
+    }
+
+    // Collapses the two Bool flags into a single presentation so the sheets can't
+    // fight. The Bools stay because child views bind to them.
+    private enum CollectibleSheet: String, Identifiable {
+        case setBrowser, search
+        var id: String { rawValue }
+    }
+
+    private var activeSheet: Binding<CollectibleSheet?> {
+        Binding(
+            get: {
+                if showSetBrowser { return .setBrowser }
+                if showSearch     { return .search }
+                return nil
+            },
+            set: { newValue in
+                showSetBrowser = (newValue == .setBrowser)
+                showSearch     = (newValue == .search)
+            }
+        )
     }
 
     // MARK: - Info Banner
@@ -158,6 +191,41 @@ struct PokemonCollectionContent: View {
     @Binding var showSetBrowser: Bool
     @Binding var showSearch: Bool
     @Binding var triggerShare: Bool
+    @State private var showGallery = false
+
+    // Collapses this view's three sheets into one presentation (see the .sheet below)
+    private enum PokemonSheet: Identifiable {
+        case shareOptions, shareLink, card(UUID)
+        var id: String {
+            switch self {
+            case .shareOptions:   return "shareOptions"
+            case .shareLink:      return "shareLink"
+            case .card(let uuid): return uuid.uuidString
+            }
+        }
+    }
+
+    private var pokemonSheet: Binding<PokemonSheet?> {
+        Binding(
+            get: {
+                if showShareOptions          { return .shareOptions }
+                if showShareSheet            { return .shareLink }
+                if let card = detailCard     { return .card(card.id) }
+                return nil
+            },
+            set: { newValue in
+                switch newValue {
+                case .shareOptions: showShareOptions = true;  showShareSheet = false; detailCard = nil
+                case .shareLink:    showShareOptions = false; showShareSheet = true;  detailCard = nil
+                case .card, .none:
+                    // .card is only ever set by tapping a card, which assigns
+                    // detailCard directly; nil means the sheet was dismissed
+                    showShareOptions = false; showShareSheet = false
+                    if newValue == nil { detailCard = nil }
+                }
+            }
+        )
+    }
 
     @Query(sort: \TCGCard.addedAt, order: .reverse) private var allCards: [TCGCard]
     @Environment(\.modelContext) private var modelContext
@@ -210,36 +278,48 @@ struct PokemonCollectionContent: View {
     }
 
     var body: some View {
-        Group {
+        // VStack (not Group) is a stable anchor — Group distributes modifiers to each
+        // child, so a content swap re-anchors the presentation and resets its state
+        // (which made the card detail sheet open and immediately close).
+        VStack(spacing: 0) {
             if !allCards.isEmpty { statsStrip }
-            if !touchedSets.isEmpty { yourSetsSection }
+            // yourSetsSection hidden for now — set progress lives in the gallery
             if allCards.isEmpty { emptyState } else { browseButton }
-            if !allCards.isEmpty { shareCardsButton }
+            if !allCards.isEmpty { galleryShareButtons }
             if !allCards.isEmpty { allOwnedSection }
+        }
+        .fullScreenCover(isPresented: $showGallery) {
+            CollectionShowcaseView(category: .pokemon)
         }
         .task { await service.fetchSets() }
         .onChange(of: triggerShare) { _, val in
             if val { shareExcludedRarities = []; showShareOptions = true; triggerShare = false }
         }
-        .sheet(isPresented: $showShareOptions) {
-            CollectionShareOptionsSheet(
-                ownedCards: ownedCards,
-                chasingCards: chasingCards,
-                availableRarities: shareAvailableRarities,
-                listType: $shareListType,
-                includePrice: $shareIncludePrice,
-                excludedRarities: $shareExcludedRarities
-            ) {
-                showShareOptions = false
-                Task { await createAndShareCollection(type: shareListType, includePrice: shareIncludePrice) }
+        // One sheet, not three siblings. Stacked presentation modifiers on the same
+        // view destabilise each other — with a fullScreenCover among them, opening
+        // a sheet inside the cover would reset the cover's state and close it again.
+        .sheet(item: pokemonSheet) { which in
+            switch which {
+            case .shareOptions:
+                CollectionShareOptionsSheet(
+                    ownedCards: ownedCards,
+                    chasingCards: chasingCards,
+                    availableRarities: shareAvailableRarities,
+                    listType: $shareListType,
+                    includePrice: $shareIncludePrice,
+                    excludedRarities: $shareExcludedRarities
+                ) {
+                    showShareOptions = false
+                    Task { await createAndShareCollection(type: shareListType, includePrice: shareIncludePrice) }
+                }
+                .presentationDetents([.medium])
+            case .shareLink:
+                if let url = shareURL { ShareSheet(items: [url]) }
+            case .card(let id):
+                if let card = allCards.first(where: { $0.id == id }) {
+                    TCGCardDetailSheet(card: card)
+                }
             }
-            .presentationDetents([.medium])
-        }
-        .sheet(isPresented: $showShareSheet) {
-            if let url = shareURL { ShareSheet(items: [url]) }
-        }
-        .sheet(item: $detailCard) { card in
-            TCGCardDetailSheet(card: card)
         }
         .overlay {
             if isCreatingShareLink {
@@ -363,32 +443,59 @@ struct PokemonCollectionContent: View {
     }
 
     private var browseButton: some View {
-        Button { showSetBrowser = true } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "rectangle.grid.2x2")
-                Text("Browse All Sets").font(.custom("DMSans-Medium", size: 15))
+        HStack(spacing: 10) {
+            Button { showSetBrowser = true } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "rectangle.grid.2x2")
+                    Text("Browse Sets").font(.custom("DMSans-Medium", size: 15))
+                }
+                .foregroundColor(.oceanTeal)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.oceanTeal.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
-            .foregroundColor(.oceanTeal)
-            .frame(maxWidth: .infinity).padding(.vertical, 14)
-            .background(Color.oceanTeal.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            Button { showSearch = true } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "sparkles")
+                    Text("Browse Pokémon").font(.custom("DMSans-Medium", size: 15))
+                }
+                .foregroundColor(.oceanTeal)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.oceanTeal.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
         }
         .padding(.horizontal, 20).padding(.top, 20)
     }
 
-    private var shareCardsButton: some View {
-        Button {
-            shareExcludedRarities = []
-            showShareOptions = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "square.and.arrow.up")
-                Text("Share Cards").font(.custom("DMSans-Medium", size: 15))
+    private var galleryShareButtons: some View {
+        HStack(spacing: 10) {
+            Button {
+                showGallery = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.grid.2x2.fill")
+                    Text("Gallery").font(.custom("DMSans-Medium", size: 15))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.oceanTeal)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity).padding(.vertical, 14)
-            .background(Color.oceanTeal)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            Button {
+                shareExcludedRarities = []
+                showShareOptions = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.arrow.up")
+                    Text("Share Cards").font(.custom("DMSans-Medium", size: 15))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.oceanTeal)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
         }
         .padding(.horizontal, 20).padding(.top, 10)
     }

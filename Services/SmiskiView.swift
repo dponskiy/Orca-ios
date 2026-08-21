@@ -12,6 +12,7 @@ struct SmiskiCollectionContent: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AuthService.self) private var authService
     @State private var showBrowser = false
+    @State private var showGallery = false
     @State private var detailItem: SmiskiItem? = nil
 
     private var ownedCount: Int { allItems.filter { $0.isOwned }.count }
@@ -27,13 +28,15 @@ struct SmiskiCollectionContent: View {
     }
 
     var body: some View {
-        Group {
+        // VStack (not Group) — Group distributes modifiers to each child, which
+        // re-anchors presentations on content changes and resets their state
+        VStack(spacing: 0) {
             if !allItems.isEmpty {
                 smiskiStatsStrip
             }
             if !touchedSeries.isEmpty {
-                seriesSection
                 browseButton
+                seriesSection
                 allOwnedSection
             } else {
                 emptyState
@@ -129,18 +132,32 @@ struct SmiskiCollectionContent: View {
     }
 
     private var browseButton: some View {
-        Button { showBrowser = true } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "rectangle.grid.2x2")
-                Text("Browse All Series").font(.custom("DMSans-Medium", size: 15))
+        HStack(spacing: 10) {
+            Button { showBrowser = true } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "rectangle.grid.2x2")
+                    Text("Browse Series").font(.custom("DMSans-Medium", size: 15))
+                }
+                .foregroundColor(.oceanTeal)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.oceanTeal.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
-            .foregroundColor(.oceanTeal)
-            .frame(maxWidth: .infinity).padding(.vertical, 14)
-            .background(Color.oceanTeal.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            Button { showGallery = true } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.grid.2x2.fill")
+                    Text("Gallery").font(.custom("DMSans-Medium", size: 15))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Color.oceanTeal)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
         }
         .padding(.horizontal, 20).padding(.top, 20)
         .sheet(isPresented: $showBrowser) { SmiskiAllSeriesView() }
+        .fullScreenCover(isPresented: $showGallery) { CollectionShowcaseView(category: .smiski) }
     }
 
     private var allOwnedSection: some View {
@@ -623,6 +640,9 @@ struct SmiskiActionSheet: View {
 
 struct SmiskiItemDetailSheet: View {
     let item: SmiskiItem
+    // Set when shown as an in-place overlay instead of a modal —
+    // @Environment(\.dismiss) is inert outside a presentation.
+    var onClose: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -705,7 +725,7 @@ struct SmiskiItemDetailSheet: View {
                 modelContext.delete(item)
                 try? modelContext.save()
                 Task { await SupabaseSyncService.shared.deleteSmiskiItem(id: id) }
-                dismiss()
+                close()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -724,5 +744,9 @@ struct SmiskiItemDetailSheet: View {
             .background(active ? color : color.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
+    }
+
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
     }
 }

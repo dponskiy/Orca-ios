@@ -7,7 +7,7 @@ import Observation
 
 // MARK: - Public types
 
-struct RBTheme: Identifiable, Decodable {
+struct RBTheme: Identifiable, Decodable, Hashable {
     let id: Int
     let parentId: Int?
     let name: String

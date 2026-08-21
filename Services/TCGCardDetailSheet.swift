@@ -7,6 +7,9 @@ import SwiftData
 
 struct TCGCardDetailSheet: View {
     let card: TCGCard
+    // Set when shown as an in-place overlay instead of a modal —
+    // @Environment(\.dismiss) is inert outside a presentation.
+    var onClose: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -61,7 +64,7 @@ struct TCGCardDetailSheet: View {
                             modelContext.delete(card)
                             try? modelContext.save()
                             Task { await SupabaseSyncService.shared.deleteTCGCard(id: id) }
-                            dismiss()
+                            close()
                         } label: {
                             Text("Remove from Collection")
                                 .font(.custom("DMSans-Medium", size: 15))
@@ -80,7 +83,7 @@ struct TCGCardDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }.foregroundColor(.oceanTeal)
+                    Button("Done") { close() }.foregroundColor(.oceanTeal)
                 }
             }
         }
@@ -249,5 +252,9 @@ struct TCGCardDetailSheet: View {
             .background(active ? color : color.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
+    }
+
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
     }
 }

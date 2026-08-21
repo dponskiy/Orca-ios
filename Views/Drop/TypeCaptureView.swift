@@ -25,6 +25,7 @@ struct TypeCaptureView: View {
     @State private var recipeFetched = false
     @State private var recipeError: String? = nil
     @State private var savedMemory: Memory? = nil
+    @State private var fetchedRecipe: RecipeResult? = nil
     
     private let sonarEngine = SonarEngine()
 
@@ -73,6 +74,78 @@ struct TypeCaptureView: View {
         }
     }
 
+    // Applies an inline banner edit: saves the new text and re-applies the fresh
+    // SonarResult so dates and pings track the edit (e.g. "4pm" → "3pm" moves the ping).
+    private func applyEditedText(_ newText: String, result: SonarResult) {
+        let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        guard let last = try? modelContext.fetch(descriptor).first else { return }
+        last.text = newText
+        last.updatedAt = Date()
+        last.tags = result.tags
+        last.detectedDate = result.detectedDate
+        last.endDate = result.endDate
+        last.dateConfidence = result.dateConfidence
+        last.estimatedMinutes = result.estimatedMinutes
+        last.isActionable = result.isActionable
+        if urlText.isEmpty, let detectedURL = sonarEngine.detectURL(text: newText) {
+            last.url = detectedURL
+        }
+
+        // Replace pings — the old ones may point at a time the edit just changed
+        let pings = (try? modelContext.fetch(FetchDescriptor<Ping>())) ?? []
+        for ping in pings where ping.memoryId == last.id {
+            let pingId = ping.id
+            NotificationService.shared.cancelPing(pingId: pingId)
+            modelContext.delete(ping)
+            Task { await SupabaseSyncService.shared.deletePing(id: pingId) }
+        }
+        var newPings: [Ping] = []
+        for suggestion in result.pingSuggestions {
+            let fireDate = suggestion.fireDate ?? result.detectedDate ?? Date()
+            let ping = Ping(memoryId: last.id, fireDate: fireDate, recurrence: suggestion.recurrence)
+            if let fireTime = suggestion.fireTime { ping.fireTime = fireTime }
+            modelContext.insert(ping)
+            NotificationService.shared.schedulePing(ping: ping, memoryText: last.text)
+            newPings.append(ping)
+        }
+        if let advancePing = NotificationService.shared.makeAdvancePing(for: last, echoName: result.echoName) {
+            modelContext.insert(advancePing)
+            NotificationService.shared.schedulePing(ping: advancePing, memoryText: "2 weeks out: \(last.text)")
+            newPings.append(advancePing)
+        }
+
+        // Refresh sonar checklist items; when the new text has none, leave existing
+        // subtasks alone (protects recipe-ingredient checklists).
+        if !result.checklistItems.isEmpty {
+            let subTasks = (try? modelContext.fetch(FetchDescriptor<SubTask>())) ?? []
+            for subTask in subTasks where subTask.memoryId == last.id {
+                let subTaskId = subTask.id
+                modelContext.delete(subTask)
+                Task { await SupabaseSyncService.shared.deleteSubTask(id: subTaskId) }
+            }
+            last.hasChecklist = true
+            for (i, item) in result.checklistItems.enumerated() {
+                modelContext.insert(SubTask(memoryId: last.id, text: item, sortOrder: i))
+            }
+        }
+
+        try? modelContext.save()
+        SpotlightService.shared.indexMemory(
+            last,
+            echoName: echos.first { $0.id == last.echoId }?.name ?? "Notes",
+            echoEmoji: echos.first { $0.id == last.echoId }?.emoji ?? "📝"
+        )
+        sonarResult = result  // banner chips refresh from this
+        if let userId = authService.userId {
+            Task { @MainActor in
+                await SupabaseSyncService.shared.pushMemory(last, userId: userId)
+                for ping in newPings {
+                    await SupabaseSyncService.shared.pushPing(ping, userId: userId)
+                }
+            }
+        }
+    }
+
     private func updateLastMemoryLocation(name: String, address: String?, lat: Double, lng: Double) {
         let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         if let last = try? modelContext.fetch(descriptor).first {
@@ -113,6 +186,9 @@ struct TypeCaptureView: View {
                         onEdit: {
                             let descriptor = FetchDescriptor<Memory>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
                             editMemory = try? modelContext.fetch(descriptor).first
+                        },
+                        onTextEdited: { newText, newResult in
+                            applyEditedText(newText, result: newResult)
                         },
                         onLocationSet: { name, address, lat, lng in
                             updateLastMemoryLocation(name: name, address: address, lat: lat, lng: lng)
@@ -186,6 +262,7 @@ struct TypeCaptureView: View {
                                         urlText = ""
                                         recipeFetched = false
                                         recipeError = nil
+                                        fetchedRecipe = nil
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
                                             .foregroundColor(.white.opacity(0.4))
@@ -258,6 +335,7 @@ struct TypeCaptureView: View {
                         }
                     }
                     text = parts.joined(separator: "\n")
+                    fetchedRecipe = recipe
                     isFetchingRecipe = false
                     recipeFetched = true
                 }
@@ -286,7 +364,10 @@ struct TypeCaptureView: View {
             return
         }
 
-        let echoId = sonarResult?.echoId ?? echos.first?.id ?? UUID()
+        let echoId = sonarResult?.echoId
+            ?? echos.first { $0.name == "Notes" }?.id
+            ?? echos.first?.id
+            ?? UUID()
         let memory = Memory(text: text, echoId: echoId, captureType: Memory.CaptureType.typed)
         memory.tags = sonarResult?.tags ?? []
         memory.detectedDate = sonarResult?.detectedDate
@@ -348,16 +429,17 @@ struct TypeCaptureView: View {
             }
         }
 
-        AnalyticsService.shared.trackMemoryDropped(
-            captureType: "typed", echoName: sonarResult?.echoName ?? "Unknown",
-            hasPing: sonarResult?.shouldCreatePing ?? false,
-            hasDate: sonarResult?.detectedDate != nil, hasURL: memory.url != nil,
-            hasChecklist: memory.hasChecklist, wordCount: text.split(separator: " ").count)
-
         if urlText.isEmpty {
             if let detectedURL = sonarEngine.detectURL(text: text) { memory.url = detectedURL }
         }
-        if let items = sonarResult?.checklistItems, !items.isEmpty {
+        // Inline recipe fetch: the text holds title + instructions; the ingredients
+        // become the checklist, matching the banner's fetch path.
+        if let recipe = fetchedRecipe, !recipe.ingredients.isEmpty {
+            memory.hasChecklist = true
+            for (index, ingredient) in recipe.ingredients.enumerated() {
+                modelContext.insert(SubTask(memoryId: memory.id, text: ingredient, sortOrder: index))
+            }
+        } else if let items = sonarResult?.checklistItems, !items.isEmpty {
             memory.hasChecklist = true
             for (i, item) in items.enumerated() {
                 modelContext.insert(SubTask(memoryId: memory.id, text: item, sortOrder: i))
@@ -369,6 +451,12 @@ struct TypeCaptureView: View {
             }
         }
 
+        AnalyticsService.shared.trackMemoryDropped(
+            captureType: "typed", echoName: sonarResult?.echoName ?? "Unknown",
+            hasPing: sonarResult?.shouldCreatePing ?? false,
+            hasDate: sonarResult?.detectedDate != nil, hasURL: memory.url != nil,
+            hasChecklist: memory.hasChecklist, wordCount: text.split(separator: " ").count)
+
         withAnimation(.spring(duration: 0.4)) { showBanner = true }
     }
     
@@ -378,6 +466,28 @@ struct TypeCaptureView: View {
         )
         if let last = recent?.first {
             let id = last.id
+            // Remove everything created alongside the memory — otherwise its pings
+            // still fire, and subtasks/gifts/spotlight entries are left orphaned.
+            let pings = (try? modelContext.fetch(FetchDescriptor<Ping>())) ?? []
+            for ping in pings where ping.memoryId == id {
+                let pingId = ping.id
+                NotificationService.shared.cancelPing(pingId: pingId)
+                modelContext.delete(ping)
+                Task { await SupabaseSyncService.shared.deletePing(id: pingId) }
+            }
+            let subTasks = (try? modelContext.fetch(FetchDescriptor<SubTask>())) ?? []
+            for subTask in subTasks where subTask.memoryId == id {
+                let subTaskId = subTask.id
+                modelContext.delete(subTask)
+                Task { await SupabaseSyncService.shared.deleteSubTask(id: subTaskId) }
+            }
+            let gifts = (try? modelContext.fetch(FetchDescriptor<GiftItem>())) ?? []
+            for gift in gifts where gift.linkedMemoryId == id {
+                let giftId = gift.id
+                modelContext.delete(gift)
+                Task { await SupabaseSyncService.shared.deleteGiftItem(id: giftId) }
+            }
+            SpotlightService.shared.removeMemory(id: id)
             modelContext.delete(last)
             SupabaseSyncService.shared.scheduleDelete(id: id)
         }

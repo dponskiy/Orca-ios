@@ -78,14 +78,18 @@ class AuthService {
 
             // Upsert user record
             do {
+                // Apple only returns fullName on the FIRST authorization, so `name`
+                // is empty on every later sign-in. Writing it unconditionally wiped
+                // the stored name each time — only include it when we actually have one.
+                var userRow: [String: String] = [
+                    "id": session.user.id.uuidString,
+                    "email": session.user.email ?? "",
+                    "updated_at": ISO8601DateFormatter().string(from: Date())
+                ]
+                if !name.isEmpty { userRow["display_name"] = name }
                 try await supabase
                     .from("users")
-                    .upsert([
-                        "id": session.user.id.uuidString,
-                        "email": session.user.email ?? "",
-                        "display_name": name.isEmpty ? "" : name,
-                        "updated_at": ISO8601DateFormatter().string(from: Date())
-                    ])
+                    .upsert(userRow)
                     .execute()
             } catch {
                 print("⚠️ User upsert failed: \(error)")

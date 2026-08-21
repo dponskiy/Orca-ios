@@ -21,11 +21,14 @@ class AudioService {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var timer: Timer?
+    // Bumped each session so a finishing task from a previous recording
+    // can't overwrite the new session's transcription.
+    private var sessionToken = UUID()
 
     func requestPermissions(completion: @escaping (Bool) -> Void) {
         AVAudioApplication.requestRecordPermission { micGranted in
             guard micGranted else {
-                completion(false)
+                DispatchQueue.main.async { completion(false) }
                 return
             }
             SFSpeechRecognizer.requestAuthorization { status in
@@ -67,10 +70,13 @@ class AudioService {
             self?.updateAudioLevel(buffer: buffer)
         }
 
+        sessionToken = UUID()
+        let token = sessionToken
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
             guard let self = self else { return }
             if let result = result {
                 DispatchQueue.main.async {
+                    guard token == self.sessionToken else { return }
                     self.transcription = result.bestTranscription.formattedString
                 }
             }
@@ -91,7 +97,9 @@ class AudioService {
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
         recognitionRequest = nil
-        recognitionTask?.cancel()
+        // finish() (not cancel()) so the final recognition segment still arrives —
+        // cancel() drops the last words of the note. The session token gates late writes.
+        recognitionTask?.finish()
         recognitionTask = nil
         isRecording = false
         timer?.invalidate()
@@ -137,6 +145,7 @@ class AudioEditService {
     private var speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    private var sessionToken = UUID()
 
     func startRecording() {
         guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else { return }
@@ -168,10 +177,13 @@ class AudioEditService {
             self?.updateAudioLevel(buffer: buffer)
         }
 
+        sessionToken = UUID()
+        let token = sessionToken
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
             guard let self = self else { return }
             if let result = result {
                 DispatchQueue.main.async {
+                    guard token == self.sessionToken else { return }
                     self.transcription = result.bestTranscription.formattedString
                 }
             }
@@ -191,7 +203,8 @@ class AudioEditService {
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
         recognitionRequest = nil
-        recognitionTask?.cancel()
+        // finish() (not cancel()) so the final recognition segment still arrives
+        recognitionTask?.finish()
         recognitionTask = nil
         isRecording = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)

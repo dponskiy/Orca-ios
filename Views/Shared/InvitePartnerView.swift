@@ -117,7 +117,8 @@ struct InvitePartnerView: View {
             do {
                 let space = try await SharedSpaceSyncService.shared.createSpace(
                     name: spaceName.trimmingCharacters(in: .whitespaces),
-                    userId: userId
+                    userId: userId,
+                    ownerName: authService.displayName ?? ""
                 )
                 await MainActor.run {
                     isLoading = false

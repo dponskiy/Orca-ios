@@ -22,6 +22,7 @@ class TCGCard {
     var highPrice: Double?
     var priceVariant: String?         // "normal", "holofoil", "reverseHolofoil" etc.
     var addedAt: Date = Date()
+    var types: [String] = []
     var psaGrade: Int?                // owned: actual PSA grade 1–10, nil = raw/ungraded
     var psaTargetGrade: Int?          // chasing: minimum PSA grade wanted, nil = raw/any
 

@@ -25,6 +25,7 @@ struct PokemonCard: Identifiable {
     let imageURL: URL?
     let largeImageURL: URL?
     let rarity: String?
+    let types: [String]
     let marketPrice: Double?
     let lowPrice: Double?
     let highPrice: Double?
@@ -47,6 +48,16 @@ class PokemonTCGService {
     var fetchCardsErrors: Set<String> = []
     var searchResults: [PokemonCard] = []
     var isSearching = false
+    var isLoadingMore = false
+    var searchFailed = false
+    // A page fetch failed (the public API rate-limits without a key). Surfaces a
+    // tappable retry — otherwise the list is stuck: the cards whose .onAppear would
+    // re-trigger loading are already on screen and never fire again.
+    var loadMoreFailed = false
+    private(set) var searchTotalCount = 0
+    private var searchPage = 1
+    private(set) var lastSearchQuery = ""
+    private var activeSearchTask: Task<Void, Never>?
 
     func fetchSets() async {
         guard allSets.isEmpty, !isFetchingSets else { return }
@@ -88,7 +99,7 @@ class PokemonTCGService {
             URLQueryItem(name: "q", value: "set.id:\(setId)"),
             URLQueryItem(name: "pageSize", value: "250"),
             URLQueryItem(name: "orderBy", value: "number"),
-            URLQueryItem(name: "select", value: "id,name,set,number,images,rarity,tcgplayer")
+            URLQueryItem(name: "select", value: "id,name,set,number,images,rarity,types,tcgplayer")
         ]
 
         guard let url = components?.url,
@@ -113,32 +124,91 @@ class PokemonTCGService {
     }
 
     func search(query: String) async {
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
-            await MainActor.run { searchResults = [] }
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else {
+            await MainActor.run { searchResults = []; searchTotalCount = 0; searchFailed = false }
             return
         }
-        await MainActor.run { isSearching = true }
+        // Cancel any in-flight search before starting a new one
+        activeSearchTask?.cancel()
+        await MainActor.run { isSearching = true; searchResults = []; searchTotalCount = 0; searchPage = 1; lastSearchQuery = q; searchFailed = false; loadMoreFailed = false; isLoadingMore = false }
 
+        let task = Task {
+            guard let result = await fetchPage(query: q, page: 1) else {
+                if !Task.isCancelled {
+                    await MainActor.run { isSearching = false; searchFailed = true }
+                }
+                return
+            }
+            if !Task.isCancelled {
+                await MainActor.run {
+                    searchResults = result.cards
+                    searchTotalCount = result.totalCount
+                    isSearching = false
+                    searchFailed = false
+                }
+            }
+        }
+        activeSearchTask = task
+        await task.value
+    }
+
+    func clearSearch() {
+        activeSearchTask?.cancel()
+        activeSearchTask = nil
+        searchResults = []
+        searchTotalCount = 0
+        searchFailed = false
+        lastSearchQuery = ""
+        isSearching = false
+        isLoadingMore = false
+    }
+
+    func searchMore() async {
+        // Claim the load atomically on the main actor. Several cards scroll into view
+        // at once and each fires this; a non-isolated guard lets them all through and
+        // they fetch the same page, appending duplicate ids.
+        let claim: (query: String, page: Int)? = await MainActor.run {
+            guard !lastSearchQuery.isEmpty, !isLoadingMore,
+                  searchResults.count < searchTotalCount else { return nil }
+            isLoadingMore = true
+            loadMoreFailed = false
+            return (lastSearchQuery, searchPage + 1)
+        }
+        guard let claim else { return }
+
+        guard let result = await fetchPage(query: claim.query, page: claim.page) else {
+            await MainActor.run { isLoadingMore = false; loadMoreFailed = true }
+            return
+        }
+        await MainActor.run {
+            // Dedupe defensively — a retry must never inject ids already on screen
+            let existing = Set(searchResults.map { $0.id })
+            searchResults.append(contentsOf: result.cards.filter { !existing.contains($0.id) })
+            searchTotalCount = result.totalCount
+            searchPage = claim.page
+            isLoadingMore = false
+            loadMoreFailed = false
+        }
+    }
+
+    private func fetchPage(query: String, page: Int) async -> (cards: [PokemonCard], totalCount: Int)? {
         var components = URLComponents(string: "\(baseURL)/cards")
+        // Large pages on purpose: the keyless public API rate-limits per request, not
+        // per row, and latency barely moves with page size. One 250-card request beats
+        // six 20-card ones — most searches now complete in a single round trip.
         components?.queryItems = [
-            URLQueryItem(name: "q", value: "name:\(query)*"),
-            URLQueryItem(name: "pageSize", value: "20"),
-            URLQueryItem(name: "select", value: "id,name,set,number,images,rarity,tcgplayer")
+            URLQueryItem(name: "q",        value: "name:\(query)*"),
+            URLQueryItem(name: "pageSize", value: "250"),
+            URLQueryItem(name: "page",     value: "\(page)"),
+            URLQueryItem(name: "select",   value: "id,name,set,number,images,rarity,types,tcgplayer")
         ]
-
         guard let url = components?.url,
               let (data, _) = try? await URLSession.shared.data(from: url),
               let response = try? JSONDecoder().decode(PTCGResponse.self, from: data)
-        else {
-            await MainActor.run { isSearching = false }
-            return
-        }
-
+        else { return nil }
         let cards = response.data.map { parseCard($0) }
-        await MainActor.run {
-            searchResults = cards
-            isSearching = false
-        }
+        return (cards, response.totalCount ?? cards.count)
     }
 
     // MARK: - Helpers
@@ -156,6 +226,7 @@ class PokemonTCGService {
             imageURL: raw.images?.small.flatMap { URL(string: $0) },
             largeImageURL: raw.images?.large.flatMap { URL(string: $0) },
             rarity: raw.rarity,
+            types: raw.types ?? [],
             marketPrice: best?.market,
             lowPrice: best?.low,
             highPrice: best?.high,
@@ -228,6 +299,7 @@ private struct PTCGSetImages: Decodable {
 
 private struct PTCGResponse: Decodable {
     let data: [PTCGCard]
+    let totalCount: Int?  // Optional — error responses won't have this field
 }
 
 private struct PTCGCard: Decodable {
@@ -237,6 +309,7 @@ private struct PTCGCard: Decodable {
     let number: String?
     let images: PTCGImages?
     let rarity: String?
+    let types: [String]?
     let tcgplayer: PTCGPlayer?
 }
 

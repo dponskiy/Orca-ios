@@ -19,6 +19,46 @@ struct DashboardView: View {
     @Query private var pings: [Ping]
     @Environment(\.modelContext) private var modelContext
     @State private var navigationPath = NavigationPath()
+    // Routes every dashboard modal through a single presentation. The individual
+    // flags stay so the rest of the view (and child bindings) are untouched.
+    private enum DashboardSheet: String, Identifiable {
+        case createEcho, editMemory, memoryDetail, grocery, media
+        case collectibles, sharedSpaces, thoughts, gifts, weather
+        var id: String { rawValue }
+    }
+
+    private var dashboardSheet: Binding<DashboardSheet?> {
+        Binding(
+            get: {
+                if showCreateEcho       { return .createEcho }
+                if editingMemory != nil { return .editMemory }
+                if detailMemory  != nil { return .memoryDetail }
+                if showGroceryMode      { return .grocery }
+                if showMediaMode        { return .media }
+                if showCollectibles     { return .collectibles }
+                if showSharedSpaces     { return .sharedSpaces }
+                if showThoughts         { return .thoughts }
+                if showGiftMode         { return .gifts }
+                if showWeatherDetail    { return .weather }
+                return nil
+            },
+            set: { newValue in
+                // Dismissal (nil) clears everything; the flags are only ever set
+                // to true by the buttons that open each destination.
+                showCreateEcho    = (newValue == .createEcho)
+                showGroceryMode   = (newValue == .grocery)
+                showMediaMode     = (newValue == .media)
+                showCollectibles  = (newValue == .collectibles)
+                showSharedSpaces  = (newValue == .sharedSpaces)
+                showThoughts      = (newValue == .thoughts)
+                showGiftMode      = (newValue == .gifts)
+                showWeatherDetail = (newValue == .weather)
+                if newValue != .editMemory   { editingMemory = nil }
+                if newValue != .memoryDetail { detailMemory  = nil }
+            }
+        )
+    }
+
     @State private var showCreateEcho = false
     @State private var showUpcoming = true
     @State private var showPinned = true
@@ -363,30 +403,22 @@ struct DashboardView: View {
             .onChange(of: locationService.location) { _, location in
                 if let location = location { Task { await weatherService.fetchWeather(for: location) } }
             }
-            .sheet(isPresented: $showCreateEcho) { EchoEditSheet(echo: nil) }
-            .sheet(item: $editingMemory) { MemoryEditView(memory: $0) }
-            .sheet(isPresented: $showGroceryMode) {
-                GroceryModeView(memories: memories.filter { $0.echoId == cookingEcho?.id })
-            }
-            .sheet(item: $detailMemory) { MemoryDetailView(memory: $0) }
-            .sheet(isPresented: $showMediaMode) {
-                WatchModeView()
-            }
-            .sheet(isPresented: $showCollectibles) {
-                CollectiblesView()
-            }
-            .sheet(isPresented: $showSharedSpaces) {
-                SharedSpacesHubView()
-            }
-            .sheet(isPresented: $showThoughts) {
-                ThoughtsView()
-            }
-            .sheet(isPresented: $showGiftMode) {
-                GiftQuickActionView()
-            }
-            // NEW: Weather detail sheet
-            .sheet(isPresented: $showWeatherDetail) {
-                WeatherDetailView()
+            // One sheet, not eleven siblings. Stacked presentation modifiers on a
+            // single view destabilise each other, and anything presented two levels
+            // deeper (Collectibles → Gallery → card detail) got torn down on open.
+            .sheet(item: dashboardSheet) { which in
+                switch which {
+                case .createEcho:    EchoEditSheet(echo: nil)
+                case .editMemory:    if let m = editingMemory { MemoryEditView(memory: m) }
+                case .memoryDetail:  if let m = detailMemory  { MemoryDetailView(memory: m) }
+                case .grocery:       GroceryModeView(memories: memories.filter { $0.echoId == cookingEcho?.id })
+                case .media:         WatchModeView()
+                case .collectibles:  CollectiblesView()
+                case .sharedSpaces:  SharedSpacesHubView()
+                case .thoughts:      ThoughtsView()
+                case .gifts:         GiftQuickActionView()
+                case .weather:       WeatherDetailView()
+                }
             }
         }
         .onChange(of: resetTrigger) { _, _ in

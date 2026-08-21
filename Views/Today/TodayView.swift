@@ -58,6 +58,7 @@ struct TodayView: View {
     private func isoDateKey(_ date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate]
+        formatter.timeZone = .current  // default is GMT — evening completions would land on tomorrow's key
         return formatter.string(from: date)
     }
 
@@ -82,6 +83,7 @@ struct TodayView: View {
         } else {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withFullDate]
+            formatter.timeZone = .current
             memory.completedAt = memory.recurringCompletedDates
                 .compactMap { formatter.date(from: $0) }
                 .max()
@@ -411,6 +413,50 @@ struct TodayView: View {
                             onEdit: {
                                 editingMemory = bannerMemory
                                 showBanner = false
+                            },
+                            onTextEdited: { newText, newResult in
+                                guard let memory = bannerMemory else { return }
+                                memory.text = newText
+                                memory.updatedAt = Date()
+                                memory.tags = newResult.tags
+                                memory.detectedDate = newResult.detectedDate
+                                memory.endDate = newResult.endDate
+                                memory.dateConfidence = newResult.dateConfidence
+                                memory.estimatedMinutes = newResult.estimatedMinutes
+                                // isActionable stays true — quick-add entries are always tasks
+
+                                // Replace pings so they track the edited text/time
+                                let memoryPings = pings.filter { $0.memoryId == memory.id }
+                                for ping in memoryPings {
+                                    let pingId = ping.id
+                                    NotificationService.shared.cancelPing(pingId: pingId)
+                                    modelContext.delete(ping)
+                                    Task { await SupabaseSyncService.shared.deletePing(id: pingId) }
+                                }
+                                var newPings: [Ping] = []
+                                for suggestion in newResult.pingSuggestions {
+                                    let fireDate = suggestion.fireDate ?? newResult.detectedDate ?? Date()
+                                    let ping = Ping(memoryId: memory.id, fireDate: fireDate, recurrence: suggestion.recurrence)
+                                    if let fireTime = suggestion.fireTime { ping.fireTime = fireTime }
+                                    modelContext.insert(ping)
+                                    NotificationService.shared.schedulePing(ping: ping, memoryText: memory.text)
+                                    newPings.append(ping)
+                                }
+                                try? modelContext.save()
+                                SpotlightService.shared.indexMemory(
+                                    memory,
+                                    echoName: echos.first { $0.id == memory.echoId }?.name ?? newResult.echoName,
+                                    echoEmoji: echos.first { $0.id == memory.echoId }?.emoji ?? "📋"
+                                )
+                                bannerSonarResult = newResult
+                                if let userId = authService.userId {
+                                    Task {
+                                        await SupabaseSyncService.shared.pushMemory(memory, userId: userId)
+                                        for ping in newPings {
+                                            await SupabaseSyncService.shared.pushPing(ping, userId: userId)
+                                        }
+                                    }
+                                }
                             },
                             onAddToWatchlist: { title, type, service in
                                 let item = WatchlistItem(title: title, itemType: type, streamingService: service)
