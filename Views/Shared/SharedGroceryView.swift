@@ -26,6 +26,7 @@ struct SharedGroceryView: View {
     @State private var byAisle = true
     @State private var busyRecipeId: UUID? = nil
     @State private var errorMessage: String? = nil
+    @State private var expandedLines: Set<String> = []
     @FocusState private var addFocused: Bool
 
     // MARK: Data
@@ -58,6 +59,13 @@ struct SharedGroceryView: View {
         let sources: [String]        // recipe titles, for the ×N detail
         let items: [SharedGroceryItem]
         var isChecked: Bool { !items.isEmpty && items.allSatisfy { $0.isChecked } }
+    }
+
+    /// One original line inside a merged row, for the ×N breakdown.
+    private struct LineSource: Identifiable {
+        let id: UUID
+        let label: String
+        let text: String
     }
 
     private func mergedLines(_ source: [SharedGroceryItem]) -> [Line] {
@@ -262,52 +270,98 @@ struct SharedGroceryView: View {
     private func lineRow(_ line: Line) -> some View {
         let checked = line.isChecked
         let checker = line.items.first { $0.isChecked }?.checkedByUserId
-        return Button { toggle(line) } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle().stroke(Color.oceanTeal.opacity(0.4), lineWidth: 1.5).frame(width: 22, height: 22)
-                    if checked {
-                        Circle().fill(Color.oceanTeal).frame(width: 22, height: 22)
-                        Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(line.name)
-                        .font(.custom("DMSans-Regular", size: 15))
-                        .foregroundColor(checked ? .gray : .deepNavy).strikethrough(checked)
-                    // Quantity, which recipe it came from, and who grabbed it —
-                    // matches the personal list, plus the bit only a shared list needs.
-                    HStack(spacing: 5) {
-                        if let q = line.quantity {
-                            Text(q).font(.custom("DMSans-Regular", size: 11))
-                                .foregroundColor(checked ? .gray.opacity(0.6) : .oceanTeal)
+        let parts = breakdown(line)
+        let isExpanded = expandedLines.contains(line.id)
+
+        return VStack(alignment: .leading, spacing: 0) {
+            Button { toggle(line) } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().stroke(Color.oceanTeal.opacity(0.4), lineWidth: 1.5).frame(width: 22, height: 22)
+                        if checked {
+                            Circle().fill(Color.oceanTeal).frame(width: 22, height: 22)
+                            Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
                         }
-                        if let origin = recipeOrigin(line) {
-                            if line.quantity != nil {
-                                Text("·").font(.system(size: 10)).foregroundColor(.gray.opacity(0.4))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(line.name)
+                            .font(.custom("DMSans-Regular", size: 15))
+                            .foregroundColor(checked ? .gray : .deepNavy).strikethrough(checked)
+                        // Quantity, which recipe it came from, and who grabbed it —
+                        // matches the personal list, plus the bit only a shared list needs.
+                        HStack(spacing: 5) {
+                            if let q = line.quantity {
+                                Text(q).font(.custom("DMSans-Regular", size: 11))
+                                    .foregroundColor(checked ? .gray.opacity(0.6) : .oceanTeal)
                             }
-                            Text(origin).font(.custom("DMSans-Regular", size: 11))
-                                .foregroundColor(.gray).lineLimit(1)
+                            if let origin = recipeOrigin(line) {
+                                if line.quantity != nil {
+                                    Text("·").font(.system(size: 10)).foregroundColor(.gray.opacity(0.4))
+                                }
+                                Text(origin).font(.custom("DMSans-Regular", size: 11))
+                                    .foregroundColor(.gray).lineLimit(1)
+                            }
+                            if checked, let checker {
+                                Text("· \(memberName(checker)) got this")
+                                    .font(.custom("DMSans-Regular", size: 11)).foregroundColor(.gray)
+                            }
                         }
-                        if checked, let checker {
-                            Text("· \(memberName(checker)) got this")
-                                .font(.custom("DMSans-Regular", size: 11)).foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // Tapping the ×N opens the per-recipe breakdown, same as the
+                    // personal list — "whose two cloves of garlic are these".
+                    if parts.count > 1 {
+                        Button {
+                            withAnimation(.spring(duration: 0.25)) {
+                                if isExpanded { expandedLines.remove(line.id) }
+                                else { expandedLines.insert(line.id) }
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text("×\(parts.count)").font(.custom("DMSans-Medium", size: 11))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                            }
+                            .foregroundColor(.oceanTeal)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Color.oceanTeal.opacity(0.1)).clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded && parts.count > 1 {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(parts) { part in
+                        HStack(spacing: 6) {
+                            Circle().fill(Color.gray.opacity(0.3)).frame(width: 3, height: 3)
+                            Text(part.label).font(.custom("DMSans-Medium", size: 11)).foregroundColor(.gray)
+                            Text(part.text).font(.custom("DMSans-Regular", size: 11))
+                                .foregroundColor(.gray.opacity(0.8)).lineLimit(1)
                         }
                     }
                 }
-                Spacer()
-                if line.sources.count > 1 {
-                    Text("×\(line.sources.count)")
-                        .font(.custom("DMSans-Medium", size: 11)).foregroundColor(.oceanTeal)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(Color.oceanTeal.opacity(0.1)).clipShape(Capsule())
-                }
+                .padding(.leading, 34).padding(.top, 2).padding(.bottom, 4)
             }
-            .padding(.vertical, 2)
         }
-        .buttonStyle(.plain)
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) { remove(line) } label: { Label("Remove", systemImage: "trash") }
+        }
+    }
+
+    /// The original lines that got merged into this row. Hand-added items name the
+    /// person instead of a recipe — on a shared list that's the useful half.
+    private func breakdown(_ line: Line) -> [LineSource] {
+        line.items.map { item in
+            LineSource(id: item.id,
+                       label: item.sourceRecipeTitle.isEmpty
+                            ? "added by \(memberName(item.addedByUserId))"
+                            : item.sourceRecipeTitle,
+                       text: item.text)
         }
     }
 
