@@ -507,8 +507,12 @@ class SonarEngine {
     }
 
     // Detects comma/and separated action items after trigger phrases like "need to", "have to", etc.
-    private func detectChecklistItems(text: String) -> [String] {
-        let lower = text.lowercased()
+    // Internal rather than private so ChecklistParsingTests can reach it.
+    func detectChecklistItems(text rawText: String) -> [String] {
+        // iOS types curly apostrophes ("don’t", "she’s"); the phrase lists use straight ones.
+        let text = rawText
+            .replacingOccurrences(of: "\u{2019}", with: "'")
+            .replacingOccurrences(of: "\u{2018}", with: "'")
 
         // Action verbs that signal a task item
         let actionVerbs = ["pick up", "pickup", "buy", "get", "grab", "prep", "prepare", "clean",
@@ -560,10 +564,11 @@ class SonarEngine {
             "for tomorrow", "for today", "this week i need to",
         ]
 
-        // Find the position after the trigger phrase
+        // Find the position after the trigger phrase. Whole words only — "must" inside
+        // "mustard" or "should" inside "shoulder" isn't a trigger.
         var listStart: String.Index? = nil
         for phrase in triggerPhrases {
-            if let range = lower.range(of: phrase) {
+            if let range = Self.wholeWordRange(of: phrase, in: text) {
                 listStart = range.upperBound
                 break
             }
@@ -572,89 +577,206 @@ class SonarEngine {
         guard let start = listStart else { return [] }
 
         let remainder = String(text[start...]).trimmingCharacters(in: .whitespaces)
-
-        // Split on comma, "and", semicolon
-        var rawItems = remainder
-            .components(separatedBy: ",")
-            .flatMap { $0.components(separatedBy: " and ") }
-            .flatMap { $0.components(separatedBy: ";") }
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        // Second pass: split on embedded action verbs for voice input (no commas spoken)
         let sortedVerbs = actionVerbs.sorted { $0.count > $1.count }
-        rawItems = rawItems.flatMap { item -> [String] in
-            var results: [String] = []
-            var current = item
-            while current.count > 1 {
-                let searchFrom = current.index(after: current.startIndex)
-                let searchRange = searchFrom..<current.endIndex
-                var splitFound = false
-                for verb in sortedVerbs {
-                    let pattern = " \(verb) "
-                    if let range = current.range(of: pattern, options: .caseInsensitive, range: searchRange) {
-                        let before = String(current[current.startIndex..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
-                        let afterSpace = current.index(after: range.lowerBound)
-                        current = String(current[afterSpace...]).trimmingCharacters(in: .whitespaces)
-                        if !before.isEmpty { results.append(before) }
-                        splitFound = true
-                        break
-                    }
-                }
-                if !splitFound { break }
-            }
-            if !current.isEmpty { results.append(current) }
-            return results
+
+        // A second "I have to" / "remind me to" partway through starts the next item.
+        let list = Self.markLaterTriggers(in: remainder)
+
+        // If you marked where items end — commas, new lines, "and" — that's taken as
+        // given. Only run-together speech has to be split by guessing.
+        let items = Self.isDelimited(list)
+            ? Self.delimitedItems(list, verbs: sortedVerbs)
+            : Self.spokenItems(list, verbs: sortedVerbs)
+
+        // Need at least 2 items to auto-create a checklist
+        guard items.count >= 2 else { return [] }
+        return items.map { item in item.prefix(1).uppercased() + item.dropFirst() }
+    }
+
+    // MARK: - Checklist helpers
+
+    /// A list you separated yourself. Every piece is kept, whatever verb it starts with
+    /// — "vacuum basement", "go grocery shopping", "eggs" — because you already said
+    /// where each item ends. Only asides and bare timing are dropped.
+    private static func delimitedItems(_ list: String, verbs: [String]) -> [String] {
+        // "and" before a new task separates; "and" inside one ("milk and eggs",
+        // "mac and cheese") is part of that item.
+        let verbPattern = verbs.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
+        let split = list.replacingOccurrences(
+            of: #"\s+and\s+(?:then\s+|also\s+)?(?=(?:"# + verbPattern + #")(?![A-Za-z]))"#,
+            with: ",",
+            options: [.regularExpression, .caseInsensitive])
+
+        return split
+            .components(separatedBy: CharacterSet(charactersIn: ",;\n"))
+            .compactMap { listItem(from: $0, verbs: verbs) }
+    }
+
+    /// One piece of a list you separated yourself, tidied — or nil when it isn't a task.
+    private static func listItem(from raw: String, verbs: [String]) -> String? {
+        // "buy: milk" → "buy milk", while a time like "4:30" keeps its colon
+        let decoloned = raw.replacingOccurrences(of: #":(?=\s|$)"#, with: " ", options: .regularExpression)
+        var words = decoloned.split(whereSeparator: \.isWhitespace).map(String.init)
+
+        // End-of-sentence punctuation isn't part of the task: "call mom."
+        if let last = words.last {
+            let trimmed = last.trimmingCharacters(in: CharacterSet(charactersIn: ".!?"))
+            if trimmed.isEmpty { words.removeLast() } else { words[words.count - 1] = trimmed }
         }
 
-        // For items that don't start with a verb (e.g. "tomorrow at 4pm call the vet"),
+        // Joining words at either end aren't either: "and clean", "then mop", "call mom and"
+        while let first = words.first, connectors.contains(first.lowercased()) { words.removeFirst() }
+        while let last = words.last, connectors.contains(last.lowercased()) { words.removeLast() }
+        guard !words.isEmpty else { return nil }
+
+        let item = words.joined(separator: " ")
+
+        // Starts with a verb we know — a task, as written.
+        if startsWithVerb(item, verbs) { return capped(item) }
+
+        // A known verb after a lead-in that's only timing or throat-clearing —
+        // "tomorrow at 4pm call the vet", "I'll pick up dinner" — keep from the verb.
+        if let v = words.indices.first(where: { startsWithVerb(words[$0...].joined(separator: " "), verbs) }),
+           v > 0, words[..<v].allSatisfy(isLeadIn) {
+            return capped(words[v...].joined(separator: " "))
+        }
+
+        // A remark, not a task: "she's been sick", "which is due Friday".
+        if clauseOpeners.contains(words[0].lowercased()) { return nil }
+
+        // Nothing but timing: "tomorrow morning", "at 4pm".
+        if words.allSatisfy(isLeadIn) { return nil }
+
+        // Everything else stays as you wrote it: "vacuum basement", "eggs", "renew my passport".
+        return capped(item)
+    }
+
+    /// Run-together speech — "pick up milk grab eggs call mom" — where nothing marks the
+    /// end of one task and the start of the next. Verbs are the only clue, so only pieces
+    /// that start with a known verb count.
+    private static func spokenItems(_ list: String, verbs sortedVerbs: [String]) -> [String] {
+        let item = list.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !item.isEmpty else { return [] }
+
+        // Split on embedded action verbs
+        var pieces: [String] = []
+        var current = item
+        while current.count > 1 {
+            let searchFrom = current.index(after: current.startIndex)
+            let searchRange = searchFrom..<current.endIndex
+            var splitFound = false
+            for verb in sortedVerbs {
+                let pattern = " \(verb) "
+                if let range = current.range(of: pattern, options: .caseInsensitive, range: searchRange) {
+                    let before = String(current[current.startIndex..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    let afterSpace = current.index(after: range.lowerBound)
+                    current = String(current[afterSpace...]).trimmingCharacters(in: .whitespaces)
+                    if !before.isEmpty { pieces.append(before) }
+                    splitFound = true
+                    break
+                }
+            }
+            if !splitFound { break }
+        }
+        if !current.isEmpty { pieces.append(current) }
+
+        // For pieces that don't start with a verb (e.g. "tomorrow at 4pm call the vet"),
         // extract the verb-starting portion so the task isn't lost to a date prefix.
-        let rescued = rawItems.flatMap { item -> [String] in
-            let itemLower = item.lowercased()
-            if actionVerbs.contains(where: { itemLower.hasPrefix($0) }) {
-                return [item]
+        let rescued = pieces.flatMap { piece -> [String] in
+            let pieceLower = piece.lowercased()
+            if sortedVerbs.contains(where: { pieceLower.hasPrefix($0) }) {
+                return [piece]
             }
             for verb in sortedVerbs {
-                if let range = item.range(of: " \(verb)", options: .caseInsensitive) {
-                    let extracted = String(item[item.index(after: range.lowerBound)...]).trimmingCharacters(in: .whitespaces)
+                if let range = piece.range(of: " \(verb)", options: .caseInsensitive) {
+                    let extracted = String(piece[piece.index(after: range.lowerBound)...]).trimmingCharacters(in: .whitespaces)
                     if !extracted.isEmpty { return [extracted] }
                 }
             }
             return []
         }
 
-        // Only keep items that start with an action verb and are short enough to be a clear task
-        let filtered = rescued.filter { item in
-            let itemLower = item.lowercased()
-            let startsWithVerb = actionVerbs.contains { itemLower.hasPrefix($0) }
-            let isShortTask = item.split(separator: " ").count <= 8
+        // Only keep pieces that start with an action verb and are short enough to be a clear task
+        return rescued.filter { piece in
+            let pieceLower = piece.lowercased()
+            let startsWithVerb = sortedVerbs.contains { pieceLower.hasPrefix($0) }
+            let isShortTask = piece.split(separator: " ").count <= 8
             return startsWithVerb && isShortTask
         }
-
-        // Need at least 2 items to auto-create a checklist
-        if filtered.count >= 2 {
-            return filtered.map { item in item.prefix(1).uppercased() + item.dropFirst() }
-        }
-
-        // Fallback: colon-separated list style ("to buy: milk, eggs, bread")
-        let colonPatterns = [
-            #"(?:to buy|to get|to watch|to read|to do|grocery|shopping list|need|want)[\s:,]+(.+)$"#
-        ]
-        for pattern in colonPatterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                  let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-                  let range = Range(match.range(at: 1), in: text) else { continue }
-            let listText = String(text[range])
-            let colonItems = listText.components(separatedBy: ",")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            if colonItems.count >= 2 {
-                return colonItems.map { item in item.prefix(1).uppercased() + item.dropFirst() }
-            }
-        }
-
-        return []
     }
+
+    /// Whether you marked where items end: a comma, semicolon, new line, or "and".
+    private static func isDelimited(_ list: String) -> Bool {
+        list.contains(",") || list.contains(";") || list.contains("\n")
+            || list.range(of: #"\band\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// Obligation phrases that, partway through a list, begin the next item:
+    /// "call mom and I have to pay rent". Longest first, so "i need to" wins over "need to".
+    private static let laterTriggers = [
+        "i also need to", "we also need to", "also need to", "i also have to", "also have to",
+        "i need to", "we need to", "i have to", "we have to",
+        "i've got to", "ive got to", "i've gotta", "ive gotta", "i gotta", "we gotta", "i got to",
+        "need to", "have to", "gotta",
+        "remind me to", "don't forget to", "dont forget to", "remember to",
+    ]
+
+    private static func markLaterTriggers(in list: String) -> String {
+        let alternatives = laterTriggers.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
+        return list.replacingOccurrences(
+            of: "(?<![A-Za-z'])(?:" + alternatives + ")(?![A-Za-z])",
+            with: ",",
+            options: [.regularExpression, .caseInsensitive])
+    }
+
+    /// Where a phrase appears as whole words, ignoring case.
+    private static func wholeWordRange(of phrase: String, in text: String) -> Range<String.Index>? {
+        var pattern = "(?<![A-Za-z])" + NSRegularExpression.escapedPattern(for: phrase)
+        if phrase.last?.isLetter == true { pattern += "(?![A-Za-z])" }
+        return text.range(of: pattern, options: [.regularExpression, .caseInsensitive])
+    }
+
+    /// Starts with one of the known verbs as a whole word — "cook dinner", not "cooking class".
+    private static func startsWithVerb(_ item: String, _ verbs: [String]) -> Bool {
+        let lower = item.lowercased()
+        return verbs.contains { verb in
+            guard lower.hasPrefix(verb) else { return false }
+            return lower.dropFirst(verb.count).first.map { !$0.isLetter } ?? true
+        }
+    }
+
+    /// A piece long enough to be prose rather than a task isn't kept.
+    private static func capped(_ item: String) -> String? {
+        item.split(separator: " ").count <= 12 ? item : nil
+    }
+
+    /// Words that only join items together.
+    private static let connectors: Set<String> = [
+        "and", "or", "then", "also", "plus", "please", "too", "afterwards", "finally",
+    ]
+
+    /// Timing and throat-clearing that can come before the actual task.
+    private static let leadInWords: Set<String> = [
+        "and", "or", "then", "also", "plus", "please", "first", "next", "finally",
+        "today", "tomorrow", "tonight", "morning", "afternoon", "evening", "night",
+        "later", "soon", "asap", "now", "this", "weekend", "week",
+        "at", "on", "by", "in", "around", "before", "after", "noon", "am", "pm",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "i", "i'll", "ill", "i'm", "im", "we", "we'll", "you", "gonna", "going", "to", "go", "will", "quickly",
+    ]
+
+    private static func isLeadIn(_ word: String) -> Bool {
+        let w = word.lowercased().trimmingCharacters(in: .punctuationCharacters)
+        return leadInWords.contains(w) || w.contains(where: \.isNumber)
+    }
+
+    /// Words that open a remark rather than a task: "she's been sick", "which is due Friday".
+    private static let clauseOpeners: Set<String> = [
+        "i", "i'm", "im", "i'll", "i've", "ive", "i'd", "you", "you're", "he", "he's", "she", "she's",
+        "it", "it's", "its", "we", "we're", "they", "they're", "there", "there's", "that's",
+        "which", "who", "whose", "because", "cause", "since", "though", "although", "but", "so",
+        "if", "when", "while", "unless", "until",
+    ]
     
     // MARK: - Named Entity Recognition
     
