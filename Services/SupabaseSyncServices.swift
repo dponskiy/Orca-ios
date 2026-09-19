@@ -68,6 +68,14 @@ class SupabaseSyncService {
             try await syncPings(userId: userId, context: context)
             try await syncPersons(userId: userId, context: context)
             try await syncGiftItems(userId: userId, context: context)
+            // Wishlist items never synced before this version, so anyone who
+            // reinstalled lost them. Their memories survived — rebuild from those
+            // before uploading, so the recovered items go up in the same pass.
+            try restoreWishlistFromMemories(context: context)
+            // Isolated on purpose — wishlist_items is newer than the rest of the
+            // schema, and a project without it yet shouldn't lose everything below.
+            do { try await syncWishlistItems(userId: userId, context: context) }
+            catch { print("⚠️ Wishlist sync skipped: \(error)") }
             try await syncWatchlistItems(userId: userId, context: context)
             try await syncTCGCards(userId: userId, context: context)
             try await syncSmiskiItems(userId: userId, context: context)
@@ -612,6 +620,8 @@ class SupabaseSyncService {
 
         let rows = localItems.reduce(into: [GiftItemRow]()) { result, item in
             guard !result.contains(where: { $0.id == item.id.uuidString }) else { return }
+            // Wishlist items go to their own table — gift_items.person_id is a
+            // foreign key into persons, and the wishlist belongs to nobody.
             guard item.personId != GiftItem.wishlistPersonId else { return }
             result.append(GiftItemRow(
                 id: item.id.uuidString,
@@ -659,6 +669,114 @@ class SupabaseSyncService {
             context.insert(item)
         }
         print("✅ Gift items synced")
+    }
+
+    // MARK: - Recover Wishlist From Memories
+    //
+    // Adding a wishlist item always wrote a companion memory ("Wishlist: <name>")
+    // and pushed it straight to the cloud, while the GiftItem itself stayed local.
+    // So a reinstall left the memories and dropped the list. The names are still in
+    // those memories, which is enough to put the list back.
+    //
+    // Purchased state, price and links can't be recovered — the memory never had them.
+    //
+    // Deleting a wishlist item leaves its memory behind, so this is deliberately
+    // narrow: it runs once, and only when the wishlist is completely empty. Without
+    // both guards it would resurrect items the user had deliberately cleared out,
+    // every time they emptied the list.
+
+    private static let wishlistRecoveryKey = "wishlistRecoveredFromMemories"
+
+    private func restoreWishlistFromMemories(context: ModelContext) throws {
+        guard !UserDefaults.standard.bool(forKey: Self.wishlistRecoveryKey) else { return }
+
+        let existing = try context.fetch(FetchDescriptor<GiftItem>())
+            .filter { $0.personId == GiftItem.wishlistPersonId }
+        guard existing.isEmpty else {
+            // Nothing was lost, so there's nothing to recover — and never will be.
+            UserDefaults.standard.set(true, forKey: Self.wishlistRecoveryKey)
+            return
+        }
+
+        let memories = try context.fetch(FetchDescriptor<Memory>())
+            .filter { $0.text.hasPrefix("Wishlist: ") }
+        guard !memories.isEmpty else { return }
+
+        var knownNames = Set<String>()
+        var restored = 0
+        for memory in memories {
+            let name = String(memory.text.dropFirst("Wishlist: ".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, !knownNames.contains(name.lowercased()) else { continue }
+
+            let item = GiftItem(personId: GiftItem.wishlistPersonId, name: name)
+            item.linkedMemoryId = memory.id
+            item.createdAt = memory.createdAt
+            context.insert(item)
+            knownNames.insert(name.lowercased())
+            restored += 1
+        }
+        UserDefaults.standard.set(true, forKey: Self.wishlistRecoveryKey)
+        if restored > 0 { print("✅ Recovered \(restored) wishlist item(s) from memories") }
+    }
+
+    // MARK: - Sync Wishlist
+    //
+    // Your own wishlist can't ride along in gift_items: person_id is a non-null
+    // foreign key into persons, and these items belong to nobody. Locally they stay
+    // GiftItems under a sentinel person, so only the wire format differs.
+
+    private func syncWishlistItems(userId: UUID, context: ModelContext) async throws {
+        let localItems = try context.fetch(FetchDescriptor<GiftItem>())
+            .filter { $0.personId == GiftItem.wishlistPersonId }
+
+        let rows = localItems.reduce(into: [WishlistItemRow]()) { result, item in
+            guard !result.contains(where: { $0.id == item.id.uuidString }) else { return }
+            result.append(WishlistItemRow(
+                id: item.id.uuidString,
+                user_id: userId.uuidString,
+                name: item.name,
+                price: item.price,
+                status: item.statusRaw,
+                occasion: item.occasion,
+                year: item.year,
+                linked_memory_id: item.linkedMemoryId?.uuidString,
+                url: item.url,
+                created_at: ISO8601DateFormatter().string(from: item.createdAt)
+            ))
+        }
+
+        if !rows.isEmpty {
+            try await supabase.from("wishlist_items").upsert(rows, onConflict: "id").execute()
+        }
+
+        let remoteItems: [WishlistItemRow] = try await supabase
+            .from("wishlist_items").select().eq("user_id", value: userId.uuidString).execute().value
+
+        let localIds = Set(localItems.map { $0.id.uuidString.lowercased() })
+        for remote in remoteItems {
+            guard !localIds.contains(remote.id.lowercased()),
+                  let remoteId = UUID(uuidString: remote.id) else { continue }
+
+            let alreadyExists = localItems.contains {
+                $0.name.lowercased() == remote.name.lowercased() && $0.occasion == remote.occasion
+            }
+            guard !alreadyExists else { continue }
+
+            let item = GiftItem(personId: GiftItem.wishlistPersonId,
+                                name: remote.name, occasion: remote.occasion)
+            item.id = remoteId
+            item.price = remote.price
+            item.statusRaw = remote.status
+            item.year = remote.year
+            item.linkedMemoryId = remote.linked_memory_id.flatMap { UUID(uuidString: $0) }
+            item.url = remote.url
+            if let createdStr = remote.created_at {
+                item.createdAt = ISO8601DateFormatter().date(from: createdStr) ?? Date()
+            }
+            context.insert(item)
+        }
+        print("✅ Wishlist synced")
     }
 
     // MARK: - Sync Watchlist Items
@@ -891,10 +1009,17 @@ class SupabaseSyncService {
 
     // MARK: - Delete Gift Item
 
+    // The caller doesn't know which table the item came from, and the id is unique
+    // either way, so clear it from both rather than guessing.
     func deleteGiftItem(id: UUID) async {
         do {
             try await supabase
                 .from("gift_items")
+                .delete()
+                .eq("id", value: id.uuidString)
+                .execute()
+            try? await supabase
+                .from("wishlist_items")
                 .delete()
                 .eq("id", value: id.uuidString)
                 .execute()
@@ -1305,6 +1430,19 @@ struct PersonRow: Codable {
     let custom_occasions: [String]?
     let created_at: String?
     let updated_at: String?
+}
+
+struct WishlistItemRow: Codable {
+    let id: String
+    let user_id: String
+    let name: String
+    let price: Double?
+    let status: String
+    let occasion: String
+    let year: Int
+    let linked_memory_id: String?
+    let url: String?
+    let created_at: String?
 }
 
 struct GiftItemRow: Codable {

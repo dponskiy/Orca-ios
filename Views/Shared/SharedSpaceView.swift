@@ -14,13 +14,28 @@ struct SharedSpaceView: View {
     @Query private var allEvents: [SharedEvent]
     @Query private var allItems: [SharedChecklistItem]
 
-    @State private var showAddEvent = false
-    @State private var showMembers = false
     @Query private var allMembers: [SharedSpaceMember]
     @Query private var allGroceryItems: [SharedGroceryItem]
-    @State private var selectedEvent: SharedEvent? = nil
     @State private var isRefreshing = false
     @State private var pastExpanded = false
+
+    // One sheet, not three. Sibling presentation modifiers on the same view
+    // destabilise each other — handing off from "add event" to "open the event we
+    // just made" would collapse the whole stack back to the dashboard instead.
+    private enum SpaceSheet: Identifiable {
+        case addEvent
+        case event(SharedEvent)
+        case members
+
+        var id: String {
+            switch self {
+            case .addEvent:     return "add"
+            case .event(let e): return e.id.uuidString
+            case .members:      return "members"
+            }
+        }
+    }
+    @State private var sheet: SpaceSheet? = nil
 
     private var events: [SharedEvent] {
         allEvents.filter { $0.spaceId == space.id }
@@ -137,13 +152,13 @@ struct SharedSpaceView: View {
                         }
                     }
                     Button {
-                        showMembers = true
+                        sheet = .members
                     } label: {
                         Image(systemName: "person.2")
                             .foregroundColor(.oceanTeal)
                     }
                     Button {
-                        showAddEvent = true
+                        sheet = .addEvent
                     } label: {
                         Image(systemName: "plus")
                             .foregroundColor(.oceanTeal)
@@ -151,16 +166,19 @@ struct SharedSpaceView: View {
                 }
             }
         }
-        .sheet(isPresented: $showAddEvent) {
-            AddSharedEventView(space: space) { newEvent in
-                selectedEvent = newEvent
+        .sheet(item: $sheet) { which in
+            switch which {
+            case .addEvent:
+                // Straight into the new event, so a checklist can be added without
+                // hunting for it back on the list.
+                AddSharedEventView(space: space) { newEvent in
+                    sheet = .event(newEvent)
+                }
+            case .event(let event):
+                SharedEventDetailView(event: event, space: space)
+            case .members:
+                SharedSpaceMembersView(space: space)
             }
-        }
-        .sheet(item: $selectedEvent) { event in
-            SharedEventDetailView(event: event, space: space)
-        }
-        .sheet(isPresented: $showMembers) {
-            SharedSpaceMembersView(space: space)
         }
     }
 
@@ -214,7 +232,7 @@ struct SharedSpaceView: View {
     }
 
     private var addNameBanner: some View {
-        Button { showMembers = true } label: {
+        Button { sheet = .members } label: {
             HStack(spacing: 12) {
                 Image(systemName: "person.crop.circle.badge.questionmark")
                     .font(.system(size: 15)).foregroundColor(.oceanTeal)
@@ -289,7 +307,7 @@ struct SharedSpaceView: View {
         let completedCount = items.filter { $0.isCompleted }.count
 
         return Button {
-            selectedEvent = event
+            sheet = .event(event)
         } label: {
             HStack(spacing: 14) {
                 // Date badge or card icon
@@ -529,21 +547,17 @@ struct AddSharedEventView: View {
                     userId: userId
                 )
                 // Shared space events — add if sync enabled, or trigger one-time prompt
-                if hasDate {
-                    if CalendarService.shared.syncEnabled && CalendarService.shared.isAuthorized {
-                        CalendarService.shared.addEvent(
-                            title: event.title,
-                            startDate: finalStartDate,
-                            endDate: (hasDate && hasEndDate) ? endDate : nil,
-                            isAllDay: !hasTime
-                        )
-                    } else if !CalendarService.shared.promptShown {
-                        NotificationCenter.default.post(
-                            name: .calendarSyncCheck,
-                            object: nil,
-                            userInfo: ["sharedEventTitle": event.title, "sharedEventDate": finalStartDate]
-                        )
-                    }
+                // Deliberately no first-run calendar prompt here. It presents an alert
+                // from ContentView, which dismisses this whole sheet stack to show it —
+                // and since a shared event isn't a Memory, opting in wouldn't have added
+                // this one anyway. The capture flows still raise it from the root.
+                if hasDate, CalendarService.shared.syncEnabled, CalendarService.shared.isAuthorized {
+                    CalendarService.shared.addEvent(
+                        title: event.title,
+                        startDate: finalStartDate,
+                        endDate: (hasDate && hasEndDate) ? endDate : nil,
+                        isAllDay: !hasTime
+                    )
                 }
                 await MainActor.run {
                     dismiss()

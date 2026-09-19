@@ -450,9 +450,11 @@ struct GiftListView: View {
         let echoId = echos.first { $0.name == "Gifts" }?.id ?? echos.first?.id ?? UUID()
         let memText = isWishlist ? "Wishlist: \(trimmed)" : "Gift for \(person?.name ?? ""): \(trimmed)"
         let memory = Memory(text: memText, echoId: echoId, captureType: .typed)
-        // A gift for someone else is something to go buy — a task. Your own wishlist
-        // is a record of what you'd like to receive, so it shouldn't join your tasks.
-        memory.isActionable = !isWishlist
+        // Gift ideas are notes, not chores. Most are "maybe, someday" rather than
+        // something to go do, and a gift list that quietly fills up the task list is
+        // worse than one that doesn't. The Task toggle in edit is there for the ones
+        // that really are errands.
+        memory.isActionable = false
         gift.linkedMemoryId = memory.id
         modelContext.insert(memory)
 

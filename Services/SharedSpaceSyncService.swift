@@ -156,6 +156,9 @@ class SharedSpaceSyncService {
                 local.status = SharedSpace.Status(rawValue: row.status) ?? .pending
                 local.invitedUserId = row.invited_user_id?.uuidString
                 if let remoteName = row.space_name, !remoteName.isEmpty { local.spaceName = remoteName }
+                // Anyone in the household can pass the link on, so the token has to
+                // land on every member's device — not just the one that created it.
+                if let token = row.invite_token { local.inviteToken = token }
                 local.updatedAt = row.updated_at
             } else {
                 let space = SharedSpace(
@@ -165,6 +168,7 @@ class SharedSpaceSyncService {
                 space.id = row.id
                 space.invitedUserId = row.invited_user_id?.uuidString
                 space.status = SharedSpace.Status(rawValue: row.status) ?? .pending
+                space.inviteToken = row.invite_token
                 space.createdAt = row.created_at
                 space.updatedAt = row.updated_at
                 context.insert(space)
@@ -198,12 +202,14 @@ class SharedSpaceSyncService {
                     space.id = row.id
                     space.invitedUserId = userId.uuidString
                     space.status = .active
+                    space.inviteToken = row.invite_token
                     space.createdAt = row.created_at
                     space.updatedAt = Date()
                     context.insert(space)
                 } else if let local = existingById[row.id] {
                     local.invitedUserId = userId.uuidString
                     local.status = .active
+                    if let token = row.invite_token { local.inviteToken = token }
                     local.updatedAt = Date()
                 }
             }
@@ -331,28 +337,42 @@ class SharedSpaceSyncService {
         let memories = try context.fetch(FetchDescriptor<Memory>())
         let myRecipes = memories.filter { cookingEchoIds.contains($0.echoId) && $0.hasChecklist }
 
-        var rows: [[String: AnyJSON]] = []
-        for space in mySpaceIds {
-            for memory in myRecipes {
-                let ingredients = recipeIngredients(for: memory, context: context)
-                guard !ingredients.isEmpty else { continue }
-                let title = memory.text.components(separatedBy: "\n").first ?? memory.text
-                rows.append([
+        // Work out each recipe once, not once per household.
+        let prepared: [(memoryId: UUID, title: String, ingredients: [String],
+                        instructions: String, updatedAt: Date)] = myRecipes.compactMap { memory in
+            let ingredients = recipeIngredients(for: memory, context: context)
+            guard !ingredients.isEmpty else { return nil }
+            return (memory.id,
+                    memory.text.components(separatedBy: "\n").first ?? memory.text,
+                    ingredients,
+                    memory.text,
+                    memory.updatedAt)
+        }
+
+        // One upsert per household rather than one for all of them. If the server
+        // won't accept a space — its membership out of step with what this device
+        // believes — Postgres would reject the entire statement, and throwing here
+        // would skip the grocery sync that runs after us. Skip that space instead.
+        for space in mySpaceIds where !prepared.isEmpty {
+            let rows: [[String: AnyJSON]] = prepared.map { recipe in
+                [
                     "space_id": .string(space.uuidString),
                     "owner_user_id": .string(userId.uuidString),
-                    "source_memory_id": .string(memory.id.uuidString),
-                    "title": .string(title),
-                    "ingredients": .array(ingredients.map { .string($0) }),
-                    "instructions": .string(memory.text),
-                    "updated_at": .string(ISO8601DateFormatter().string(from: memory.updatedAt))
-                ])
+                    "source_memory_id": .string(recipe.memoryId.uuidString),
+                    "title": .string(recipe.title),
+                    "ingredients": .array(recipe.ingredients.map { .string($0) }),
+                    "instructions": .string(recipe.instructions),
+                    "updated_at": .string(ISO8601DateFormatter().string(from: recipe.updatedAt))
+                ]
             }
-        }
-        if !rows.isEmpty {
-            try await supabase
-                .from("shared_recipes")
-                .upsert(rows, onConflict: "space_id,source_memory_id")
-                .execute()
+            do {
+                try await supabase
+                    .from("shared_recipes")
+                    .upsert(rows, onConflict: "space_id,source_memory_id")
+                    .execute()
+            } catch {
+                print("⚠️ Couldn't publish recipes to space \(space.uuidString): \(error)")
+            }
         }
 
         // Pull everyone's (RLS limits this to households I'm in)
@@ -702,15 +722,28 @@ class SharedSpaceSyncService {
 
         // The creator is a member too — otherwise they'd be the one nameless
         // person in their own household.
-        try await supabase
-            .from("shared_space_members")
-            .insert([
-                "space_id": row.id.uuidString,
-                "user_id": userId.uuidString,
-                "display_name": ownerName,
-                "role": "owner"
-            ])
-            .execute()
+        do {
+            try await supabase
+                .from("shared_space_members")
+                .insert([
+                    "space_id": row.id.uuidString,
+                    "user_id": userId.uuidString,
+                    "display_name": ownerName,
+                    "role": "owner"
+                ])
+                .execute()
+        } catch {
+            // Never leave a space with no members behind: is_space_member() would be
+            // false for everyone including the creator, so nothing could be written
+            // to it and nobody could read it. Undo the space and report the failure.
+            try? await supabase
+                .from("shared_spaces")
+                .delete()
+                .eq("id", value: row.id.uuidString)
+                .execute()
+            context.delete(space)
+            throw error
+        }
         let owner = SharedSpaceMember(spaceId: row.id, userId: userId.uuidString,
                                       displayName: ownerName, role: "owner")
         context.insert(owner)

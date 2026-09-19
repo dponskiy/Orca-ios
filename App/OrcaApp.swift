@@ -175,7 +175,6 @@ struct OrcaApp: App {
 
                     if newPhase == .active {
                         NotificationService.shared.checkAndScheduleFollowUps(pings: pings, memories: memories)
-                        await FinanceService.shared.checkPriceAlerts(memories: memories)
                         // Refresh badge when app comes to foreground
                         NotificationService.shared.updateBadge(memories: memories, pings: pings)
                         // Reschedule morning briefing with fresh counts every foreground

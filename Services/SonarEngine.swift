@@ -904,11 +904,8 @@ class SonarEngine {
             } else {
                 scores.append(("Workout", 5.0, 22))
             }
-            if let fidx = scores.firstIndex(where: { $0.name == "Finance" }) {
-                scores[fidx].score = max(0, scores[fidx].score - 3.0)
-            }
         }
-        
+
         let cardioPattern = #"\d+(?:\.\d+)?\s*(?:miles?|km|kilometers?|meters?|k)\b.{0,30}\d+\s*(?:minutes?|mins?|hours?|hr)"#
         if normalizedText.range(of: cardioPattern, options: .regularExpression) != nil {
             if let idx = scores.firstIndex(where: { $0.name == "Workout" }) {
@@ -924,15 +921,6 @@ class SonarEngine {
                 scores[idx].score += 5.0
             } else {
                 scores.append(("Workout", 5.0, 22))
-            }
-        }
-        
-        let detectedTicker = FinanceService.shared.detectTicker(in: originalText)
-        if detectedTicker != nil {
-            if let idx = scores.firstIndex(where: { $0.name == "Finance" }) {
-                scores[idx].score += 3.0
-            } else {
-                scores.append(("Finance", 3.0, 15))
             }
         }
         

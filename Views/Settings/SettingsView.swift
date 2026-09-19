@@ -223,7 +223,7 @@ struct SettingsView: View {
                                 .scaledToFit()
                                 .frame(width: 32, height: 32)
                                 .clipShape(RoundedRectangle(cornerRadius: 7))
-                            Text("Orca v3.0")
+                            Text("Orca v\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
                                 .font(.custom("DMMono-Regular", size: 12))
                                 .foregroundColor(.gray)
                             Text("\(memories.count) memories saved")

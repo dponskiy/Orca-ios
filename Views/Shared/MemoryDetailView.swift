@@ -30,7 +30,6 @@ struct MemoryDetailView: View {
 
     var echo: Echo? { echos.first { $0.id == memory.echoId } }
     var isTravelEcho: Bool { echo?.name.lowercased() == "travel" }
-    var isFinanceEcho: Bool { echo?.name.lowercased().contains("finance") == true }
     var isWorkoutEcho: Bool { echo?.name.lowercased().contains("workout") == true }
 
     private var isCooking: Bool {
@@ -124,7 +123,6 @@ struct MemoryDetailView: View {
                     }
 
                     if isTravelEcho  { TravelDetailBlock(memory: memory) }
-                    if isFinanceEcho { FinanceDetailBlock(memory: memory) }
                     if isWorkoutEcho { WorkoutDetailBlock(memory: memory) }
 
                     if isWorkoutEcho && Calendar.current.isDateInToday(memory.createdAt) {

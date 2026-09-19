@@ -276,8 +276,17 @@ struct SharedSpaceMembersView: View {
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity).padding(.vertical, 13)
-                .background(Color.oceanTeal)
+                .background(space.inviteToken == nil ? Color.oceanTeal.opacity(0.4) : Color.oceanTeal)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            // Until the token has synced down there's nothing to share. Show that,
+            // rather than letting the button look live and do nothing.
+            .disabled(space.inviteToken == nil)
+
+            if space.inviteToken == nil {
+                Text("Fetching the link… give it a moment and reopen this screen.")
+                    .font(.custom("DMSans-Regular", size: 11))
+                    .foregroundColor(.gray.opacity(0.7))
             }
 
             if iAmOwner {

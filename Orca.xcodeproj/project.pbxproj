@@ -17,13 +17,10 @@
 		69E446DDE7464699BF9CDAE0 /* SharedSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92EF8EC96EE4A21951BE9DC /* SharedSpace.swift */; };
 		6D556752137449C899E56096 /* SharedSpaceMembersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C893911D5F2490E8995577F /* SharedSpaceMembersView.swift */; };
 		867FB0F82B994B528E2B3B89 /* ThoughtTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DA8A35C3014ACB9B38725E /* ThoughtTab.swift */; };
-		8729F5282F7727C600B58E0B /* FinanceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5272F7727C000B58E0B /* FinanceService.swift */; };
-		8729F52A2F7727E000B58E0B /* FinanceEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5292F7727DB00B58E0B /* FinanceEchoView.swift */; };
 		8729F52C2F7881F600B58E0B /* WorkoutParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F52B2F7881EA00B58E0B /* WorkoutParser.swift */; };
 		8729F52E2F78826B00B58E0B /* WorkoutDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F52D2F78826900B58E0B /* WorkoutDetailBlock.swift */; };
 		8729F5302F78828500B58E0B /* WorkoutEchoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F52F2F78828400B58E0B /* WorkoutEchoView.swift */; };
 		8729F5322F78829F00B58E0B /* QuickLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5312F78829A00B58E0B /* QuickLogView.swift */; };
-		8729F5382F7882EB00B58E0B /* FinanceDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5372F7882E700B58E0B /* FinanceDetailBlock.swift */; };
 		8729F53A2F7883F500B58E0B /* TravelDetailBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F5392F7883F200B58E0B /* TravelDetailBlock.swift */; };
 		8729F53C2F789CAA00B58E0B /* WorkoutSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8729F53B2F789CA800B58E0B /* WorkoutSessionManager.swift */; };
 		872F722A2F4ED482000A4AE3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 872F72262F4ED482000A4AE3 /* Assets.xcassets */; };
@@ -173,13 +170,10 @@
 		6E9EBA5833A045DDA182CE6C /* SharedSpaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpaceView.swift; sourceTree = "<group>"; };
 		72E850EBA51B4FA389A321C6 /* WorkoutModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutModeView.swift; sourceTree = "<group>"; };
 		784F83020862420ABC203C97 /* MealDBService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MealDBService.swift; sourceTree = "<group>"; };
-		8729F5272F7727C000B58E0B /* FinanceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceService.swift; sourceTree = "<group>"; };
-		8729F5292F7727DB00B58E0B /* FinanceEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceEchoView.swift; sourceTree = "<group>"; };
 		8729F52B2F7881EA00B58E0B /* WorkoutParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutParser.swift; sourceTree = "<group>"; };
 		8729F52D2F78826900B58E0B /* WorkoutDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutDetailBlock.swift; sourceTree = "<group>"; };
 		8729F52F2F78828400B58E0B /* WorkoutEchoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutEchoView.swift; sourceTree = "<group>"; };
 		8729F5312F78829A00B58E0B /* QuickLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLogView.swift; sourceTree = "<group>"; };
-		8729F5372F7882E700B58E0B /* FinanceDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceDetailBlock.swift; sourceTree = "<group>"; };
 		8729F5392F7883F200B58E0B /* TravelDetailBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TravelDetailBlock.swift; sourceTree = "<group>"; };
 		8729F53B2F789CA800B58E0B /* WorkoutSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSessionManager.swift; sourceTree = "<group>"; };
 		872F72262F4ED482000A4AE3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -478,7 +472,6 @@
 				87BBD7A42F805A4200CB8A33 /* WeatherDetailView.swift */,
 				8729F53B2F789CA800B58E0B /* WorkoutSessionManager.swift */,
 				8729F52B2F7881EA00B58E0B /* WorkoutParser.swift */,
-				8729F5272F7727C000B58E0B /* FinanceService.swift */,
 				878C03802F737F7A0016D38A /* TravelConfirmationParser.swift */,
 				878C03782F68A8C00016D38A /* SpotLightService.swift */,
 				878C03762F6898B40016D38A /* LocationService.swift */,
@@ -606,7 +599,6 @@
 			isa = PBXGroup;
 			children = (
 				8729F5392F7883F200B58E0B /* TravelDetailBlock.swift */,
-				8729F5372F7882E700B58E0B /* FinanceDetailBlock.swift */,
 				8729F5312F78829A00B58E0B /* QuickLogView.swift */,
 				8729F52F2F78828400B58E0B /* WorkoutEchoView.swift */,
 				72E850EBA51B4FA389A321C6 /* WorkoutModeView.swift */,
@@ -618,7 +610,6 @@
 				894410E66040486FB43DCB22 /* SharedEventDetailView.swift */,
 				CB38421D0E414BE8B1B1CB3F /* InvitePartnerView.swift */,
 				8729F52D2F78826900B58E0B /* WorkoutDetailBlock.swift */,
-				8729F5292F7727DB00B58E0B /* FinanceEchoView.swift */,
 				878C037C2F6F940A0016D38A /* GroceryModeView.swift */,
 				A1B2C3D4E5F6A7B8C9D0E1F2 /* GiftQuickActionView.swift */,
 				878C037A2F6F228B0016D38A /* LocationSearchView.swift */,
@@ -905,11 +896,9 @@
 				EBEA33F619B04CD8BC00A521 /* SharedEventDetailView.swift in Sources */,
 				BF52E9249DAA48CA9B4D5F0E /* InvitePartnerView.swift in Sources */,
 				878C036F2F676FD70016D38A /* MemoryDetailView.swift in Sources */,
-				8729F5282F7727C600B58E0B /* FinanceService.swift in Sources */,
 				878C03732F67A67E0016D38A /* RecipeCaptureView.swift in Sources */,
 				872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */,
 				87CD0AFB2F57D9B100CAAB4D /* AnalyticsService.swift in Sources */,
-				8729F5382F7882EB00B58E0B /* FinanceDetailBlock.swift in Sources */,
 				878C03792F68A8D00016D38A /* SpotLightService.swift in Sources */,
 				87CD0AF62F578BC300CAAB4D /* ManageEchosView.swift in Sources */,
 				872F726D2F4FF4BC000A4AE3 /* CaptureDrawerView.swift in Sources */,
@@ -947,7 +936,6 @@
 				8729F52C2F7881F600B58E0B /* WorkoutParser.swift in Sources */,
 				872F72662F4FE723000A4AE3 /* SearchView.swift in Sources */,
 				8788DA212F96F1F7004DD77D /* DurationParser.swift in Sources */,
-				8729F52A2F7727E000B58E0B /* FinanceEchoView.swift in Sources */,
 				87CD0AE52F52992E00CAAB4D /* SupabaseManager.swift in Sources */,
 				878C037D2F6F940C0016D38A /* GroceryModeView.swift in Sources */,
 				A1B2C3D4E5F6A7B8C9D0E1F3 /* GiftQuickActionView.swift in Sources */,
@@ -1120,7 +1108,7 @@
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1160,7 +1148,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca.dev;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1186,7 +1174,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = NT9FS4SA62;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1226,7 +1214,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -1366,7 +1354,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca.dev.OrcaWidgetExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1400,7 +1388,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca.OrcaWidgetExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;

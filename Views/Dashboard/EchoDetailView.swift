@@ -83,16 +83,6 @@ struct EchoDetailView: View {
                 .listRowSeparator(.hidden)
             }
 
-            // Finance echo view
-            if echo.name.lowercased().contains("finance") && !filteredMemories.isEmpty {
-                Section {
-                    FinanceEchoView(memories: filteredMemories)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
-            }
-
             // Workout echo view
             if echo.name.lowercased().contains("workout") && !filteredMemories.isEmpty {
                 Section {
