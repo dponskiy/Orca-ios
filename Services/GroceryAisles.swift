@@ -41,7 +41,7 @@ enum GroceryAisles {
             return exact
         }
 
-        let produce = ["apple", "apples", "banana", "bananas", "orange", "oranges", "lemon", "lemons", "lime", "limes", "grape", "grapes", "strawberry", "strawberries", "blueberry", "blueberries", "raspberry", "raspberries", "blackberry", "blackberries", "cranberry", "cranberries", "gooseberry", "gooseberries", "cherry", "cherries", "berry", "berries", "mango", "mangoes", "pineapple", "peach", "peaches", "pear", "pears", "plum", "plums", "watermelon", "cantaloupe", "honeydew", "kiwi", "avocado", "avocados", "tomato", "tomatoes", "cucumber", "cucumbers", "zucchini", "squash", "pepper", "peppers", "jalapen", "jalapeño", "jalapeños", "jalapeno", "jalapenos", "poblano", "serrano", "habanero", "chile", "chiles", "onion", "onions", "shallot", "shallots", "garlic", "ginger", "carrot", "carrots", "celery", "broccoli", "cauliflower", "cabbage", "kale", "spinach", "lettuce", "arugula", "romaine", "chard", "beet", "beets", "turnip", "turnips", "parsnip", "parsnips", "potato", "potatoes", "sweet potato", "sweet potatoes", "yam", "yams", "corn", "mushroom", "mushrooms", "asparagus", "artichoke", "artichokes", "brussels", "eggplant", "leek", "leeks", "fennel", "radish", "radishes", "bok choy", "daikon", "scallion", "scallions", "green onion", "green onions", "chive", "chives", "cilantro", "parsley", "basil", "mint", "thyme", "rosemary", "sage", "dill", "oregano", "herb", "herbs", "sprout", "sprouts", "snap pea", "snap peas", "green bean", "green beans", "edamame", "plantain", "plantains", "papaya", "guava", "coconut", "fig", "figs", "date", "dates", "pomegranate", "pomegranates", "persimmon", "persimmons", "lychee", "tarragon", "watercress", "endive", "radicchio", "microgreen", "microgreens", "tofu", "tempeh", "silken tofu", "firm tofu", "extra firm tofu"]
+        let produce = ["apple", "apples", "banana", "bananas", "orange", "oranges", "lemon", "lemons", "lime", "limes", "grape", "grapes", "strawberry", "strawberries", "blueberry", "blueberries", "raspberry", "raspberries", "blackberry", "blackberries", "cranberry", "cranberries", "gooseberry", "gooseberries", "cherry", "cherries", "berry", "berries", "mango", "mangoes", "pineapple", "peach", "peaches", "pear", "pears", "plum", "plums", "watermelon", "cantaloupe", "honeydew", "kiwi", "avocado", "avocados", "tomato", "tomatoes", "cucumber", "cucumbers", "zucchini", "squash", "pepper", "peppers", "jalapen", "jalapeño", "jalapeños", "jalapeno", "jalapenos", "poblano", "serrano", "habanero", "chile", "chiles", "onion", "onions", "shallot", "shallots", "garlic", "garlic clove", "ginger", "carrot", "carrots", "celery", "broccoli", "cauliflower", "cabbage", "kale", "spinach", "lettuce", "arugula", "romaine", "chard", "beet", "beets", "turnip", "turnips", "parsnip", "parsnips", "potato", "potatoes", "sweet potato", "sweet potatoes", "yam", "yams", "corn", "mushroom", "mushrooms", "asparagus", "artichoke", "artichokes", "brussels", "eggplant", "leek", "leeks", "fennel", "radish", "radishes", "bok choy", "daikon", "scallion", "scallions", "green onion", "green onions", "chive", "chives", "cilantro", "parsley", "basil", "mint", "thyme", "rosemary", "sage", "dill", "oregano", "herb", "herbs", "sprout", "sprouts", "snap pea", "snap peas", "green bean", "green beans", "edamame", "plantain", "plantains", "papaya", "guava", "coconut", "fig", "figs", "date", "dates", "pomegranate", "pomegranates", "persimmon", "persimmons", "lychee", "tarragon", "watercress", "endive", "radicchio", "microgreen", "microgreens", "tofu", "tempeh", "silken tofu", "firm tofu", "extra firm tofu"]
         let meat = ["chicken", "beef", "pork", "lamb", "turkey", "veal", "duck", "bison", "venison", "steak", "ground beef", "ground turkey", "ground chicken", "breast", "thigh", "drumstick", "wing", "tenderloin", "loin", "rib", "pork chop", "lamb chop", "veal chop", "roast", "sausage", "bacon", "ham", "prosciutto", "pancetta", "guanciale", "chorizo", "bratwurst", "hot dog", "meatball", "meatloaf", "burger", "patty", "brisket", "chuck", "sirloin", "flank", "skirt steak", "ribeye", "filet", "short rib", "salami", "pepperoni", "kielbasa", "andouille"]
         let seafood = ["fish", "salmon", "tuna", "cod", "halibut", "tilapia", "sea bass", "mahi", "snapper", "trout", "sardine", "anchovy", "herring", "mackerel", "shrimp", "prawn", "lobster", "crab", "scallop", "clam", "mussel", "oyster", "squid", "octopus", "calamari", "seafood", "lox", "branzino", "swordfish", "catfish", "pollock", "sole", "flounder", "monkfish", "ahi"]
         let dairy = ["milk", "oat milk", "almond milk", "soy milk", "cream", "half and half", "heavy cream", "sour cream", "cream cheese", "butter", "ghee", "yogurt", "greek yogurt", "kefir", "cheese", "cheddar", "mozzarella", "parmesan", "parmigiano", "pecorino", "brie", "gouda", "gruyere", "swiss", "provolone", "feta", "ricotta", "cottage cheese", "egg", "whipped cream", "creme fraiche", "dairy", "manchego", "havarti", "colby", "monterey jack", "pepper jack", "asiago", "romano", "camembert", "gorgonzola", "burrata"]
@@ -52,11 +52,11 @@ enum GroceryAisles {
         let pasta = ["pasta", "spaghetti", "penne", "rigatoni", "fettuccine", "linguine", "tagliatelle", "farfalle", "fusilli", "rotini", "orzo", "lasagna", "macaroni", "gnocchi", "ramen noodle", "rice noodle", "udon", "soba", "vermicelli", "white rice", "brown rice", "basmati", "jasmine rice", "arborio", "wild rice", "grain rice", "sushi rice", "sticky rice", "rice pilaf", "black rice", "red rice", "quinoa", "farro", "barley", "couscous", "bulgur", "millet", "polenta", "grits", "oat", "oatmeal", "rolled oat", "steel cut", "panko", "breadcrumb", "buckwheat", "amaranth", "teff", "spelt"]
         let breakfast = ["cereal", "granola", "muesli", "instant oatmeal", "pancake mix", "waffle mix", "maple syrup", "honey", "jam", "jelly", "peanut butter", "almond butter", "nutella", "protein bar", "granola bar", "pop tart"]
         let snacks = ["chip", "crisp", "cracker", "pretzel", "popcorn", "trail mix", "jerky", "rice cake", "pita chip", "tortilla chip", "nacho", "cookie", "candy", "chocolate bar", "dark chocolate", "gummy", "fruit snack", "nut mix", "snack", "almond", "cashew", "walnut", "pecan", "pistachio", "peanut", "macadamia", "pine nut", "hazelnut", "brazil nut", "sunflower seed", "pumpkin seed", "mixed nuts", "dried mango", "dried cranberry", "raisin", "dried apricot", "prune"]
-        let beverages = ["water bottle", "sparkling water", "seltzer", "orange juice", "apple juice", "cranberry juice", "kombucha", "iced tea", "cold brew", "matcha drink", "lemonade", "soda", "energy drink", "sports drink", "coconut water", "smoothie drink", "juice box", "gatorade", "powerade", "coffee", "espresso", "coffee bean", "ground coffee", "instant coffee", "tea bag", "loose leaf tea", "green tea", "black tea", "herbal tea", "chamomile", "chai", "la croix", "pellegrino", "perrier"]
+        let beverages = ["water bottle", "sparkling water", "seltzer", "orange juice", "apple juice", "cranberry juice", "kombucha", "iced tea", "cold brew", "matcha drink", "lemonade", "soda", "energy drink", "sports drink", "coconut water", "smoothie drink", "juice box", "gatorade", "powerade", "coffee", "espresso", "coffee bean", "ground coffee", "instant coffee", "tea bag", "loose leaf tea", "green tea", "black tea", "herbal tea", "chamomile", "chai", "la croix", "pellegrino", "perrier", "fresca", "sprite", "coke", "coca cola", "coca-cola", "pepsi", "dr pepper", "dr. pepper", "mountain dew", "7up", "7-up", "fanta", "ginger ale", "ginger beer", "root beer", "tonic water"]
         let alcohol = ["beer", "wine", "red wine", "white wine", "rose", "champagne", "prosecco", "cava", "vodka", "whiskey", "bourbon", "gin", "rum", "tequila", "mezcal", "sake", "hard cider", "hard seltzer", "white claw", "truly", "spirits", "six pack", "ipa", "lager", "stout", "porter"]
         let condiments = ["ketchup", "mustard", "mayo", "mayonnaise", "hot sauce", "sriracha", "tabasco", "soy sauce", "tamari", "worcestershire", "fish sauce", "oyster sauce", "hoisin", "teriyaki", "salad dressing", "vinaigrette", "ranch", "caesar dressing", "balsamic glaze", "bbq sauce", "buffalo sauce", "salsa", "pesto", "tahini", "miso", "harissa", "gochujang", "kochujang", "chili paste", "chili sauce", "steak sauce", "horseradish", "relish", "aioli", "coconut aminos", "ponzu", "sambal", "kimchi", "ssamjang", "doenjang", "fermented bean", "bean paste", "doubanjiang", "XO sauce", "black bean sauce", "hoisin sauce", "plum sauce", "sweet soy", "ketjap manis"]
         let oils = ["olive oil", "extra virgin", "vegetable oil", "canola oil", "coconut oil", "avocado oil", "sesame oil", "peanut oil", "grape seed oil", "sunflower oil", "vinegar", "balsamic", "apple cider vinegar", "rice vinegar", "white vinegar", "red wine vinegar", "sherry vinegar", "truffle oil"]
-        let baking = ["sugar", "brown sugar", "powdered sugar", "baking powder", "baking soda", "yeast", "vanilla", "vanilla extract", "cocoa", "cocoa powder", "chocolate chip", "salt", "black pepper", "cumin", "paprika", "turmeric", "cinnamon", "nutmeg", "cardamom", "coriander", "cayenne", "red pepper flake", "chili powder", "curry powder", "garam masala", "italian seasoning", "bay leaf", "clove", "allspice", "five spice", "five-spice", "garam masala", "herbes de provence", "za'atar", "ras el hanout", "everything bagel seasoning", "italian seasoning", "poultry seasoning", "pumpkin pie spice", "old bay", "star anise", "fennel seed", "poppy seed", "sesame seed", "sesame seeds", "toasted sesame", "flax seed", "flaxseed", "chia seed", "chia seeds", "hemp seed", "hemp seeds", "cornstarch", "arrowroot", "gelatin", "cream of tartar", "shortening", "lard", "cooking spray", "saffron", "sumac"]
+        let baking = ["sugar", "brown sugar", "powdered sugar", "baking powder", "baking soda", "yeast", "vanilla", "vanilla extract", "cocoa", "cocoa powder", "chocolate chip", "salt", "black pepper", "cumin", "paprika", "turmeric", "cinnamon", "ground ginger", "nutmeg", "cardamom", "coriander", "cayenne", "red pepper flake", "chili powder", "curry powder", "garam masala", "italian seasoning", "bay leaf", "clove", "allspice", "five spice", "five-spice", "garam masala", "herbes de provence", "za'atar", "ras el hanout", "everything bagel seasoning", "italian seasoning", "poultry seasoning", "pumpkin pie spice", "old bay", "star anise", "fennel seed", "poppy seed", "sesame seed", "sesame seeds", "toasted sesame", "flax seed", "flaxseed", "chia seed", "chia seeds", "hemp seed", "hemp seeds", "cornstarch", "arrowroot", "gelatin", "cream of tartar", "shortening", "lard", "cooking spray", "saffron", "sumac"]
         let supplements = ["vitamin", "supplement", "protein powder", "whey protein", "collagen", "probiotic", "omega", "fish oil", "multivitamin", "magnesium", "zinc", "iron supplement", "b12", "vitamin d", "melatonin", "creatine", "bcaa", "pre workout", "electrolyte", "ashwagandha", "spirulina", "greens powder"]
         let bodycare = ["shampoo", "conditioner", "body wash", "hand soap", "face wash", "toothpaste", "toothbrush", "floss", "mouthwash", "deodorant", "lotion", "moisturizer", "sunscreen", "razor", "shaving cream", "hair mask", "dry shampoo", "chapstick", "lip balm", "cotton swab", "cotton ball", "bandage", "ibuprofen", "tylenol", "advil", "allergy", "cold medicine"]
         let household = ["paper towel", "toilet paper", "tissue", "trash bag", "garbage bag", "zip lock", "ziploc", "foil", "aluminum foil", "plastic wrap", "parchment paper", "dish soap", "dishwasher pod", "laundry detergent", "fabric softener", "bleach", "sponge", "cleaning spray", "windex", "lysol", "hand sanitizer", "candle", "batteries", "light bulb", "dryer sheet", "dish tab"]
@@ -96,26 +96,64 @@ enum GroceryAisles {
         if frozen.contains(where: { lower.contains($0) }) { return "❄️ Frozen" }
         if canned.contains(where: { lower.contains($0) }) { return "🥫 Canned & Jarred" }
 
-        if produce.contains(where: { lower.contains($0) }) { return "🥬 Produce" }
-        if meat.contains(where: { lower.contains($0) }) { return "🥩 Meat" }
-        if seafood.contains(where: { lower.contains($0) }) { return "🐟 Seafood" }
-        if dairy.contains(where: { lower.contains($0) }) { return "🥛 Dairy & Eggs" }
-        if deli.contains(where: { lower.contains($0) }) { return "🧀 Deli & Prepared" }
-        if bakery.contains(where: { lower.contains($0) }) { return "🍞 Bakery & Bread" }
-        if oils.contains(where: { lower.contains($0) }) { return "🫒 Oils & Vinegars" }
-        if pasta.contains(where: { lower.contains($0) }) { return "🌾 Pasta, Rice & Grains" }
-        if breakfast.contains(where: { lower.contains($0) }) { return "🥣 Breakfast" }
-        if snacks.contains(where: { lower.contains($0) }) { return "🍿 Snacks" }
-        if alcohol.contains(where: { lower.contains($0) }) { return "🍷 Beer, Wine & Spirits" }
-        if beverages.contains(where: { lower.contains($0) }) { return "🥤 Beverages" }
-        if condiments.contains(where: { lower.contains($0) }) { return "🫙 Condiments & Sauces" }
-        if baking.contains(where: { lower.contains($0) }) { return "🧂 Baking & Spices" }
-        if supplements.contains(where: { lower.contains($0) }) { return "💊 Supplements" }
-        if bodycare.contains(where: { lower.contains($0) }) { return "🧴 Body Care" }
-        if household.contains(where: { lower.contains($0) }) { return "🏠 Household" }
-        if pet.contains(where: { lower.contains($0) }) { return "🐾 Pet" }
-        return "📦 Other"
+        // Everything else: every aisle's words compete, rather than the first list with
+        // any match winning. Listed in the old checking order, which still settles exact ties.
+        let aisles: [(name: String, keywords: [String])] = [
+            ("🥬 Produce", produce), ("🥩 Meat", meat), ("🐟 Seafood", seafood),
+            ("🥛 Dairy & Eggs", dairy), ("🧀 Deli & Prepared", deli), ("🍞 Bakery & Bread", bakery),
+            ("🫒 Oils & Vinegars", oils), ("🌾 Pasta, Rice & Grains", pasta), ("🥣 Breakfast", breakfast),
+            ("🍿 Snacks", snacks), ("🍷 Beer, Wine & Spirits", alcohol), ("🥤 Beverages", beverages),
+            ("🫙 Condiments & Sauces", condiments), ("🧂 Baking & Spices", baking),
+            ("💊 Supplements", supplements), ("🧴 Body Care", bodycare), ("🏠 Household", household),
+            ("🐾 Pet", pet),
+        ]
+        return bestAisle(for: lower, among: aisles) ?? "📦 Other"
+    }
+
+    /// The last word of an item decides its aisle — English puts the thing itself last,
+    /// so "potato chips" are chips and "orange juice" is juice. When two keywords end in
+    /// the same word the longer one wins: "sausage" beats the "sage" inside it, "baking
+    /// soda" beats "soda". Earlier aisles win anything still tied.
+    private static func bestAisle(for item: String, among aisles: [(name: String, keywords: [String])]) -> String? {
+        var best: (wordEnd: Int, length: Int, aisle: String)?
+        for aisle in aisles {
+            for keyword in aisle.keywords {
+                guard let end = wordEnd(of: keyword, in: item) else { continue }
+                if let b = best, (end, keyword.count) <= (b.wordEnd, b.length) { continue }
+                best = (end, keyword.count, aisle.name)
+            }
         }
+        return best?.aisle
+    }
+
+    /// Where the word holding `keyword`'s last appearance ends, or nil if it's absent.
+    /// Keywords of three letters or fewer must be the whole word, plural allowed — "ham"
+    /// isn't in "graham" or "shampoo", but "eggs" is "egg". Longer ones may sit inside a
+    /// word, so "butter" still finds "buttermilk". A final "y" also matches "ies":
+    /// "dried cranberry" finds "dried cranberries".
+    private static func wordEnd(of keyword: String, in item: String) -> Int? {
+        var forms = [keyword]
+        if keyword.count > 3, keyword.hasSuffix("y") { forms.append(String(keyword.dropLast()) + "ies") }
+
+        var latest: Int?
+        for form in forms {
+            var from = item.startIndex
+            while let found = item.range(of: form, range: from..<item.endIndex) {
+                var start = found.lowerBound, end = found.upperBound
+                while start > item.startIndex, item[item.index(before: start)].isLetter {
+                    start = item.index(before: start)
+                }
+                while end < item.endIndex, item[end].isLetter { end = item.index(after: end) }
+
+                let word = String(item[start..<end])
+                if keyword.count > 3 || word == form || word == form + "s" || word == form + "es" {
+                    latest = max(latest ?? 0, item.distance(from: item.startIndex, to: end))
+                }
+                from = found.upperBound
+            }
+        }
+        return latest
+    }
 }
 
 // MARK: - Ingredient parsing
