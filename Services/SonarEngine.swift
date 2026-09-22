@@ -522,7 +522,11 @@ class SonarEngine {
                            "wash", "iron", "wrap", "charge", "download", "install", "cancel", "pay",
                            "register", "sign up", "review", "finish", "complete", "submit", "upload",
                            "clear", "tidy", "sweep", "mop", "mow", "dust", "wipe", "scrub", "set out",
-                           "put away", "gather", "throw", "set up", "pick", "move", "fold"]
+                           "put away", "gather", "throw", "set up", "pick", "move", "fold",
+                           // Chores and errands people dictate. These double as nouns
+                           // ("a vacuum", "water bottles"), which is what keepsMeaning guards.
+                           "vacuum", "go", "walk", "feed", "water", "renew", "visit",
+                           "empty", "refill", "restock", "rake", "shovel"]
 
         // Trigger phrases that introduce a list
         let triggerPhrases = [
@@ -582,11 +586,10 @@ class SonarEngine {
         // A second "I have to" / "remind me to" partway through starts the next item.
         let list = Self.markLaterTriggers(in: remainder)
 
-        // If you marked where items end — commas, new lines, "and" — that's taken as
-        // given. Only run-together speech has to be split by guessing.
-        let items = Self.isDelimited(list)
-            ? Self.delimitedItems(list, verbs: sortedVerbs)
-            : Self.spokenItems(list, verbs: sortedVerbs)
+        // Punctuation marks where items end, and it's deliberate — so when it's there,
+        // take it as given. Dictated lists have none, so they're split at the verbs.
+        let punctuated = list.contains(",") || list.contains(";") || list.contains("\n")
+        let items = Self.listItems(list, verbs: sortedVerbs, splitOnVerbs: !punctuated)
 
         // Need at least 2 items to auto-create a checklist
         guard items.count >= 2 else { return [] }
@@ -595,10 +598,16 @@ class SonarEngine {
 
     // MARK: - Checklist helpers
 
-    /// A list you separated yourself. Every piece is kept, whatever verb it starts with
-    /// — "vacuum basement", "go grocery shopping", "eggs" — because you already said
-    /// where each item ends. Only asides and bare timing are dropped.
-    private static func delimitedItems(_ list: String, verbs: [String]) -> [String] {
+    /// Splits a list into items. Every piece is kept whatever verb it starts with —
+    /// "vacuum basement", "go grocery shopping", "eggs" — and only asides and bare timing
+    /// are dropped.
+    ///
+    /// `splitOnVerbs` is the difference between typing and talking. Punctuation is a
+    /// deliberate act: if you wrote commas, each piece is exactly what you meant and
+    /// guessing further only breaks things ("take the car to get washed" is one errand).
+    /// You can't speak a comma though, so a dictated list arrives as one breath with a
+    /// single "and" near the end, and the verbs are the only clue where items end.
+    private static func listItems(_ list: String, verbs: [String], splitOnVerbs: Bool) -> [String] {
         // "and" before a new task separates; "and" inside one ("milk and eggs",
         // "mac and cheese") is part of that item.
         let verbPattern = verbs.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
@@ -609,8 +618,61 @@ class SonarEngine {
 
         return split
             .components(separatedBy: CharacterSet(charactersIn: ",;\n"))
+            .flatMap { splitOnVerbs ? runOnPieces($0, verbs: verbs) : [$0] }
             .compactMap { listItem(from: $0, verbs: verbs) }
     }
+
+    /// Breaks "vacuum basement go grocery shopping cook dinner" apart at the verbs that
+    /// start each new task. Splits at the earliest verb rather than the first one that
+    /// happens to be checked, so items come out in the order they were said.
+    ///
+    /// Two things stop it cutting a single errand in half, both judged by what sits to the
+    /// left of the verb: a piece ending in a word like "a" or "to" is mid-phrase
+    /// ("buy a| vacuum cleaner", "take the car to| get washed"), and a piece that is just a
+    /// bare verb has no object yet ("buy| water bottles").
+    private static func runOnPieces(_ chunk: String, verbs: [String]) -> [String] {
+        var pieces: [String] = []
+        var rest = chunk.trimmingCharacters(in: .whitespaces)
+
+        while true {
+            var cut: (head: String, tail: String)? = nil
+            var earliest = rest.endIndex
+
+            for verb in verbs {
+                let from = rest.index(rest.startIndex, offsetBy: 1, limitedBy: rest.endIndex) ?? rest.endIndex
+                guard from < rest.endIndex,
+                      let found = rest.range(of: " \(verb) ", options: .caseInsensitive,
+                                             range: from..<rest.endIndex),
+                      found.lowerBound < earliest
+                else { continue }
+                earliest = found.lowerBound
+                cut = (String(rest[rest.startIndex..<found.lowerBound]),
+                       String(rest[rest.index(after: found.lowerBound)...]))
+            }
+
+            guard let cut, keepsMeaning(head: cut.head, verbs: verbs) else { break }
+            pieces.append(cut.head.trimmingCharacters(in: .whitespaces))
+            rest = cut.tail.trimmingCharacters(in: .whitespaces)
+        }
+
+        if !rest.isEmpty { pieces.append(rest) }
+        return pieces
+    }
+
+    /// Whether the text before a verb stands on its own as a task.
+    private static func keepsMeaning(head: String, verbs: [String]) -> Bool {
+        let words = head.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        guard let last = words.last else { return false }
+        if danglingWords.contains(last) { return false }                       // "buy a", "take the car to"
+        if words.count == 1 && verbs.contains(words[0]) { return false }       // "buy" with nothing after it
+        return true
+    }
+
+    /// Words that can't end a task — whatever follows them belongs to the same phrase.
+    private static let danglingWords: Set<String> = [
+        "a", "an", "the", "my", "your", "our", "their", "his", "her", "its",
+        "to", "of", "for", "with", "at", "on", "in", "into", "onto", "from", "some", "more",
+    ]
 
     /// One piece of a list you separated yourself, tidied — or nil when it isn't a task.
     private static func listItem(from raw: String, verbs: [String]) -> String? {
@@ -649,66 +711,6 @@ class SonarEngine {
 
         // Everything else stays as you wrote it: "vacuum basement", "eggs", "renew my passport".
         return capped(item)
-    }
-
-    /// Run-together speech — "pick up milk grab eggs call mom" — where nothing marks the
-    /// end of one task and the start of the next. Verbs are the only clue, so only pieces
-    /// that start with a known verb count.
-    private static func spokenItems(_ list: String, verbs sortedVerbs: [String]) -> [String] {
-        let item = list.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !item.isEmpty else { return [] }
-
-        // Split on embedded action verbs
-        var pieces: [String] = []
-        var current = item
-        while current.count > 1 {
-            let searchFrom = current.index(after: current.startIndex)
-            let searchRange = searchFrom..<current.endIndex
-            var splitFound = false
-            for verb in sortedVerbs {
-                let pattern = " \(verb) "
-                if let range = current.range(of: pattern, options: .caseInsensitive, range: searchRange) {
-                    let before = String(current[current.startIndex..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
-                    let afterSpace = current.index(after: range.lowerBound)
-                    current = String(current[afterSpace...]).trimmingCharacters(in: .whitespaces)
-                    if !before.isEmpty { pieces.append(before) }
-                    splitFound = true
-                    break
-                }
-            }
-            if !splitFound { break }
-        }
-        if !current.isEmpty { pieces.append(current) }
-
-        // For pieces that don't start with a verb (e.g. "tomorrow at 4pm call the vet"),
-        // extract the verb-starting portion so the task isn't lost to a date prefix.
-        let rescued = pieces.flatMap { piece -> [String] in
-            let pieceLower = piece.lowercased()
-            if sortedVerbs.contains(where: { pieceLower.hasPrefix($0) }) {
-                return [piece]
-            }
-            for verb in sortedVerbs {
-                if let range = piece.range(of: " \(verb)", options: .caseInsensitive) {
-                    let extracted = String(piece[piece.index(after: range.lowerBound)...]).trimmingCharacters(in: .whitespaces)
-                    if !extracted.isEmpty { return [extracted] }
-                }
-            }
-            return []
-        }
-
-        // Only keep pieces that start with an action verb and are short enough to be a clear task
-        return rescued.filter { piece in
-            let pieceLower = piece.lowercased()
-            let startsWithVerb = sortedVerbs.contains { pieceLower.hasPrefix($0) }
-            let isShortTask = piece.split(separator: " ").count <= 8
-            return startsWithVerb && isShortTask
-        }
-    }
-
-    /// Whether you marked where items end: a comma, semicolon, new line, or "and".
-    private static func isDelimited(_ list: String) -> Bool {
-        list.contains(",") || list.contains(";") || list.contains("\n")
-            || list.range(of: #"\band\b"#, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     /// Obligation phrases that, partway through a list, begin the next item:

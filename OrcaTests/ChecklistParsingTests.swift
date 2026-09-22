@@ -72,6 +72,18 @@ struct ChecklistParsingTests {
 
         // --- Spoken lists with no punctuation keep working ---
         Phrasing("I need to pick up milk grab eggs call mom", ["Pick up milk", "Grab eggs", "Call mom"]),
+        // You can't speak a comma, so a run-on with one "and" at the end still has to split
+        Phrasing("Saturday remind me to vacuum basement go grocery shopping cook dinner and clean upstairs sink",
+                 ["Vacuum basement", "Go grocery shopping", "Cook dinner", "Clean upstairs sink"]),
+        Phrasing("remind me to walk the dog feed the cat and water the plants",
+                 ["Walk the dog", "Feed the cat", "Water the plants"]),
+
+        // --- ...but a verb inside one task must not split it ---
+        Phrasing("I need to buy a vacuum cleaner and call mom", ["Buy a vacuum cleaner", "Call mom"]),
+        Phrasing("I need to take the car to get washed and pick up milk",
+                 ["Take the car to get washed", "Pick up milk"]),
+        Phrasing("I need to buy water bottles and call the plumber",
+                 ["Buy water bottles", "Call the plumber"]),
         Phrasing("tomorrow at 4pm I need to call the vet and pick up dog food", ["Call the vet", "Pick up dog food"]),
         Phrasing("Don\u{2019}t forget to text Jake, call the plumber and pay rent",
                  ["Text Jake", "Call the plumber", "Pay rent"]),
