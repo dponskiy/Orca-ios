@@ -64,8 +64,7 @@ class PokemonTCGService {
         await MainActor.run { isFetchingSets = true; fetchSetsError = false }
 
         guard let url = URL(string: "\(baseURL)/sets?orderBy=-releaseDate&pageSize=250"),
-              let (data, _) = try? await URLSession.shared.data(from: url),
-              let response = try? JSONDecoder().decode(PTCGSetsResponse.self, from: data)
+              let response = await loadJSON(url, as: PTCGSetsResponse.self)
         else {
             await MainActor.run { isFetchingSets = false; fetchSetsError = true }
             return
@@ -103,8 +102,7 @@ class PokemonTCGService {
         ]
 
         guard let url = components?.url,
-              let (data, _) = try? await URLSession.shared.data(from: url),
-              let response = try? JSONDecoder().decode(PTCGResponse.self, from: data)
+              let response = await loadJSON(url, as: PTCGResponse.self)
         else {
             await MainActor.run { isFetchingCards.remove(setId); fetchCardsErrors.insert(setId) }
             return
@@ -204,14 +202,39 @@ class PokemonTCGService {
             URLQueryItem(name: "select",   value: "id,name,set,number,images,rarity,types,tcgplayer")
         ]
         guard let url = components?.url,
-              let (data, _) = try? await URLSession.shared.data(from: url),
-              let response = try? JSONDecoder().decode(PTCGResponse.self, from: data)
+              let response = await loadJSON(url, as: PTCGResponse.self)
         else { return nil }
         let cards = response.data.map { parseCard($0) }
         return (cards, response.totalCount ?? cards.count)
     }
 
     // MARK: - Helpers
+
+    /// api.pokemontcg.io returns 500 or 502 on a large share of requests — measured at
+    /// roughly 6 in 10 for /sets and 1 in 3 for /cards. The failures are transient and a
+    /// retry a moment later usually lands, so one attempt is the difference between
+    /// "browse by set is broken" and "browse by set works". Three tries takes a 58%
+    /// failure rate down to about 20%, four to about 12%.
+    private func loadJSON<T: Decodable>(_ url: URL, as type: T.Type, attempts: Int = 4) async -> T? {
+        for attempt in 1...attempts {
+            if Task.isCancelled { return nil }
+            do {
+                let (data, response) = try await URLSession.shared.data(from: url)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if status == 200, let decoded = try? JSONDecoder().decode(type, from: data) {
+                    return decoded
+                }
+                print("⚠️ pokemontcg \(status) on attempt \(attempt)/\(attempts): \(url.path)")
+            } catch {
+                if (error as? URLError)?.code == .cancelled { return nil }
+                print("⚠️ pokemontcg \(error.localizedDescription) on attempt \(attempt)/\(attempts)")
+            }
+            guard attempt < attempts else { break }
+            // Back off a little each time; their bad gateways clear in well under a second
+            try? await Task.sleep(nanoseconds: UInt64(attempt) * 400_000_000)
+        }
+        return nil
+    }
 
     private func parseCard(_ raw: PTCGCard) -> PokemonCard {
         let prices = raw.tcgplayer?.prices
