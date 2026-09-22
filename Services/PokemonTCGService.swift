@@ -70,14 +70,14 @@ class PokemonTCGService {
             return
         }
 
-        let sets = response.data.map { raw in
+        let sets = response.data.compactMap(\.value).map { raw in
             PokemonSet(
                 id: raw.id,
                 name: raw.name,
-                series: raw.series,
-                total: raw.total,
-                printedTotal: raw.printedTotal,
-                releaseDate: raw.releaseDate,
+                series: raw.series ?? "",
+                total: raw.total ?? raw.printedTotal ?? 0,
+                printedTotal: raw.printedTotal ?? raw.total ?? 0,
+                releaseDate: raw.releaseDate ?? "",
                 symbolURL: raw.images?.symbol.flatMap { URL(string: $0) },
                 logoURL: raw.images?.logo.flatMap { URL(string: $0) }
             )
@@ -108,7 +108,7 @@ class PokemonTCGService {
             return
         }
 
-        let cards = response.data.map { parseCard($0) }
+        let cards = response.data.compactMap(\.value).map { parseCard($0) }
 
         guard !cards.isEmpty else {
             await MainActor.run { isFetchingCards.remove(setId); fetchCardsErrors.insert(setId) }
@@ -204,7 +204,7 @@ class PokemonTCGService {
         guard let url = components?.url,
               let response = await loadJSON(url, as: PTCGResponse.self)
         else { return nil }
-        let cards = response.data.map { parseCard($0) }
+        let cards = response.data.compactMap(\.value).map { parseCard($0) }
         return (cards, response.totalCount ?? cards.count)
     }
 
@@ -302,16 +302,26 @@ class PokemonTCGService {
 // MARK: - API Response Models
 
 private struct PTCGSetsResponse: Decodable {
-    let data: [PTCGSetRaw]
+    let data: [Lenient<PTCGSetRaw>]
 }
 
+/// Decodes what it can and drops what it can't. A list of 176 sets shouldn't come back
+/// empty because one of them is malformed — which is exactly what happened when a set
+/// arrived on 2026-09-16 with no `printedTotal` and browsing by set stopped working.
+private struct Lenient<T: Decodable>: Decodable {
+    let value: T?
+    init(from decoder: Decoder) throws { value = try? T(from: decoder) }
+}
+
+/// Everything past the id and name is optional on purpose: this API drops fields from new
+/// records without warning, and a missing page count is no reason to hide a whole set.
 private struct PTCGSetRaw: Decodable {
     let id: String
     let name: String
-    let series: String
-    let total: Int
-    let printedTotal: Int
-    let releaseDate: String
+    let series: String?
+    let total: Int?
+    let printedTotal: Int?
+    let releaseDate: String?
     let images: PTCGSetImages?
 }
 
@@ -321,7 +331,7 @@ private struct PTCGSetImages: Decodable {
 }
 
 private struct PTCGResponse: Decodable {
-    let data: [PTCGCard]
+    let data: [Lenient<PTCGCard>]
     let totalCount: Int?  // Optional — error responses won't have this field
 }
 
