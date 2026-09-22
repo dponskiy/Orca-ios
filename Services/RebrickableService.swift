@@ -36,6 +36,18 @@ struct RBSet: Identifiable, Decodable {
         case numParts = "num_parts"
         case setImgUrl = "set_img_url"
     }
+
+    /// Only the set number and name are genuinely required — a set with no part count is
+    /// still a set worth showing, and shouldn't take the rest of the list down with it.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        setNum    = try c.decode(String.self, forKey: .setNum)
+        name      = try c.decode(String.self, forKey: .name)
+        year      = (try? c.decode(Int.self, forKey: .year)) ?? 0
+        themeId   = (try? c.decode(Int.self, forKey: .themeId)) ?? 0
+        numParts  = (try? c.decode(Int.self, forKey: .numParts)) ?? 0
+        setImgUrl = try? c.decode(String.self, forKey: .setImgUrl)
+    }
 }
 
 // MARK: - Service
@@ -132,8 +144,25 @@ final class RebrickableService {
 
 // MARK: - Response wrapper
 
+/// Decodes the rows it can and drops the ones it can't. A whole page of LEGO sets
+/// shouldn't come back empty because one of them is missing a field — which is exactly
+/// how Pokémon's browse-by-set broke in September 2026.
 private struct RBListResponse<T: Decodable>: Decodable {
     let count: Int
     let next: String?
     let results: [T]
+
+    private enum CodingKeys: String, CodingKey { case count, next, results }
+
+    private struct Row: Decodable {
+        let value: T?
+        init(from decoder: Decoder) throws { value = try? T(from: decoder) }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        count   = (try? container.decode(Int.self, forKey: .count)) ?? 0
+        next    = try? container.decode(String.self, forKey: .next)
+        results = (try container.decode([Row].self, forKey: .results)).compactMap(\.value)
+    }
 }
