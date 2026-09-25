@@ -6,6 +6,117 @@
 //
 
 import Foundation
+import WebKit
+import UIKit
+
+// MARK: - Rendered Page
+//
+// Loads a page the way a browser does — running its scripts — and hands back the finished
+// HTML. Needed for sites that build the recipe after load rather than serving it, and for
+// ones whose bot protection turns away anything that doesn't look like a browser.
+
+@MainActor
+final class RenderedPage: NSObject, WKNavigationDelegate {
+
+    /// Loads `url`, waits for the recipe data to appear, and returns the rendered HTML.
+    /// Gives up after `timeout` so a slow or hostile page can't leave a capture hanging.
+    static func html(from url: URL, timeout: TimeInterval = 15) async throws -> String {
+        let page = RenderedPage()
+        return try await page.load(url, timeout: timeout)
+    }
+
+    private var webView: WKWebView?
+    private var waiter: CheckedContinuation<Void, Error>?
+
+    private func load(_ url: URL, timeout: TimeInterval) async throws -> String {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()   // nothing from a recipe site is kept
+        let web = WKWebView(frame: .init(x: 0, y: 0, width: 390, height: 844), configuration: config)
+        web.navigationDelegate = self
+        webView = web
+
+        // iOS throttles a web view that isn't in a window — scripts stall and
+        // evaluateJavaScript never answers. Sit it behind the interface, effectively
+        // invisible and untouchable, so the page runs at full speed.
+        attachOffscreen(web)
+        defer {
+            webView = nil
+            web.navigationDelegate = nil
+            web.stopLoading()
+            web.removeFromSuperview()
+        }
+
+        let deadline = Date().addingTimeInterval(timeout)
+
+        // Wait for the page itself to load
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { @MainActor in
+                try await withCheckedThrowingContinuation { self.waiter = $0; web.load(URLRequest(url: url)) }
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                throw RecipeExtractor.RecipeError.networkError(URLError(.timedOut))
+            }
+            try await group.next()
+            group.cancelAll()
+        }
+
+        // The recipe often arrives a moment after the page reports finishing, so watch the
+        // DOM rather than grabbing its first version. Stop as soon as the recipe data shows
+        // up, or once the page stops changing — otherwise a page that simply hasn't got a
+        // recipe would cost the caller the whole timeout before saying so.
+        var lastLength = -1
+        var unchangedPolls = 0
+
+        while Date() < deadline {
+            if let html = (try? await web.evaluateJavaScript("document.documentElement.outerHTML")) as? String {
+                if html.range(of: "application/ld\\+json", options: .regularExpression) != nil { return html }
+                if html.count == lastLength {
+                    unchangedPolls += 1
+                    if unchangedPolls >= 2 { return html }   // settled, nothing more is coming
+                } else {
+                    lastLength = html.count
+                    unchangedPolls = 0
+                }
+            }
+            try? await Task.sleep(nanoseconds: 400_000_000)
+        }
+
+        throw RecipeExtractor.RecipeError.noRecipeFound
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor in resume(with: nil) }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        Task { @MainActor in resume(with: error) }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        Task { @MainActor in resume(with: error) }
+    }
+
+    /// Puts the web view behind everything else at almost zero opacity. In a window so
+    /// iOS keeps it running, but never seen or touched.
+    private func attachOffscreen(_ web: WKWebView) {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        guard let window = windows.first(where: \.isKeyWindow) ?? windows.first else { return }
+        web.alpha = 0.01
+        web.isUserInteractionEnabled = false
+        window.insertSubview(web, at: 0)
+    }
+
+    /// Resumes exactly once — a page can report finishing and failing in either order.
+    private func resume(with error: Error?) {
+        guard let waiter else { return }
+        self.waiter = nil
+        if let error { waiter.resume(throwing: RecipeExtractor.RecipeError.networkError(error)) }
+        else { waiter.resume() }
+    }
+}
 
 // MARK: - Recipe Result
 
@@ -47,29 +158,45 @@ actor RecipeExtractor {
         guard let url = URL(string: urlString) else {
             throw RecipeError.invalidURL
         }
-        
-        let html: String
+
+        // Most recipe sites are WordPress and put the recipe straight in the HTML, so
+        // try the plain fetch first — it's a fraction of the cost of rendering.
+        if let html = try? await fetchHTML(from: url),
+           let result = try? parseRecipe(from: html) {
+            return result
+        }
+
+        // Nothing there. Either the page builds its recipe with JavaScript — Trader Joe's
+        // serves a 1.6KB shell and fills it in after load — or the site turned us away for
+        // not looking like a browser. A real web view answers both: it runs the page's
+        // scripts, and it sends the full set of headers bot protection looks for.
+        let rendered = try await RenderedPage.html(from: url)
+        return try parseRecipe(from: rendered)
+    }
+
+    private func fetchHTML(from url: URL) async throws -> String {
+        var request = URLRequest(url: url)
+        request.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
         do {
-            var request = URLRequest(url: url)
-            request.setValue(
-                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-                forHTTPHeaderField: "User-Agent"
-            )
-            request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
-            request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                throw RecipeError.networkError(URLError(.badServerResponse))
+            }
             guard let string = String(data: data, encoding: .utf8)
                            ?? String(data: data, encoding: .isoLatin1) else {
                 throw RecipeError.parseError
             }
-            html = string
+            return string
         } catch let error as RecipeError {
             throw error
         } catch {
             throw RecipeError.networkError(error)
         }
-        
-        return try parseRecipe(from: html)
     }
     
     // MARK: - Parsing
