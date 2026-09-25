@@ -18,17 +18,75 @@ import UIKit
 @MainActor
 final class RenderedPage: NSObject, WKNavigationDelegate {
 
-    /// Loads `url`, waits for the recipe data to appear, and returns the rendered HTML.
+    /// What a rendered page gave us: its finished HTML, and — for pages that never
+    /// publish structured data — whatever could be read off the visible page instead.
+    struct Rendered {
+        let html: String
+        let visibleRecipe: RecipeResult?
+    }
+
+    /// Loads `url`, waits for the recipe to appear, and reads it back.
     /// Gives up after `timeout` so a slow or hostile page can't leave a capture hanging.
-    static func html(from url: URL, timeout: TimeInterval = 15) async throws -> String {
+    static func load(from url: URL, timeout: TimeInterval = 15) async throws -> Rendered {
         let page = RenderedPage()
         return try await page.load(url, timeout: timeout)
+    }
+
+    /// Reads a recipe off the page the way a person does: find the "Ingredients" heading,
+    /// take the list under it, then the same for the steps. Plenty of sites — Trader Joe's
+    /// among them — never publish structured data but lay the page out exactly like this.
+    private static let visibleRecipeJS = #"""
+    (function(){
+      var all = Array.prototype.slice.call(document.querySelectorAll('*'));
+      function listAfter(re){
+        var heads = all.filter(function(e){ return /^(H[1-6]|STRONG|B|DT|P)$/.test(e.tagName); });
+        for (var k = 0; k < heads.length; k++){
+          var t = heads[k].textContent.trim().toLowerCase().replace(/[:\s]+$/,'');
+          if (!re.test(t)) continue;
+          var i = all.indexOf(heads[k]);
+          for (var j = i + 1; j < Math.min(i + 40, all.length); j++){
+            var e = all[j];
+            if ((e.tagName === 'UL' || e.tagName === 'OL') && e.children.length > 1){
+              return Array.prototype.map.call(e.children, function(li){
+                return li.textContent.trim().replace(/\s+/g,' ');
+              }).filter(Boolean);
+            }
+          }
+        }
+        return null;
+      }
+      var ing = listAfter(/^ingredients?$/);
+      var dir = listAfter(/^(directions?|instructions?|method|steps|preparation)$/);
+      if (!ing || ing.length < 2) return null;
+      var h1 = document.querySelector('h1');
+      var img = document.querySelector('meta[property="og:image"]');
+      return JSON.stringify({
+        title: (h1 ? h1.textContent : document.title).trim(),
+        ingredients: ing,
+        instructions: dir || [],
+        image: img ? img.getAttribute('content') : null
+      });
+    })()
+    """#
+
+    private static func visibleRecipe(from json: String) -> RecipeResult? {
+        guard let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ingredients = obj["ingredients"] as? [String], ingredients.count >= 2
+        else { return nil }
+        return RecipeResult(
+            title: (obj["title"] as? String)?.isEmpty == false ? (obj["title"] as! String) : "Recipe",
+            ingredients: ingredients,
+            instructions: (obj["instructions"] as? [String]) ?? [],
+            imageURL: obj["image"] as? String,
+            prepTime: nil, cookTime: nil, servings: nil
+        )
     }
 
     private var webView: WKWebView?
     private var waiter: CheckedContinuation<Void, Error>?
 
-    private func load(_ url: URL, timeout: TimeInterval) async throws -> String {
+    private func load(_ url: URL, timeout: TimeInterval) async throws -> Rendered {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()   // nothing from a recipe site is kept
         let web = WKWebView(frame: .init(x: 0, y: 0, width: 390, height: 844), configuration: config)
@@ -70,10 +128,14 @@ final class RenderedPage: NSObject, WKNavigationDelegate {
 
         while Date() < deadline {
             if let html = (try? await web.evaluateJavaScript("document.documentElement.outerHTML")) as? String {
-                if html.range(of: "application/ld\\+json", options: .regularExpression) != nil { return html }
+                if html.range(of: "application/ld\\+json", options: .regularExpression) != nil {
+                    return Rendered(html: html, visibleRecipe: await readVisibleRecipe(from: web))
+                }
                 if html.count == lastLength {
                     unchangedPolls += 1
-                    if unchangedPolls >= 2 { return html }   // settled, nothing more is coming
+                    if unchangedPolls >= 2 {   // settled, nothing more is coming
+                        return Rendered(html: html, visibleRecipe: await readVisibleRecipe(from: web))
+                    }
                 } else {
                     lastLength = html.count
                     unchangedPolls = 0
@@ -95,6 +157,11 @@ final class RenderedPage: NSObject, WKNavigationDelegate {
 
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in resume(with: error) }
+    }
+
+    private func readVisibleRecipe(from web: WKWebView) async -> RecipeResult? {
+        guard let json = (try? await web.evaluateJavaScript(Self.visibleRecipeJS)) as? String else { return nil }
+        return Self.visibleRecipe(from: json)
     }
 
     /// Puts the web view behind everything else at almost zero opacity. In a window so
@@ -170,8 +237,15 @@ actor RecipeExtractor {
         // serves a 1.6KB shell and fills it in after load — or the site turned us away for
         // not looking like a browser. A real web view answers both: it runs the page's
         // scripts, and it sends the full set of headers bot protection looks for.
-        let rendered = try await RenderedPage.html(from: url)
-        return try parseRecipe(from: rendered)
+        let rendered = try await RenderedPage.load(from: url)
+
+        // Structured data first, since it carries times and servings too.
+        if let result = try? parseRecipe(from: rendered.html) { return result }
+
+        // Some pages never publish any, and just lay the recipe out on screen.
+        if let visible = rendered.visibleRecipe { return visible }
+
+        throw RecipeError.noRecipeFound
     }
 
     private func fetchHTML(from url: URL) async throws -> String {
