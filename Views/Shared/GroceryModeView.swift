@@ -81,6 +81,7 @@ struct GroceryModeView: View {
 
     // Recipe adding
     @State private var showAddRecipeOptions = false
+    @State private var recipesExpanded = false
     @State private var showURLInputSheet = false
     @State private var showRecipeBuilder = false
     @State private var showPhotoCapture = false
@@ -1003,6 +1004,60 @@ struct GroceryModeView: View {
                         }
                     } else {
                         Section {
+                            // Collapsed by default. Every saved recipe used to sit here, so
+                            // the list grew forever and the add-an-item field — the thing
+                            // reached for most often — was pushed off the bottom.
+                            Button {
+                                withAnimation(.spring(duration: 0.25)) { recipesExpanded.toggle() }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "fork.knife").foregroundColor(.oceanTeal)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(selectedMemoryIds.isEmpty
+                                             ? "Choose recipes"
+                                             : "\(selectedMemoryIds.count) recipe\(selectedMemoryIds.count == 1 ? "" : "s") on the list")
+                                            .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy)
+                                        Text("\(recipeMemories.count) saved")
+                                            .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.gray.opacity(0.5))
+                                        .rotationEffect(.degrees(recipesExpanded ? 180 : 0))
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            // Collapsed: just what's actually on the list, so you can see
+                            // your choices without wading through everything else.
+                            if !recipesExpanded {
+                                ForEach(selectedMemories) { memory in
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 13)).foregroundColor(.oceanTeal)
+                                        Button { viewingRecipe = memory } label: {
+                                            Text(memory.text.components(separatedBy: "\n").first ?? memory.text)
+                                                .font(.custom("DMSans-Regular", size: 14))
+                                                .foregroundColor(.deepNavy).lineLimit(1)
+                                        }
+                                        .buttonStyle(.plain)
+                                        Spacer()
+                                        Button {
+                                            selectedMemoryIds.remove(memory.id)
+                                            autoSaveToday()
+                                        } label: {
+                                            Image(systemName: "xmark")
+                                                .font(.system(size: 10, weight: .semibold))
+                                                .foregroundColor(.gray.opacity(0.5)).padding(6)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                    .padding(.leading, 4)
+                                }
+                            }
+
+                            if recipesExpanded {
                             ForEach(recipeMemories) { memory in
                                 let isSelected = selectedMemoryIds.contains(memory.id)
                                 let items = subTasks(for: memory)
@@ -1052,6 +1107,7 @@ struct GroceryModeView: View {
                                         Label("Delete", systemImage: "trash")
                                     }
                                 }
+                            }
                             }
                         } header: {
                             HStack {
