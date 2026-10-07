@@ -82,6 +82,7 @@ struct GroceryModeView: View {
     // Recipe adding
     @State private var showAddRecipeOptions = false
     @State private var recipesExpanded = false
+    @State private var recipeSearch = ""
     @State private var collapsedAisles: Set<String> = []
     @State private var reopenedAisles: Set<String> = []
     @State private var showURLInputSheet = false
@@ -186,6 +187,32 @@ struct GroceryModeView: View {
 
     private var recipeMemories: [Memory] {
         memories.filter { $0.hasChecklist }
+    }
+
+    /// Search matches the title or any ingredient, so "pasta" finds Sunday Sauce even
+    /// though the word only appears in what you need to buy for it.
+    private var ingredientsByRecipe: [UUID: [String]] {
+        var grouped: [UUID: [String]] = [:]
+        for task in allSubTasks { grouped[task.memoryId, default: []].append(task.text) }
+        return grouped
+    }
+
+    private var filteredRecipeMemories: [Memory] {
+        let query = recipeSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return recipeMemories }
+        let grouped = ingredientsByRecipe
+        return recipeMemories.filter { memory in
+            if memory.text.lowercased().contains(query) { return true }
+            return grouped[memory.id]?.contains { $0.lowercased().contains(query) } ?? false
+        }
+    }
+
+    /// The ingredient that brought a recipe into the results — shown in place of the
+    /// ingredient count, so a hit you can't see in the title explains itself.
+    private func matchedIngredient(for memory: Memory) -> String? {
+        let query = recipeSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty, !memory.text.lowercased().contains(query) else { return nil }
+        return ingredientsByRecipe[memory.id]?.first { $0.lowercased().contains(query) }
     }
 
     private func subTasks(for memory: Memory) -> [SubTask] {
@@ -1010,7 +1037,10 @@ struct GroceryModeView: View {
                             // the list grew forever and the add-an-item field — the thing
                             // reached for most often — was pushed off the bottom.
                             Button {
-                                withAnimation(.spring(duration: 0.25)) { recipesExpanded.toggle() }
+                                withAnimation(.spring(duration: 0.25)) {
+                                    recipesExpanded.toggle()
+                                    if !recipesExpanded { recipeSearch = "" }   // reopen fresh
+                                }
                             } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: "fork.knife").foregroundColor(.oceanTeal)
@@ -1059,8 +1089,36 @@ struct GroceryModeView: View {
                                 }
                             }
 
+                            if recipesExpanded && recipeMemories.count > 5 {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 13)).foregroundColor(.gray.opacity(0.6))
+                                    TextField("Search name or ingredient", text: $recipeSearch)
+                                        .font(.custom("DMSans-Regular", size: 14))
+                                        .foregroundColor(.deepNavy)
+                                        .autocorrectionDisabled()
+                                        .textInputAutocapitalization(.never)
+                                        .submitLabel(.search)
+                                    if !recipeSearch.isEmpty {
+                                        Button { recipeSearch = "" } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 14)).foregroundColor(.gray.opacity(0.4))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+
+                            if recipesExpanded, filteredRecipeMemories.isEmpty, !recipeSearch.isEmpty {
+                                Text("Nothing matches “\(recipeSearch)”")
+                                    .font(.custom("DMSans-Regular", size: 13))
+                                    .foregroundColor(.gray)
+                                    .padding(.vertical, 6)
+                            }
+
                             if recipesExpanded {
-                            ForEach(recipeMemories) { memory in
+                            ForEach(filteredRecipeMemories) { memory in
                                 let isSelected = selectedMemoryIds.contains(memory.id)
                                 let items = subTasks(for: memory)
                                 HStack(spacing: 12) {
@@ -1070,8 +1128,17 @@ struct GroceryModeView: View {
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text(memory.text.components(separatedBy: "\n").first ?? memory.text)
                                                 .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy).lineLimit(2)
-                                            Text("\(items.count) \(items.count == 1 ? "ingredient" : "ingredients")")
-                                                .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                                            if let matched = matchedIngredient(for: memory) {
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: "checkmark.circle.fill").font(.system(size: 9))
+                                                    Text(matched).lineLimit(1)
+                                                }
+                                                .font(.custom("DMMono-Regular", size: 12))
+                                                .foregroundColor(.oceanTeal)
+                                            } else {
+                                                Text("\(items.count) \(items.count == 1 ? "ingredient" : "ingredients")")
+                                                    .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                                            }
                                         }
                                     }
                                     .buttonStyle(.plain)
