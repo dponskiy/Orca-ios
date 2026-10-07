@@ -27,6 +27,8 @@ struct SharedGroceryView: View {
     @State private var busyRecipeId: UUID? = nil
     @State private var errorMessage: String? = nil
     @State private var expandedLines: Set<String> = []
+    @State private var collapsedAisles: Set<String> = []
+    @State private var reopenedAisles: Set<String> = []
     @FocusState private var addFocused: Bool
 
     // MARK: Data
@@ -113,13 +115,39 @@ struct SharedGroceryView: View {
                     recipeSection
                     if !items.isEmpty {
                         ForEach(groupedLines, id: \.aisle) { group in
+                            let checked = group.lines.filter(\.isChecked).count
+                            let isDone = checked == group.lines.count && !group.lines.isEmpty
+                            let collapsed = !group.aisle.isEmpty && isAisleCollapsed(group.aisle, isDone: isDone)
+
                             Section {
-                                ForEach(group.lines) { line in lineRow(line) }
+                                if !collapsed {
+                                    ForEach(group.lines) { line in lineRow(line) }
+                                }
                             } header: {
                                 if !group.aisle.isEmpty {
-                                    Text(group.aisle)
-                                        .font(.custom("DMSans-Medium", size: 14))
-                                        .foregroundColor(.deepNavy).textCase(nil)
+                                    Button {
+                                        withAnimation(.spring(duration: 0.25)) {
+                                            toggleAisle(group.aisle, isDone: isDone)
+                                        }
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Text(group.aisle)
+                                                .font(.custom("DMSans-Medium", size: 14))
+                                                .foregroundColor(isDone ? .gray : .deepNavy).textCase(nil)
+                                            if isDone {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .font(.system(size: 12)).foregroundColor(.oceanTeal)
+                                            }
+                                            Spacer()
+                                            Text("\(checked)/\(group.lines.count)")
+                                                .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                                            Image(systemName: "chevron.down")
+                                                .font(.system(size: 10, weight: .semibold))
+                                                .foregroundColor(.gray.opacity(0.5))
+                                                .rotationEffect(.degrees(collapsed ? -90 : 0))
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -362,6 +390,23 @@ struct SharedGroceryView: View {
                             ? "added by \(memberName(item.addedByUserId))"
                             : item.sourceRecipeTitle,
                        text: item.text)
+        }
+    }
+
+    // An aisle everyone has finished folds away on its own, so what's still to find fills
+    // the screen. Same behaviour as the personal list. Two sets rather than a flag per
+    // aisle so nothing is written while the list is drawing.
+    private func isAisleCollapsed(_ aisle: String, isDone: Bool) -> Bool {
+        isDone ? !reopenedAisles.contains(aisle) : collapsedAisles.contains(aisle)
+    }
+
+    private func toggleAisle(_ aisle: String, isDone: Bool) {
+        if isDone {
+            if reopenedAisles.contains(aisle) { reopenedAisles.remove(aisle) }
+            else { reopenedAisles.insert(aisle) }
+        } else {
+            if collapsedAisles.contains(aisle) { collapsedAisles.remove(aisle) }
+            else { collapsedAisles.insert(aisle) }
         }
     }
 
