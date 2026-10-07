@@ -1372,7 +1372,7 @@ class SonarEngine {
                 let dates2 = detector?.matches(in: secondHalf, range: range2).compactMap { $0.date } ?? []
 
                 if var startDate = dates1.first, var endDate = dates2.first {
-                    if isForwardLooking(lower) {
+                    if !looksLikePast(lower) {
                         let rolled = rollForwardIfPast(startDate, text: text)
                         if rolled != startDate {
                             let span = endDate.timeIntervalSince(startDate)
@@ -1428,7 +1428,7 @@ class SonarEngine {
 
         guard !dates.isEmpty else { return (nil, nil, nil, nil, nil) }
 
-        if isForwardLooking(lower) {
+        if !looksLikePast(lower) {
             dates = dates.map { rollForwardIfPast($0, text: text) }
         }
         
@@ -1466,8 +1466,26 @@ class SonarEngine {
     }
 
     /// Is this text about something upcoming, rather than a record of the past?
-    private func isForwardLooking(_ lower: String) -> Bool {
-        reminderKeywords.contains { lower.contains($0) } || detectAction(text: lower)
+    /// A date written without a year almost always means the next one — "March 3" typed
+    /// in September is next March, not the one gone by. So a past date rolls forward
+    /// unless the note is plainly recording something that already happened.
+    ///
+    /// This used to work the other way round: roll only when a reminder word or a known
+    /// action verb was spotted. That meant "September 4 at 7 PM post on LinkedIn" landed
+    /// in the past, because "post" wasn't on the verb list — a reminder that can never
+    /// fire, and nothing on screen to say so. Listing the ways of referring to the past
+    /// is a far smaller job than listing every verb someone might use.
+    ///
+    /// Kept deliberately short and unambiguous. Getting it wrong one way dates a note a
+    /// year out; the other way kills a reminder silently, which is the worse of the two.
+    private let pastMarkers = [
+        "yesterday", "last night", "last week", "last weekend", "last month", "last year",
+        " ago", "i went", "we went", "i saw", "we saw", "i had", "we had",
+        "i attended", "we attended", "i visited", "we visited", "it was", "that was",
+    ]
+
+    private func looksLikePast(_ lower: String) -> Bool {
+        pastMarkers.contains { lower.contains($0) }
     }
 
     /// Does a date plausibly begin here? Guards the range-separator split.

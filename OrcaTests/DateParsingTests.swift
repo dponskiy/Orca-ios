@@ -89,6 +89,29 @@ struct DateParsingTests {
         }
     }
 
+    /// A date with no year rolls into the year ahead, but a note about something that
+    /// already happened keeps the date it was given.
+    ///
+    /// Built from today's date rather than a fixed one on purpose: the "September 4"
+    /// case in the table above passed for a month and then started failing the day that
+    /// date went by, which is how the bug this guards was found in the first place.
+    @Test("A note about the past keeps its year")
+    func pastNotesDontRollForward() {
+        let cal = Calendar.current
+        let now = Date()
+        guard let past = cal.date(byAdding: .day, value: -45, to: now),
+              cal.component(.year, from: past) == cal.component(.year, from: now)
+        else { return }   // too close to January for this to say anything
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM d"
+        let phrase = "we had dinner at Carbone on \(formatter.string(from: past))"
+
+        let got = SonarEngine().readDates(phrase).eventDate
+        #expect(got.map { cal.component(.year, from: $0) } == cal.component(.year, from: now),
+                "expected it to stay in \(cal.component(.year, from: now)), got \(Self.describe(got)) for \"\(phrase)\"")
+    }
+
     /// Prints every phrase and what it produced. Handy while adding new ones —
     /// run this to see current behaviour before deciding what's correct.
     @Test("Show what every phrase currently produces")
