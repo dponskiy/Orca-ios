@@ -9,6 +9,34 @@
 
 import Foundation
 
+/// Which sections of a shopping list are folded shut.
+///
+/// A section where everything is checked folds itself, so the list shrinks as you shop
+/// instead of staying full length with the trolley contents in the way. Two sets rather
+/// than one flag per section: a finished section is folded unless you reopened it, and an
+/// unfinished one is open unless you closed it. That way nothing has to be written while
+/// the list is drawing, which is what causes update loops in SwiftUI.
+///
+/// Keyed by whatever names the section — an aisle name, or a recipe's id.
+struct SectionFolding<Key: Hashable> {
+    private var closedByHand: Set<Key> = []
+    private var reopenedWhenDone: Set<Key> = []
+
+    func isCollapsed(_ key: Key, isDone: Bool) -> Bool {
+        isDone ? !reopenedWhenDone.contains(key) : closedByHand.contains(key)
+    }
+
+    mutating func toggle(_ key: Key, isDone: Bool) {
+        if isDone {
+            if reopenedWhenDone.contains(key) { reopenedWhenDone.remove(key) }
+            else { reopenedWhenDone.insert(key) }
+        } else {
+            if closedByHand.contains(key) { closedByHand.remove(key) }
+            else { closedByHand.insert(key) }
+        }
+    }
+}
+
 enum GroceryAisles {
     /// Store order for a grocery trip — produce first, household last.
     static let groceryOrder: [String] = [

@@ -83,8 +83,8 @@ struct GroceryModeView: View {
     @State private var showAddRecipeOptions = false
     @State private var recipesExpanded = false
     @State private var recipeSearch = ""
-    @State private var collapsedAisles: Set<String> = []
-    @State private var reopenedAisles: Set<String> = []
+    @State private var aisleFolding = SectionFolding<String>()
+    @State private var recipeFolding = SectionFolding<UUID>()
     @State private var showURLInputSheet = false
     @State private var showRecipeBuilder = false
     @State private var showPhotoCapture = false
@@ -1801,16 +1801,36 @@ struct GroceryModeView: View {
             let title = memory.text.components(separatedBy: "\n").first ?? memory.text
             let checkedCount = items.filter { checkedItems.contains($0.id) }.count
 
+            let isDone = checkedCount == items.count && !items.isEmpty
+            let collapsed = recipeFolding.isCollapsed(memory.id, isDone: isDone)
+
             Section {
-                ForEach(items.sorted { !checkedItems.contains($0.id) && checkedItems.contains($1.id) }) { subTask in
-                    recipeIngredientRow(subTask: subTask)
+                if !collapsed {
+                    ForEach(items.sorted { !checkedItems.contains($0.id) && checkedItems.contains($1.id) }) { subTask in
+                        recipeIngredientRow(subTask: subTask)
+                    }
                 }
             } header: {
-                HStack {
-                    Text(title).font(.custom("DMSans-Medium", size: 14)).foregroundColor(.deepNavy).textCase(nil)
-                    Spacer()
-                    Text("\(checkedCount)/\(items.count)").font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                Button {
+                    withAnimation(.spring(duration: 0.25)) { recipeFolding.toggle(memory.id, isDone: isDone) }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(title).font(.custom("DMSans-Medium", size: 14))
+                            .foregroundColor(isDone ? .gray : .deepNavy).textCase(nil)
+                        if isDone {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 12)).foregroundColor(.oceanTeal)
+                        }
+                        Spacer()
+                        Text("\(checkedCount)/\(items.count)")
+                            .font(.custom("DMMono-Regular", size: 12)).foregroundColor(.gray)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.gray.opacity(0.5))
+                            .rotationEffect(.degrees(collapsed ? -90 : 0))
+                    }
                 }
+                .buttonStyle(.plain)
             }
         }
 
@@ -1830,7 +1850,7 @@ struct GroceryModeView: View {
             if let items = mergedByAisle[aisle] {
                 let checkedInAisle = items.filter { isMergedChecked($0) }.count
                 let isDone = checkedInAisle == items.count && !items.isEmpty
-                let collapsed = isAisleCollapsed(aisle, isDone: isDone)
+                let collapsed = aisleFolding.isCollapsed(aisle, isDone: isDone)
 
                 Section {
                     if !collapsed {
@@ -1840,7 +1860,7 @@ struct GroceryModeView: View {
                     }
                 } header: {
                     Button {
-                        withAnimation(.spring(duration: 0.25)) { toggleAisle(aisle, isDone: isDone) }
+                        withAnimation(.spring(duration: 0.25)) { aisleFolding.toggle(aisle, isDone: isDone) }
                     } label: {
                         HStack(spacing: 8) {
                             Text(aisle).font(.custom("DMSans-Medium", size: 14))
@@ -1865,24 +1885,6 @@ struct GroceryModeView: View {
 
         Section {
             addItemRow(text: $shoppingNewItemText, onAdd: addShoppingExtraItem)
-        }
-    }
-
-    // An aisle you've finished folds away on its own, so what's left fills the screen
-    // instead of sitting under everything already in the trolley. Two sets rather than
-    // one so nothing has to be written while the list is drawing: `collapsedAisles` is
-    // the ones you closed by hand, `reopenedAisles` the finished ones you pulled back open.
-    private func isAisleCollapsed(_ aisle: String, isDone: Bool) -> Bool {
-        isDone ? !reopenedAisles.contains(aisle) : collapsedAisles.contains(aisle)
-    }
-
-    private func toggleAisle(_ aisle: String, isDone: Bool) {
-        if isDone {
-            if reopenedAisles.contains(aisle) { reopenedAisles.remove(aisle) }
-            else { reopenedAisles.insert(aisle) }
-        } else {
-            if collapsedAisles.contains(aisle) { collapsedAisles.remove(aisle) }
-            else { collapsedAisles.insert(aisle) }
         }
     }
 

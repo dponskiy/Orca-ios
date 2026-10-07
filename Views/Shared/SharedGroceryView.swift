@@ -27,8 +27,8 @@ struct SharedGroceryView: View {
     @State private var busyRecipeId: UUID? = nil
     @State private var errorMessage: String? = nil
     @State private var expandedLines: Set<String> = []
-    @State private var collapsedAisles: Set<String> = []
-    @State private var reopenedAisles: Set<String> = []
+    @State private var aisleFolding = SectionFolding<String>()
+    @State private var recipeSearch = ""
     @FocusState private var addFocused: Bool
 
     // MARK: Data
@@ -117,7 +117,7 @@ struct SharedGroceryView: View {
                         ForEach(groupedLines, id: \.aisle) { group in
                             let checked = group.lines.filter(\.isChecked).count
                             let isDone = checked == group.lines.count && !group.lines.isEmpty
-                            let collapsed = !group.aisle.isEmpty && isAisleCollapsed(group.aisle, isDone: isDone)
+                            let collapsed = !group.aisle.isEmpty && aisleFolding.isCollapsed(group.aisle, isDone: isDone)
 
                             Section {
                                 if !collapsed {
@@ -127,7 +127,7 @@ struct SharedGroceryView: View {
                                 if !group.aisle.isEmpty {
                                     Button {
                                         withAnimation(.spring(duration: 0.25)) {
-                                            toggleAisle(group.aisle, isDone: isDone)
+                                            aisleFolding.toggle(group.aisle, isDone: isDone)
                                         }
                                     } label: {
                                         HStack(spacing: 8) {
@@ -261,8 +261,11 @@ struct SharedGroceryView: View {
                 if recipes.isEmpty {
                     Text("No recipes yet. Anything you save with an ingredient list shows up here for everyone.")
                         .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.gray)
+                } else if filteredRecipes.isEmpty {
+                    Text("Nothing matches “\(recipeSearch)”")
+                        .font(.custom("DMSans-Regular", size: 14)).foregroundColor(.gray)
                 } else {
-                    ForEach(recipes) { recipe in
+                    ForEach(filteredRecipes) { recipe in
                         let selected = selectedRecipeIds.contains(recipe.id)
                         Button { toggleRecipe(recipe, currentlySelected: selected) } label: {
                             HStack(spacing: 12) {
@@ -272,8 +275,20 @@ struct SharedGroceryView: View {
                                     Text(recipe.title)
                                         .font(.custom("DMSans-Medium", size: 15))
                                         .foregroundColor(.deepNavy).lineLimit(1)
-                                    Text("\(recipe.ingredients.count) ingredients · \(memberName(recipe.ownerUserId).capitalized)")
-                                        .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
+                                    // When the match is on an ingredient, show it — otherwise a
+                                    // recipe whose title has nothing to do with the search looks
+                                    // like a mistake rather than the point.
+                                    if let matched = matchedIngredient(for: recipe) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "checkmark.circle.fill").font(.system(size: 9))
+                                            Text(matched).lineLimit(1)
+                                        }
+                                        .font(.custom("DMSans-Regular", size: 12))
+                                        .foregroundColor(.oceanTeal)
+                                    } else {
+                                        Text("\(recipe.ingredients.count) ingredients · \(memberName(recipe.ownerUserId).capitalized)")
+                                            .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
+                                    }
                                 }
                                 Spacer()
                                 if busyRecipeId == recipe.id { ProgressView().scaleEffect(0.7) }
@@ -283,6 +298,7 @@ struct SharedGroceryView: View {
                     }
                 }
             }
+            .searchable(text: $recipeSearch, prompt: "Search name or ingredient")
             .navigationTitle("Household recipes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -393,21 +409,21 @@ struct SharedGroceryView: View {
         }
     }
 
-    // An aisle everyone has finished folds away on its own, so what's still to find fills
-    // the screen. Same behaviour as the personal list. Two sets rather than a flag per
-    // aisle so nothing is written while the list is drawing.
-    private func isAisleCollapsed(_ aisle: String, isDone: Bool) -> Bool {
-        isDone ? !reopenedAisles.contains(aisle) : collapsedAisles.contains(aisle)
+    /// Search matches the title or any ingredient, so "pasta" finds Sunday Sauce even
+    /// though the word only appears in what you need to buy for it.
+    private var filteredRecipes: [SharedRecipe] {
+        let query = recipeSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return recipes }
+        return recipes.filter { recipe in
+            recipe.title.lowercased().contains(query)
+                || recipe.ingredients.contains { $0.lowercased().contains(query) }
+        }
     }
 
-    private func toggleAisle(_ aisle: String, isDone: Bool) {
-        if isDone {
-            if reopenedAisles.contains(aisle) { reopenedAisles.remove(aisle) }
-            else { reopenedAisles.insert(aisle) }
-        } else {
-            if collapsedAisles.contains(aisle) { collapsedAisles.remove(aisle) }
-            else { collapsedAisles.insert(aisle) }
-        }
+    private func matchedIngredient(for recipe: SharedRecipe) -> String? {
+        let query = recipeSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty, !recipe.title.lowercased().contains(query) else { return nil }
+        return recipe.ingredients.first { $0.lowercased().contains(query) }
     }
 
     /// Which recipe an item came from, or that someone added it by hand.
