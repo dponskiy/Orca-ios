@@ -78,6 +78,19 @@ struct ChecklistParsingTests {
         Phrasing("remind me to walk the dog feed the cat and water the plants",
                  ["Walk the dog", "Feed the cat", "Water the plants"]),
 
+        // --- A time between "remind me" and "to" must not hide the list ---
+        // Said aloud the time lands mid-opener, and the whole list used to vanish with it
+        Phrasing("remind me at 830pm to vacuum the basement, clean the litter box and buy groceries",
+                 ["Vacuum the basement", "Clean the litter box", "Buy groceries"]),
+        Phrasing("remind me tomorrow to walk the dog, feed the cat and water the plants",
+                 ["Walk the dog", "Feed the cat", "Water the plants"]),
+        Phrasing("remind me on Wednesday to vacuum the basement and clean the litter box",
+                 ["Vacuum the basement", "Clean the litter box"]),
+        Phrasing("set a reminder for 7am to pack lunches and feed the cat",
+                 ["Pack lunches", "Feed the cat"]),
+        // The gap has to say *when*. Here it's a subject, so this is one note, not a list
+        Phrasing("remind me about the gift I want to get Sarah", []),
+
         // --- ...but a verb inside one task must not split it ---
         Phrasing("I need to buy a vacuum cleaner and call mom", ["Buy a vacuum cleaner", "Call mom"]),
         Phrasing("I need to take the car to get washed and pick up milk",

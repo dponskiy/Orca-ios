@@ -578,6 +578,12 @@ class SonarEngine {
             }
         }
 
+        // Said aloud, the time lands where it falls: "remind me at 8:30 to vacuum the
+        // basement, clean the litter box and buy groceries". The phrases above are
+        // matched whole, so a time sitting between "remind me" and "to" hid the entire
+        // list and three chores arrived as a single task.
+        if listStart == nil { listStart = Self.reminderListStart(in: text) }
+
         guard let start = listStart else { return [] }
 
         let remainder = String(text[start...]).trimmingCharacters(in: .whitespaces)
@@ -597,6 +603,40 @@ class SonarEngine {
     }
 
     // MARK: - Checklist helpers
+
+    /// Words that make a gap read as timing rather than as part of what you're saying.
+    private static let whenWords = [
+        "noon", "midnight", "morning", "afternoon", "evening", "night", "tonight",
+        "today", "tomorrow", "weekend", "monday", "tuesday", "wednesday", "thursday",
+        "friday", "saturday", "sunday",
+    ]
+
+    /// Finds where the list starts in "remind me at 8:30 to …", where a time has split
+    /// the opener in two.
+    ///
+    /// Only the pair is matched — a reminder word, then the "to" that follows it — and
+    /// only when what sits between them says *when*. That last part is what keeps
+    /// "remind me about the gift I want to get Sarah" from being read as a list: the gap
+    /// there is a subject, not a time.
+    ///
+    /// Consulted only after every literal phrase has failed, so a list that already
+    /// comes out right cannot be changed by this.
+    private static func reminderListStart(in text: String) -> String.Index? {
+        guard let opener = text.range(of: #"\b(?:remind|reminder|remember)\b"#,
+                                      options: [.regularExpression, .caseInsensitive])
+        else { return nil }
+
+        let rest = text[opener.upperBound...]
+        guard let to = rest.range(of: #"\bto\b"#, options: [.regularExpression, .caseInsensitive]),
+              rest.distance(from: rest.startIndex, to: to.lowerBound) <= 30
+        else { return nil }
+
+        let gap = rest[..<to.lowerBound].lowercased()
+        let saysWhen = gap.rangeOfCharacter(from: .decimalDigits) != nil
+            || whenWords.contains { gap.range(of: #"\b\#($0)\b"#, options: .regularExpression) != nil }
+
+        return saysWhen ? to.upperBound : nil
+    }
 
     /// Splits a list into items. Every piece is kept whatever verb it starts with —
     /// "vacuum basement", "go grocery shopping", "eggs" — and only asides and bare timing
