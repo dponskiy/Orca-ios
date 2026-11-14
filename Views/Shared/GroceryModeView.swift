@@ -83,6 +83,12 @@ struct GroceryModeView: View {
     @State private var showAddRecipeOptions = false
     @State private var recipesExpanded = false
     @State private var recipeSearch = ""
+
+    // Adding items runs in a streak — you rattle off everything you remembered at once.
+    // Return adds the item and holds the keyboard on an empty field for the next one,
+    // rather than packing up after each. Tapping away is how you say you're finished.
+    @FocusState private var shoppingAddFocused: Bool
+    @FocusState private var builderAddFocused: Bool
     @State private var aisleFolding = SectionFolding<String>()
     @State private var recipeFolding = SectionFolding<UUID>()
     @State private var showURLInputSheet = false
@@ -1231,7 +1237,12 @@ struct GroceryModeView: View {
                         Image(systemName: "plus.circle").font(.system(size: 18)).foregroundColor(.oceanTeal.opacity(0.6))
                         TextField(addItemPlaceholder, text: $newItemText)
                             .font(.custom("DMSans-Regular", size: 15)).foregroundColor(.deepNavy)
-                            .submitLabel(.done).onSubmit { addExtraItem() }
+                            .focused($builderAddFocused)
+                            .submitLabel(.next)
+                            .onSubmit {
+                                addExtraItem()
+                                DispatchQueue.main.async { builderAddFocused = true }
+                            }
                         if !newItemText.isEmpty {
                             Button { addExtraItem() } label: {
                                 Text("Add").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal)
@@ -1977,7 +1988,14 @@ struct GroceryModeView: View {
             Image(systemName: "plus.circle").font(.system(size: 18)).foregroundColor(.oceanTeal.opacity(0.6))
             TextField(addItemPlaceholder, text: text)
                 .font(.custom("DMSans-Regular", size: 15)).foregroundColor(.deepNavy)
-                .submitLabel(.done).onSubmit { onAdd() }
+                .focused($shoppingAddFocused)
+                .submitLabel(.next)
+                .onSubmit {
+                    onAdd()
+                    // The keyboard resigns right after onSubmit, so asking for focus now
+                    // would be undone a moment later. Claim it once that has happened.
+                    DispatchQueue.main.async { shoppingAddFocused = true }
+                }
             if !text.wrappedValue.isEmpty {
                 Button { onAdd() } label: {
                     Text("Add").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal)

@@ -440,8 +440,13 @@ struct SharedGroceryView: View {
             TextField("Add an item...", text: $newItemText)
                 .font(.custom("DMSans-Regular", size: 15))
                 .focused($addFocused)
-                .submitLabel(.done)
-                .onSubmit { addExtra() }
+                .submitLabel(.next)
+                .onSubmit {
+                    addExtra()
+                    // Hold the keyboard for the next item; the resign happens just after
+                    // onSubmit, so claiming focus has to wait for it.
+                    DispatchQueue.main.async { addFocused = true }
+                }
             if !newItemText.isEmpty {
                 Button { addExtra() } label: {
                     Text("Add").font(.custom("DMSans-Medium", size: 13)).foregroundColor(.oceanTeal)

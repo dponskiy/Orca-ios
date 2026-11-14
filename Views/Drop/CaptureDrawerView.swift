@@ -29,9 +29,9 @@ struct CaptureDrawerView: View {
             
             HStack(spacing: 32) {
                 captureOption(icon: "mic.fill", label: "Voice", mode: .voice)
-                captureOption(icon: "camera.fill", label: "Screenshot", mode: .screenshot)
-                captureOption(icon: "keyboard", label: "Type", mode: .typed)
                 captureOption(icon: "fork.knife", label: "Recipe", mode: .recipe)
+                captureOption(icon: "keyboard", label: "Type", mode: .typed)
+                captureOption(icon: "camera.fill", label: "Screenshot", mode: .screenshot)
             }
             .padding(.vertical, 24)
             
