@@ -20,8 +20,14 @@ struct ShowcaseItem: Identifiable, Equatable {
 
 // MARK: - Colors
 
-private let roomBg  = Color(red: 0.032, green: 0.024, blue: 0.059)  // deep indigo-black
-private let caseBg  = Color(red: 0.067, green: 0.060, blue: 0.118)  // display-case interior
+// The gallery was a dark room; it now matches the media shelves — warm paper, light
+// oak, ink instead of white. Same furniture, lights on. The hold-to-spotlight gesture
+// still dims the room, because a torch beam needs somewhere dark to fall.
+private let roomBg = cafeBg                                           // warm paper
+private let caseBg = Color(red: 0.937, green: 0.906, blue: 0.859)     // linen, the case interior
+private let galleryInk     = inkPrimary                               // warm charcoal
+private let galleryInkSoft = inkMuted
+private let galleryLine    = inkPrimary.opacity(0.12)                 // hairlines and edges
 
 // MARK: - Gallery card
 
@@ -38,7 +44,7 @@ struct ShowcaseCard: View {
                 artImage
                 // Spotlight: soft light from top-center, simulates gallery downlighting
                 LinearGradient(
-                    colors: [Color.white.opacity(0.08), Color.clear],
+                    colors: [Color.white.opacity(0.55), Color.clear],
                     startPoint: UnitPoint(x: 0.5, y: 0),
                     endPoint: UnitPoint(x: 0.5, y: 0.55)
                 )
@@ -53,7 +59,7 @@ struct ShowcaseCard: View {
 
             // Hairline — the edge of the display case lid
             Rectangle()
-                .fill(Color.white.opacity(0.07))
+                .fill(galleryLine)
                 .frame(height: 0.5)
 
             // Museum label
@@ -78,7 +84,7 @@ struct ShowcaseCard: View {
                             }
                         }
                     }
-                    .foregroundColor(.white.opacity(0.86))
+                    .foregroundColor(galleryInk)
                     // In compact (4-col) show only set/subtitle; in normal also append the badge (rarity etc)
                     Group {
                         if !isCompact, let badge = item.badge {
@@ -88,7 +94,7 @@ struct ShowcaseCard: View {
                         }
                     }
                     .font(.custom("DMMono-Regular", size: 8))
-                    .foregroundColor(.white.opacity(0.22))
+                    .foregroundColor(galleryInkSoft)
                     .tracking(0.5)
                     .lineLimit(1)
                 }
@@ -115,10 +121,10 @@ struct ShowcaseCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
+                .strokeBorder(galleryLine, lineWidth: 0.5)
         )
         // Heavier shadow — items float off the wall
-        .shadow(color: .black.opacity(0.55), radius: 12, y: 6)
+        .shadow(color: .black.opacity(0.10), radius: 8, y: 4)
     }
 
     @ViewBuilder
@@ -258,11 +264,11 @@ struct CollectionShowcaseView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
-                        .foregroundColor(.white.opacity(0.55))
+                        .foregroundColor(galleryInkSoft)
                 }
             }
             .toolbarBackground(roomBg, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
         // Presented in place, not as a sheet. The gallery is already a
         // fullScreenCover inside a sheet, and a third nested modal was being torn
@@ -280,7 +286,7 @@ struct CollectionShowcaseView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 40)
-                        .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
+                        .shadow(color: .black.opacity(0.18), radius: 20, y: 8)
                 }
                 .transition(.opacity)
             }
@@ -326,11 +332,11 @@ struct CollectionShowcaseView: View {
             Text("Hold anywhere for spotlight")
                 .font(.custom("DMSans-Regular", size: 12))
         }
-        .foregroundColor(.white.opacity(0.45))
+        .foregroundColor(galleryInkSoft)
         .padding(.horizontal, 12).padding(.vertical, 6)
-        .background(Color.white.opacity(0.06))
+        .background(shelfWood.opacity(0.18))
         .clipShape(Capsule())
-        .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.5))
+        .overlay(Capsule().stroke(galleryLine, lineWidth: 0.5))
         .padding(.top, 4)
         .transition(.opacity)
     }
@@ -383,13 +389,13 @@ struct CollectionShowcaseView: View {
     private var shelfLedge: some View {
         VStack(spacing: 0) {
             Rectangle()
-                .fill(Color.white.opacity(0.16))
+                .fill(Color.white.opacity(0.70))
                 .frame(height: 1.5)
             Rectangle()
-                .fill(Color(red: 0.118, green: 0.106, blue: 0.196))
+                .fill(shelfWood)
                 .frame(height: 8)
             LinearGradient(
-                colors: [Color.black.opacity(0.45), Color.clear],
+                colors: [Color.black.opacity(0.16), Color.clear],
                 startPoint: .top, endPoint: .bottom
             )
             .frame(height: 16)
@@ -439,7 +445,7 @@ struct CollectionShowcaseView: View {
         if spotlightActive {
             GeometryReader { geo in
                 RadialGradient(
-                    colors: [.clear, .clear, Color.black.opacity(0.72)],
+                    colors: [.clear, .clear, Color.black.opacity(0.62)],
                     center: UnitPoint(
                         x: spotlightLocation.x / max(geo.size.width, 1),
                         y: spotlightLocation.y / max(geo.size.height, 1)
@@ -545,7 +551,7 @@ struct CollectionShowcaseView: View {
             }
             .frame(width: width, height: height)
             .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(galleryLine, lineWidth: 0.5))
             .shadow(color: .black.opacity(0.7), radius: 18, y: 8)
 
             VStack(spacing: 1) {
@@ -580,21 +586,21 @@ struct CollectionShowcaseView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("GALLERY")
                         .font(.custom("DMMono-Regular", size: 9))
-                        .foregroundColor(.white.opacity(0.18))
+                        .foregroundColor(galleryInkSoft)
                         .tracking(3)
                     Text(categoryTitle)
                         .font(.custom("DMSans-Medium", size: 26))
-                        .foregroundColor(.white.opacity(0.85))
+                        .foregroundColor(galleryInk)
                 }
                 Spacer()
                 // Ghost count — large, very faint
                 Text("\(filteredItems.count)")
                     .font(.system(size: 52, weight: .thin).monospacedDigit())
-                    .foregroundColor(.white.opacity(0.06))
+                    .foregroundColor(inkPrimary.opacity(0.09))
             }
             // Room divider
             Rectangle()
-                .fill(Color.white.opacity(0.07))
+                .fill(galleryLine)
                 .frame(height: 0.5)
         }
         .padding(.horizontal, 18)
@@ -634,7 +640,7 @@ struct CollectionShowcaseView: View {
             .padding(.horizontal, 16).padding(.vertical, 11)
         }
         .background(roomBg)
-        .overlay(Rectangle().fill(Color.white.opacity(0.07)).frame(height: 0.5), alignment: .bottom)
+        .overlay(Rectangle().fill(galleryLine).frame(height: 0.5), alignment: .bottom)
     }
 
     private var typeFilterBar: some View {
@@ -653,7 +659,7 @@ struct CollectionShowcaseView: View {
             .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 10)
         }
         .background(roomBg)
-        .overlay(Rectangle().fill(Color.white.opacity(0.05)).frame(height: 0.5), alignment: .bottom)
+        .overlay(Rectangle().fill(galleryLine).frame(height: 0.5), alignment: .bottom)
     }
 
     // Minimal bar — just the grid-size control
@@ -667,16 +673,16 @@ struct CollectionShowcaseView: View {
                     } label: {
                         Image(systemName: gridIcon(for: cols))
                             .font(.system(size: 12, weight: columnCount == cols ? .semibold : .regular))
-                            .foregroundColor(columnCount == cols ? .white.opacity(0.80) : .white.opacity(0.22))
+                            .foregroundColor(columnCount == cols ? galleryInk : galleryInkSoft)
                             .frame(width: 28, height: 26)
-                            .background(columnCount == cols ? Color.white.opacity(0.09) : Color.clear)
+                            .background(columnCount == cols ? shelfWood.opacity(0.35) : Color.clear)
                             .clipShape(RoundedRectangle(cornerRadius: 5))
                     }
                     .buttonStyle(.plain)
                 }
 
                 Rectangle()
-                    .fill(Color.white.opacity(0.10))
+                    .fill(galleryLine)
                     .frame(width: 0.5, height: 14)
                     .padding(.horizontal, 4)
 
@@ -686,9 +692,9 @@ struct CollectionShowcaseView: View {
                 } label: {
                     Image(systemName: "circle.grid.3x3.fill")
                         .font(.system(size: 11, weight: isWallMode ? .semibold : .regular))
-                        .foregroundColor(isWallMode ? .white.opacity(0.80) : .white.opacity(0.22))
+                        .foregroundColor(isWallMode ? galleryInk : galleryInkSoft)
                         .frame(width: 28, height: 26)
-                        .background(isWallMode ? Color.white.opacity(0.09) : Color.clear)
+                        .background(isWallMode ? shelfWood.opacity(0.35) : Color.clear)
                         .clipShape(RoundedRectangle(cornerRadius: 5))
                 }
                 .buttonStyle(.plain)
@@ -712,7 +718,7 @@ struct CollectionShowcaseView: View {
             Text(categoryEmoji).font(.system(size: 40)).opacity(0.18)
             Text("Nothing here")
                 .font(.custom("DMSans-Medium", size: 15))
-                .foregroundColor(.white.opacity(0.20))
+                .foregroundColor(galleryInkSoft)
             Spacer()
         }
     }
@@ -724,13 +730,13 @@ struct CollectionShowcaseView: View {
         Button(action: action) {
             Text(label)
                 .font(.custom("DMSans-Medium", size: 12))
-                .foregroundColor(selected ? .white.opacity(0.88) : .white.opacity(0.36))
+                .foregroundColor(selected ? galleryInk : galleryInkSoft)
                 .padding(.horizontal, 11).padding(.vertical, 5)
-                .background(selected ? Color.white.opacity(0.12) : Color.clear)
+                .background(selected ? shelfWood.opacity(0.35) : Color.clear)
                 .clipShape(Capsule())
                 .overlay(
                     Capsule().stroke(
-                        selected ? Color.white.opacity(0.16) : Color.white.opacity(0.07),
+                        selected ? shelfWood.opacity(0.60) : galleryLine,
                         lineWidth: 0.5
                     )
                 )
@@ -744,18 +750,18 @@ struct CollectionShowcaseView: View {
                 if let emoji = typeEmoji(label) { Text(emoji).font(.system(size: 10)) }
                 Text(label)
                     .font(.custom("DMSans-Medium", size: 12))
-                    .foregroundColor(selected ? .white.opacity(0.92) : .white.opacity(0.36))
+                    .foregroundColor(selected ? galleryInk : galleryInkSoft)
             }
             .padding(.horizontal, 10).padding(.vertical, 5)
             .background(selected ? typeColor(label).opacity(0.28) : Color.clear)
             .clipShape(Capsule())
-            .overlay(Capsule().stroke(selected ? typeColor(label).opacity(0.4) : Color.white.opacity(0.07), lineWidth: 0.5))
+            .overlay(Capsule().stroke(selected ? typeColor(label).opacity(0.5) : galleryLine, lineWidth: 0.5))
         }
         .buttonStyle(.plain)
     }
 
     private var thinDivider: some View {
-        Rectangle().fill(Color.white.opacity(0.10)).frame(width: 0.5, height: 16)
+        Rectangle().fill(galleryLine).frame(width: 0.5, height: 16)
     }
 
     // MARK: Type helpers
