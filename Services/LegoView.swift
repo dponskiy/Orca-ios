@@ -375,6 +375,15 @@ struct LegoSetBrowserView: View {
                 }
             } else {
                 ScrollView {
+                    // Tapping a card cycles it, which nothing on screen said before —
+                    // people tapped once, got "owned", and had no idea want or removing
+                    // were a second and third tap away.
+                    Text("Tap a set to own it · tap again for want · once more to remove")
+                        .font(.custom("DMSans-Regular", size: 11))
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 10)
+
                     LazyVGrid(columns: columns, spacing: 10) {
                         ForEach(sets) { set in setCard(set: set) }
                     }
@@ -603,7 +612,16 @@ struct LegoSearchView: View {
     @State private var query = ""
     @FocusState private var focused: Bool
 
+    /// What this sheet has filed since it opened, so a card can say so without waiting
+    /// on the query behind `addedNums`.
+    @State private var justAdded: [String: String] = [:]
+
     private var addedNums: Set<String> { Set(allLegoSets.map { $0.setNum }) }
+
+    /// "owned", "want", or nil when the set isn't in the collection.
+    private func status(of setNum: String) -> String? {
+        justAdded[setNum] ?? allLegoSets.first { $0.setNum == setNum }?.statusRaw
+    }
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
@@ -660,7 +678,7 @@ struct LegoSearchView: View {
     }
 
     private func searchResultCard(set: RBSet) -> some View {
-        let alreadyAdded = addedNums.contains(set.setNum)
+        let currentStatus = status(of: set.setNum)
 
         return VStack(spacing: 0) {
             AsyncImage(url: set.imageURL) { phase in
@@ -679,10 +697,20 @@ struct LegoSearchView: View {
                 Text(set.setNum).font(.custom("DMMono-Regular", size: 9)).foregroundColor(.gray)
                 Text("\(set.numParts) pcs · \(set.year)").font(.custom("DMMono-Regular", size: 9)).foregroundColor(.gray)
 
-                if alreadyAdded {
-                    Text("Added ✓").font(.custom("DMSans-Medium", size: 10)).foregroundColor(.oceanTeal)
-                        .frame(maxWidth: .infinity).padding(.vertical, 4)
-                        .background(Color.oceanTeal.opacity(0.1)).clipShape(RoundedRectangle(cornerRadius: 6))
+                if let currentStatus {
+                    let owned = currentStatus == "owned"
+                    // Say which shelf it landed on, not just that something happened —
+                    // and stay tappable, so the wrong button is one tap to put right.
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark").font(.system(size: 9, weight: .bold))
+                        Text(owned ? "Owned" : "Want").font(.custom("DMSans-Medium", size: 10))
+                    }
+                    .foregroundColor(owned ? .oceanTeal : .coral)
+                    .frame(maxWidth: .infinity).padding(.vertical, 4)
+                    .background((owned ? Color.oceanTeal : Color.coral).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .contentShape(Rectangle())
+                    .onTapGesture { addSet(set, status: owned ? "want" : "owned") }
                 } else {
                     HStack(spacing: 6) {
                         addBtn("Own", color: .oceanTeal) { addSet(set, status: "owned") }
@@ -708,6 +736,23 @@ struct LegoSearchView: View {
     }
 
     private func addSet(_ set: RBSet, status: String) {
+        // Say so on the card straight away. The query behind `addedNums` doesn't refresh
+        // while this sheet is up, so the card used to sit there unchanged however many
+        // times you pressed Own — the set was saved every time, just never acknowledged.
+        // The theme browser has always tracked its own status for the same reason.
+        justAdded[set.setNum] = status
+
+        // Pressing it twice shouldn't file the same set twice, and pressing the other
+        // button should move it rather than leave two copies disagreeing.
+        if let existing = allLegoSets.first(where: { $0.setNum == set.setNum }) {
+            existing.statusRaw = status
+            try? modelContext.save()
+            if let userId = authService.userId {
+                Task { await SupabaseSyncService.shared.pushLegoSet(existing, userId: userId) }
+            }
+            return
+        }
+
         let themeName = service.themes.first(where: { $0.id == set.themeId })?.name ?? "Lego"
         let legoSet = LegoSet(
             setNum: set.setNum,
