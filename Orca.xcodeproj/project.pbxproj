@@ -1128,6 +1128,7 @@
 				INFOPLIST_FILE = Orca/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Orca DEV";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Orca adds your memories and shared events with dates to your iPhone Calendar so they show up in Calendar.app, Siri, and your lock screen.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Orca uses your camera to capture screenshots as memories";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Orca uses your location to show local weather";
@@ -1148,7 +1149,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 3.4;
+				MARKETING_VERSION = 3.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca.dev;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1194,6 +1195,7 @@
 				INFOPLIST_FILE = Orca/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Orca;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Orca adds your memories and shared events with dates to your iPhone Calendar so they show up in Calendar.app, Siri, and your lock screen.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Orca uses your camera to capture screenshots as memories";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Orca uses your location to show local weather";
@@ -1214,7 +1216,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 3.4;
+				MARKETING_VERSION = 3.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dponskiy.Orca;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
