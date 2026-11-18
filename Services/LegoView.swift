@@ -612,15 +612,16 @@ struct LegoSearchView: View {
     @State private var query = ""
     @FocusState private var focused: Bool
 
-    /// What this sheet has filed since it opened, so a card can say so without waiting
-    /// on the query behind `addedNums`.
+    /// What this sheet has filed since it opened, so a card can answer a tap without
+    /// waiting on `allLegoSets`, which doesn't refresh while the sheet is up.
     @State private var justAdded: [String: String] = [:]
 
-    private var addedNums: Set<String> { Set(allLegoSets.map { $0.setNum }) }
-
-    /// "owned", "want", or nil when the set isn't in the collection.
+    /// "owned", "want", or nil when the set isn't in the collection. An empty string in
+    /// `justAdded` means removed just now — the query can still be holding the old row,
+    /// and without the marker the card would spring straight back to Want.
     private func status(of setNum: String) -> String? {
-        justAdded[setNum] ?? allLegoSets.first { $0.setNum == setNum }?.statusRaw
+        if let local = justAdded[setNum] { return local.isEmpty ? nil : local }
+        return allLegoSets.first { $0.setNum == setNum }?.statusRaw
     }
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
@@ -656,6 +657,12 @@ struct LegoSearchView: View {
                     Spacer()
                 } else {
                     ScrollView {
+                        Text("Tap a set to own it · tap again for want · once more to remove")
+                            .font(.custom("DMSans-Regular", size: 11))
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity)
+                            .padding(.bottom, 10)
+
                         LazyVGrid(columns: columns, spacing: 10) {
                             ForEach(service.searchResults) { set in
                                 searchResultCard(set: set)
@@ -679,43 +686,46 @@ struct LegoSearchView: View {
 
     private func searchResultCard(set: RBSet) -> some View {
         let currentStatus = status(of: set.setNum)
+        let isOwned = currentStatus == "owned"
+        let accent: Color = isOwned ? .oceanTeal : .coral
 
         return VStack(spacing: 0) {
-            AsyncImage(url: set.imageURL) { phase in
-                if case .success(let img) = phase {
-                    img.resizable().aspectRatio(contentMode: .fill)
-                } else {
-                    ZStack { Color.mist; Image(systemName: "cube.box").foregroundColor(.gray.opacity(0.3)) }
+            ZStack(alignment: .topTrailing) {
+                AsyncImage(url: set.imageURL) { phase in
+                    if case .success(let img) = phase {
+                        img.resizable().aspectRatio(contentMode: .fill)
+                    } else {
+                        ZStack { Color.mist; Image(systemName: "cube.box").foregroundColor(.gray.opacity(0.3)) }
+                    }
+                }
+                .frame(maxWidth: .infinity).frame(height: 90)
+                .clipped()
+
+                if currentStatus != nil {
+                    Image(systemName: isOwned ? "checkmark.circle.fill" : "heart.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(accent)
+                        .padding(5)
+                        .background(Color.white)
+                        .clipShape(Circle())
+                        .padding(5)
                 }
             }
-            .frame(maxWidth: .infinity).frame(height: 90)
-            .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(currentStatus == nil ? Color.clear : accent, lineWidth: 2)
+            )
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(set.name).font(.custom("DMSans-Medium", size: 11)).foregroundColor(.deepNavy).lineLimit(2)
                 Text(set.setNum).font(.custom("DMMono-Regular", size: 9)).foregroundColor(.gray)
                 Text("\(set.numParts) pcs · \(set.year)").font(.custom("DMMono-Regular", size: 9)).foregroundColor(.gray)
 
-                if let currentStatus {
-                    let owned = currentStatus == "owned"
-                    // Say which shelf it landed on, not just that something happened —
-                    // and stay tappable, so the wrong button is one tap to put right.
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark").font(.system(size: 9, weight: .bold))
-                        Text(owned ? "Owned" : "Want").font(.custom("DMSans-Medium", size: 10))
-                    }
-                    .foregroundColor(owned ? .oceanTeal : .coral)
-                    .frame(maxWidth: .infinity).padding(.vertical, 4)
-                    .background((owned ? Color.oceanTeal : Color.coral).opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .contentShape(Rectangle())
-                    .onTapGesture { addSet(set, status: owned ? "want" : "owned") }
-                } else {
-                    HStack(spacing: 6) {
-                        addBtn("Own", color: .oceanTeal) { addSet(set, status: "owned") }
-                        addBtn("Want", color: .coral) { addSet(set, status: "want") }
-                    }
+                if currentStatus != nil {
+                    Text(isOwned ? "Owned" : "Want")
+                        .font(.custom("DMSans-Medium", size: 10))
+                        .foregroundColor(accent)
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 6)
@@ -723,51 +733,67 @@ struct LegoSearchView: View {
         .background(Color.white)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+        .contentShape(Rectangle())
+        .onTapGesture { cycleSearchResult(set) }
     }
 
-    private func addBtn(_ label: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label).font(.custom("DMSans-Medium", size: 10)).foregroundColor(color)
-                .frame(maxWidth: .infinity).padding(.vertical, 5)
-                .background(color.opacity(0.1)).clipShape(RoundedRectangle(cornerRadius: 6))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
+    /// Own → Want → gone, the same cycle as browsing a theme.
+    ///
+    /// The card used to carry two buttons instead, which looked broken: the state came
+    /// from the query behind `allLegoSets`, and that doesn't refresh while this sheet is
+    /// up, so nothing changed however many times you pressed. Each press filed the set
+    /// again, so a set pressed three times went in three times. Searching and browsing
+    /// now work the same way, and `justAdded` is what makes the card answer at once.
+    private func cycleSearchResult(_ set: RBSet) {
+        let existing = allLegoSets.first { $0.setNum == set.setNum }
 
-    private func addSet(_ set: RBSet, status: String) {
-        // Say so on the card straight away. The query behind `addedNums` doesn't refresh
-        // while this sheet is up, so the card used to sit there unchanged however many
-        // times you pressed Own — the set was saved every time, just never acknowledged.
-        // The theme browser has always tracked its own status for the same reason.
-        justAdded[set.setNum] = status
-
-        // Pressing it twice shouldn't file the same set twice, and pressing the other
-        // button should move it rather than leave two copies disagreeing.
-        if let existing = allLegoSets.first(where: { $0.setNum == set.setNum }) {
-            existing.statusRaw = status
+        switch status(of: set.setNum) {
+        case nil:
+            justAdded[set.setNum] = "owned"
+            // Something already saved but not shown by the query — move it, don't double it
+            if let existing {
+                existing.statusRaw = "owned"
+                try? modelContext.save()
+                if let userId = authService.userId {
+                    Task { await SupabaseSyncService.shared.pushLegoSet(existing, userId: userId) }
+                }
+                return
+            }
+            let themeName = service.themes.first(where: { $0.id == set.themeId })?.name ?? "Lego"
+            let legoSet = LegoSet(
+                setNum: set.setNum,
+                name: set.name,
+                year: set.year,
+                themeId: set.themeId,
+                themeName: themeName,
+                numParts: set.numParts,
+                imageURL: set.imageURL?.absoluteString ?? ""
+            )
+            legoSet.statusRaw = "owned"
+            modelContext.insert(legoSet)
             try? modelContext.save()
             if let userId = authService.userId {
-                Task { await SupabaseSyncService.shared.pushLegoSet(existing, userId: userId) }
+                Task { await SupabaseSyncService.shared.pushLegoSet(legoSet, userId: userId) }
             }
-            return
-        }
 
-        let themeName = service.themes.first(where: { $0.id == set.themeId })?.name ?? "Lego"
-        let legoSet = LegoSet(
-            setNum: set.setNum,
-            name: set.name,
-            year: set.year,
-            themeId: set.themeId,
-            themeName: themeName,
-            numParts: set.numParts,
-            imageURL: set.imageURL?.absoluteString ?? ""
-        )
-        legoSet.statusRaw = status
-        modelContext.insert(legoSet)
-        try? modelContext.save()
-        if let userId = authService.userId {
-            Task { await SupabaseSyncService.shared.pushLegoSet(legoSet, userId: userId) }
+        case "owned":
+            justAdded[set.setNum] = "want"
+            if let existing {
+                existing.statusRaw = "want"
+                try? modelContext.save()
+                if let userId = authService.userId {
+                    Task { await SupabaseSyncService.shared.pushLegoSet(existing, userId: userId) }
+                }
+            }
+
+        default:
+            justAdded[set.setNum] = ""
+            if let existing {
+                let id = existing.id
+                modelContext.delete(existing)
+                try? modelContext.save()
+                Task { await SupabaseSyncService.shared.deleteLegoSet(id: id) }
+            }
         }
     }
 }
