@@ -651,8 +651,23 @@ class SonarEngine {
         // "and" before a new task separates; "and" inside one ("milk and eggs",
         // "mac and cheese") is part of that item.
         let verbPattern = verbs.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
+
+        // A word missing from the verb list is still a verb when it takes an object:
+        // "and cut my nails", "and trim the hedges", "and defrost the chicken". The
+        // determiner is the tell, and it's what the compounds lack — "milk and eggs",
+        // "mac and cheese" — so those still stay whole.
+        //
+        // Without this the list split on the order things were said in: "cut my nails
+        // and make lunch" gave two items because "make" was listed, while "make lunch
+        // and cut my nails" gave none, because "cut" wasn't. Verb lists will always
+        // have a next missing word; taking an object is a property of the sentence.
+        //
+        // "his", "her" and "their" are left out: they usually carry on the same task
+        // ("call mom and tell her the news") rather than starting a new one.
+        let takesAnObject = #"[A-Za-z]+\s+(?:my|the|a|an|our|your)\b"#
+
         let split = list.replacingOccurrences(
-            of: #"\s+and\s+(?:then\s+|also\s+)?(?=(?:"# + verbPattern + #")(?![A-Za-z]))"#,
+            of: #"\s+and\s+(?:then\s+|also\s+)?(?=(?:(?:"# + verbPattern + #")(?![A-Za-z])|"# + takesAnObject + #"))"#,
             with: ",",
             options: [.regularExpression, .caseInsensitive])
 

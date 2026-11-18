@@ -78,6 +78,22 @@ struct ChecklistParsingTests {
         Phrasing("remind me to walk the dog feed the cat and water the plants",
                  ["Walk the dog", "Feed the cat", "Water the plants"]),
 
+        // --- The order items are said in must not decide whether the list splits ---
+        // The same two chores, both ways round. "cut" was not a known verb, so the list
+        // split when it came first and silently didn't when it came second.
+        Phrasing("today at 1:30 I need to cut my nails and make lunch",
+                 ["Cut my nails", "Make lunch"]),
+        Phrasing("tonight at 7pm I need to make lunch and cut my nails",
+                 ["Make lunch", "Cut my nails"]),
+        // A verb nobody listed is still a task when it takes an object
+        Phrasing("I need to make lunch and trim the hedges",
+                 ["Make lunch", "Trim the hedges"]),
+        Phrasing("I need to call mom and defrost the chicken",
+                 ["Call mom", "Defrost the chicken"]),
+        // ...while things that belong together stay whole
+        Phrasing("I need to make lunch and pick up milk and eggs",
+                 ["Make lunch", "Pick up milk and eggs"]),
+
         // --- A time between "remind me" and "to" must not hide the list ---
         // Said aloud the time lands mid-opener, and the whole list used to vanish with it
         Phrasing("remind me at 830pm to vacuum the basement, clean the litter box and buy groceries",
