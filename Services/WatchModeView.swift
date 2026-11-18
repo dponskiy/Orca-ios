@@ -432,28 +432,49 @@ struct WatchModeView: View {
         }
     }
 
+    /// The counts under Finished filter the shelves, the same as the chips at the top.
+    ///
+    /// They always looked like controls — they take a type, they highlight when that
+    /// type is showing — but there was never a Button here, only `.buttonStyle` and
+    /// `.disabled` on a plain Group, which do nothing on their own. So the pills lit up
+    /// when you used the chips above and ignored you when you pressed them.
+    ///
+    /// Tapping the one already showing goes back to everything; there's no "All" pill
+    /// down here, so that's the way out.
+    @ViewBuilder
     private func statPill(emoji: String, value: String, label: String, type: String?, isActive: Bool) -> some View {
-        Group {
-            HStack(spacing: 6) {
-                Text(emoji).font(.system(size: 12))
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(value)
-                        .font(.custom("DMSans-Medium", size: 13))
-                        .foregroundColor(isActive ? .white : .deepNavy)
-                    Text(label)
-                        .font(.custom("DMSans-Regular", size: 10))
-                        .foregroundColor(isActive ? .white.opacity(0.8) : .gray)
-                }
+        if let type {
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { typeFilter = isActive ? nil : type }
+            } label: {
+                statPillBody(emoji: emoji, value: value, label: label, isActive: isActive)
             }
-            .padding(.horizontal, 11).padding(.vertical, 7)
-            .background(isActive ? Color.oceanTeal : Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(
-                isActive ? Color.oceanTeal : Color.black.opacity(0.07), lineWidth: isActive ? 0 : 0.5))
-            .shadow(color: isActive ? Color.oceanTeal.opacity(0.25) : .clear, radius: 4, y: 2)
+            .buttonStyle(.plain)
+        } else {
+            // The average rating is a readout, not a filter
+            statPillBody(emoji: emoji, value: value, label: label, isActive: isActive)
         }
-        .buttonStyle(.plain)
-        .disabled(type == nil)
+    }
+
+    private func statPillBody(emoji: String, value: String, label: String, isActive: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(emoji).font(.system(size: 12))
+            VStack(alignment: .leading, spacing: 0) {
+                Text(value)
+                    .font(.custom("DMSans-Medium", size: 13))
+                    .foregroundColor(isActive ? .white : .deepNavy)
+                Text(label)
+                    .font(.custom("DMSans-Regular", size: 10))
+                    .foregroundColor(isActive ? .white.opacity(0.8) : .gray)
+            }
+        }
+        .padding(.horizontal, 11).padding(.vertical, 7)
+        .background(isActive ? Color.oceanTeal : Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(
+            isActive ? Color.oceanTeal : Color.black.opacity(0.07), lineWidth: isActive ? 0 : 0.5))
+        .shadow(color: isActive ? Color.oceanTeal.opacity(0.25) : .clear, radius: 4, y: 2)
+        .contentShape(Rectangle())
     }
 
     // MARK: - Completed Row
