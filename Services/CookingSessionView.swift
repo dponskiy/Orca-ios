@@ -26,6 +26,8 @@ struct CookingSessionView: View {
     @State private var addingStep = false
     @State private var newStep = ""
     @FocusState private var newStepFocused: Bool
+    @State private var showTimerPicker = false
+    @State private var pickerMinutes = 10
 
     private var title: String { RecipeDocument.title(in: memory.text) }
     private var allDone: Bool { !steps.isEmpty && done.count == steps.count }
@@ -81,6 +83,7 @@ struct CookingSessionView: View {
         .onChange(of: scenePhase) { _, phase in
             UIApplication.shared.isIdleTimerDisabled = (phase == .active)
         }
+        .sheet(isPresented: $showTimerPicker) { timerPicker }
     }
 
     // MARK: - Ingredients
@@ -150,6 +153,28 @@ struct CookingSessionView: View {
                         .font(.custom("DMMono-Regular", size: 10)).foregroundColor(inkMuted.opacity(0.7))
                 }
                 Spacer()
+
+                // A step with no time in its text still needs a timer sometimes —
+                // "until the onions are soft" is a real instruction.
+                Button { showTimerPicker = true } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "timer").font(.system(size: 11, weight: .medium))
+                        Text("Set a timer").font(.custom("DMSans-Medium", size: 12))
+                    }
+                    .foregroundColor(.oceanTeal)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Color.oceanTeal.opacity(0.10))
+                    .clipShape(Capsule())
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Nothing said the numbers were buttons, so they read as decoration.
+            if !steps.isEmpty && done.isEmpty {
+                Text("Tap a number to check that step off")
+                    .font(.custom("DMSans-Regular", size: 12))
+                    .foregroundColor(inkMuted)
             }
 
             if steps.isEmpty && !addingStep {
@@ -294,6 +319,76 @@ struct CookingSessionView: View {
         memory.text = RecipeDocument.settingSteps(steps, in: memory.text)
         memory.updatedAt = Date()
         try? modelContext.save()
+    }
+
+    // MARK: - Your own timer
+
+    /// Presets first, because most kitchen timers are a round number, and the wheel
+    /// underneath for the ones that aren't.
+    private var timerPicker: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                HStack(spacing: 10) {
+                    ForEach([5, 10, 15, 30], id: \.self) { minutes in
+                        Button {
+                            startTimer(minutes: minutes)
+                        } label: {
+                            Text("\(minutes)m")
+                                .font(.custom("DMSans-Medium", size: 15))
+                                .foregroundColor(.oceanTeal)
+                                .frame(maxWidth: .infinity).padding(.vertical, 12)
+                                .background(Color.oceanTeal.opacity(0.10))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+
+                Picker("Minutes", selection: $pickerMinutes) {
+                    ForEach(1...180, id: \.self) { minute in
+                        Text(minute < 60
+                             ? "\(minute) min"
+                             : (minute % 60 == 0 ? "\(minute / 60) hr" : "\(minute / 60) hr \(minute % 60) min"))
+                            .tag(minute)
+                    }
+                }
+                .pickerStyle(.wheel)
+                .frame(maxHeight: 180)
+
+                Button {
+                    startTimer(minutes: pickerMinutes)
+                } label: {
+                    Text("Start")
+                        .font(.custom("DMSans-Medium", size: 16)).foregroundColor(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(Color.oceanTeal)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+
+                Spacer()
+            }
+            .background(cafeBg.ignoresSafeArea())
+            .navigationTitle("Set a timer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showTimerPicker = false }.foregroundColor(inkMuted)
+                }
+            }
+        }
+        .presentationDetents([.height(420)])
+    }
+
+    private func startTimer(minutes: Int) {
+        showTimerPicker = false
+        Task {
+            _ = await timers.ensurePermission()
+            timers.start(label: "\(minutes) min · \(title)", seconds: minutes * 60)
+        }
     }
 
     // MARK: - Timer bar

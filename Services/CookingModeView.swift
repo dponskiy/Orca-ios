@@ -142,20 +142,31 @@ struct CookingModeView: View {
             cooking = recipe
         } label: {
             VStack(alignment: .leading, spacing: 0) {
-                ZStack {
+                // The name lives up here either way — over the photo when there is one,
+                // filling the space when there isn't. The box below is then free to be
+                // just the facts, instead of repeating the title underneath itself.
+                ZStack(alignment: .bottomLeading) {
                     LinearGradient(colors: [shelfWood.opacity(0.30), shelfWood.opacity(0.14)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
-                    if let data = recipe.imageData, let image = UIImage(data: data) {
-                        Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
-                    } else {
-                        Text(title)
-                            .font(.custom("DMSans-Medium", size: 17))
-                            .foregroundColor(inkPrimary.opacity(0.75))
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(3)
-                            .padding(12)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+
+                    let photo = recipe.imageData.flatMap(UIImage.init(data:))
+                    if let photo {
+                        Image(uiImage: photo)
+                            .resizable().aspectRatio(contentMode: .fill)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .clipped()
+                        // So the name stays readable whatever the photo is doing
+                        LinearGradient(colors: [.clear, .black.opacity(0.55)],
+                                       startPoint: .center, endPoint: .bottom)
                     }
+
+                    Text(title)
+                        .font(.custom("DMSans-Medium", size: photo == nil ? 17 : 15))
+                        .foregroundColor(photo == nil ? inkPrimary.opacity(0.78) : .white)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
+                        .shadow(color: photo == nil ? .clear : .black.opacity(0.4), radius: 3, y: 1)
+                        .padding(12)
                 }
                 .frame(height: 104)
                 .clipped()
@@ -163,22 +174,17 @@ struct CookingModeView: View {
                 // rather than in one migration that hammers a dozen sites at once.
                 .task {
                     guard recipe.imageData == nil,
-                          let source = RecipePhoto.sourceURL(for: recipe),
-                          let data = await RecipePhoto.fetch(from: source) else { return }
+                          let page = RecipePhoto.sourceURL(for: recipe),
+                          let data = await RecipePhoto.fetchFromPage(page) else { return }
                     recipe.imageData = data
                     try? modelContext.save()
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.custom("DMSans-Medium", size: 14))
-                        .foregroundColor(inkPrimary).lineLimit(2)
-                    Text(subtitle(ingredients: count, steps: steps))
-                        .font(.custom("DMMono-Regular", size: 10))
-                        .foregroundColor(inkMuted).lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10).padding(.vertical, 9)
+                Text(subtitle(ingredients: count, steps: steps))
+                    .font(.custom("DMMono-Regular", size: 11))
+                    .foregroundColor(inkMuted).lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10).padding(.vertical, 9)
             }
             .frame(width: width)
             .background(Color.white.opacity(0.72))

@@ -48,6 +48,61 @@ enum RecipePhoto {
         return url
     }
 
+    /// Finds the picture on a recipe page and brings it back.
+    ///
+    /// A recipe stores the page it came from, not the photo, so a card filling itself in
+    /// has to read the page first. Handing that page straight to `fetch` downloads HTML
+    /// and quietly makes nothing of it, which is exactly what the first version did.
+    ///
+    /// The recipe's own structured image is preferred over the page's `og:image`: the
+    /// first is the dish, the second is whatever the site wants shown when the page is
+    /// shared, which on a blog is sometimes the logo.
+    static func fetchFromPage(_ pageURL: String) async -> Data? {
+        guard let url = URL(string: pageURL), url.scheme?.hasPrefix("http") == true else { return nil }
+
+        var request = URLRequest(url: url, timeoutInterval: 15)
+        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode ?? 0 < 400,
+              let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1),
+              let found = imageURL(inHTML: html, page: url)
+        else { return nil }
+
+        return await fetch(from: found)
+    }
+
+    /// The first usable image reference in the page, structured data before social tags.
+    static func imageURL(inHTML html: String, page: URL) -> String? {
+        let patterns = [
+            // JSON-LD: "image": "https://…" or "image": ["https://…", …] or {"url": "…"}
+            #""image"\s*:\s*"(https?://[^"]+)""#,
+            #""image"\s*:\s*\[\s*"(https?://[^"]+)""#,
+            #""image"\s*:\s*\{[^}]*?"url"\s*:\s*"(https?://[^"]+)""#,
+            // og:image, with the attributes either way round
+            #"<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']"#,
+            #"<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']"#,
+            #"<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']"#,
+        ]
+
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                  let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+                  match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: html)
+            else { continue }
+
+            let found = String(html[range])
+                .replacingOccurrences(of: "&amp;", with: "&")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Sites write these relative as often as not.
+            if found.hasPrefix("http") { return found }
+            if let absolute = URL(string: found, relativeTo: page)?.absoluteString { return absolute }
+        }
+        return nil
+    }
+
     private static func downscaled(_ image: UIImage) -> Data? {
         let scale = min(1, maxWidth / max(image.size.width, 1))
         guard scale < 1 else { return image.jpegData(compressionQuality: 0.8) }
