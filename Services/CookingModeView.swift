@@ -155,9 +155,14 @@ struct CookingModeView: View {
                             .resizable().aspectRatio(contentMode: .fill)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
-                        // So the name stays readable whatever the photo is doing
-                        LinearGradient(colors: [.clear, .black.opacity(0.55)],
-                                       startPoint: .center, endPoint: .bottom)
+                        // The name has to hold up over whatever the photo turns out to
+                        // be — a bright dish, or the blogger's face. A scrim that only
+                        // began halfway down wasn't enough for either.
+                        LinearGradient(stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black.opacity(0.30), location: 0.45),
+                            .init(color: .black.opacity(0.82), location: 1),
+                        ], startPoint: .top, endPoint: .bottom)
                     }
 
                     Text(title)
@@ -165,7 +170,7 @@ struct CookingModeView: View {
                         .foregroundColor(photo == nil ? inkPrimary.opacity(0.78) : .white)
                         .multilineTextAlignment(.leading)
                         .lineLimit(3)
-                        .shadow(color: photo == nil ? .clear : .black.opacity(0.4), radius: 3, y: 1)
+                        .shadow(color: photo == nil ? .clear : .black.opacity(0.75), radius: 4, y: 1)
                         .padding(12)
                 }
                 .frame(height: 104)
