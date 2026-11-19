@@ -39,9 +39,9 @@ struct CookingSessionView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
+                        sourceLink
                         ingredientsSection
                         stepsSection
-                        sourceLink
                     }
                     .padding(.horizontal, 18)
                     .padding(.top, 8)
@@ -326,31 +326,29 @@ struct CookingSessionView: View {
 
     /// What's saved is the ingredients and the steps, which isn't the whole page: the
     /// notes about why it works, the picture of what it should look like, the comments
-    /// saying to halve the salt. Worth being one tap away while you cook.
+    /// saying to halve the salt.
+    ///
+    /// It sits above the ingredients rather than below the steps — you'd want the page
+    /// before you start, not after a scroll past everything you've already read. One
+    /// line, so it stays out of the way of what you came here for.
     @ViewBuilder
     private var sourceLink: some View {
         if let source = memory.url, !source.isEmpty, let url = URL(string: source) {
             Link(destination: url) {
-                HStack(spacing: 8) {
-                    Image(systemName: "safari").font(.system(size: 14))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Open the original recipe")
-                            .font(.custom("DMSans-Medium", size: 14))
-                        Text(url.host()?.replacingOccurrences(of: "www.", with: "") ?? source)
-                            .font(.custom("DMMono-Regular", size: 11))
-                            .foregroundColor(inkMuted)
-                            .lineLimit(1)
-                    }
-                    Spacer()
+                HStack(spacing: 7) {
+                    Image(systemName: "safari").font(.system(size: 13))
+                    Text("Open on \(url.host()?.replacingOccurrences(of: "www.", with: "") ?? "the site")")
+                        .font(.custom("DMSans-Regular", size: 13))
+                        .lineLimit(1)
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 11, weight: .semibold)).foregroundColor(inkMuted.opacity(0.7))
+                        .font(.system(size: 10, weight: .semibold))
+                    Spacer()
                 }
                 .foregroundColor(.oceanTeal)
-                .padding(14)
-                .background(Color.white.opacity(0.55))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(Color.white.opacity(0.5))
+                .clipShape(Capsule())
             }
-            .padding(.top, 4)
         }
     }
 
