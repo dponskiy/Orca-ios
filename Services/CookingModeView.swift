@@ -35,8 +35,13 @@ struct CookingModeView: View {
 
     @State private var search = ""
     @State private var cooking: Memory?
+    @State private var recentIds: [UUID] = []
 
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
+
+    /// Every card is this tall, whatever is in it.
+    private let artHeight: CGFloat = 104
+    private let footerHeight: CGFloat = 34
 
     var body: some View {
         NavigationStack {
@@ -49,7 +54,14 @@ struct CookingModeView: View {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
                                 ForEach(recentlyCooked) { recipe in
-                                    card(for: recipe, width: 150)
+                                    card(for: recipe)
+                                        .frame(width: 150)
+                                        // The shelf is a convenience, so it has to be
+                                        // clearable. One dinner you're not making again
+                                        // shouldn't hold the top of the screen for weeks.
+                                        .overlay(alignment: .topTrailing) {
+                                            removeButton { forget(recipe) }
+                                        }
                                 }
                             }
                             .padding(.horizontal, 16)
@@ -62,7 +74,7 @@ struct CookingModeView: View {
                     } else {
                         if !recentlyCooked.isEmpty && search.isEmpty { shelfLabel("Everything else") }
                         LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(filtered) { recipe in card(for: recipe, width: nil) }
+                            ForEach(filtered) { recipe in card(for: recipe) }
                         }
                     }
                 }
@@ -77,7 +89,8 @@ struct CookingModeView: View {
                     Button("Done") { dismiss() }.foregroundColor(.oceanTeal)
                 }
             }
-            .fullScreenCover(item: $cooking) { recipe in
+            .onAppear(perform: refreshRecent)
+            .fullScreenCover(item: $cooking, onDismiss: refreshRecent) { recipe in
                 CookingSessionView(memory: recipe, ingredients: subTasks(for: recipe))
             }
         }
@@ -133,7 +146,12 @@ struct CookingModeView: View {
 
     /// A card with no photo is a designed state, not a gap: the name gets the room the
     /// picture would have had.
-    private func card(for recipe: Memory, width: CGFloat?) -> some View {
+    ///
+    /// Both dimensions are declared here rather than inherited from the contents, because
+    /// a card that sizes itself is a card that comes out a different size to the one next
+    /// to it. The artwork has a height; the footer has a height; the card takes whatever
+    /// width it's handed. Nothing inside gets a say.
+    private func card(for recipe: Memory) -> some View {
         let title = RecipeDocument.title(in: recipe.text)
         let count = subTasks(for: recipe).count
         let steps = RecipeDocument.steps(in: recipe.text).count
@@ -142,62 +160,87 @@ struct CookingModeView: View {
             cooking = recipe
         } label: {
             VStack(alignment: .leading, spacing: 0) {
-                // The name lives up here either way — over the photo when there is one,
-                // filling the space when there isn't. The box below is then free to be
-                // just the facts, instead of repeating the title underneath itself.
-                ZStack(alignment: .bottomLeading) {
-                    LinearGradient(colors: [shelfWood.opacity(0.30), shelfWood.opacity(0.14)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing)
-
-                    let photo = recipe.imageData.flatMap(UIImage.init(data:))
-                    if let photo {
-                        Image(uiImage: photo)
-                            .resizable().aspectRatio(contentMode: .fill)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .clipped()
-                        // The name has to hold up over whatever the photo turns out to
-                        // be — a bright dish, or the blogger's face. A scrim that only
-                        // began halfway down wasn't enough for either.
-                        LinearGradient(stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black.opacity(0.30), location: 0.45),
-                            .init(color: .black.opacity(0.82), location: 1),
-                        ], startPoint: .top, endPoint: .bottom)
+                artwork(title: title, photo: recipe.imageData.flatMap(UIImage.init(data:)))
+                    .frame(height: artHeight)
+                    .clipped()
+                    // Recipes saved before photos were kept fill in as you look at them,
+                    // rather than in one migration that hammers a dozen sites at once.
+                    .task {
+                        guard recipe.imageData == nil,
+                              let page = RecipePhoto.sourceURL(for: recipe),
+                              let data = await RecipePhoto.fetchFromPage(page) else { return }
+                        recipe.imageData = data
+                        try? modelContext.save()
                     }
-
-                    Text(title)
-                        .font(.custom("DMSans-Medium", size: photo == nil ? 17 : 15))
-                        .foregroundColor(photo == nil ? inkPrimary.opacity(0.78) : .white)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(3)
-                        .shadow(color: photo == nil ? .clear : .black.opacity(0.75), radius: 4, y: 1)
-                        .padding(12)
-                }
-                .frame(height: 104)
-                .clipped()
-                // Recipes saved before photos were kept fill in as you look at them,
-                // rather than in one migration that hammers a dozen sites at once.
-                .task {
-                    guard recipe.imageData == nil,
-                          let page = RecipePhoto.sourceURL(for: recipe),
-                          let data = await RecipePhoto.fetchFromPage(page) else { return }
-                    recipe.imageData = data
-                    try? modelContext.save()
-                }
 
                 Text(subtitle(ingredients: count, steps: steps))
                     .font(.custom("DMMono-Regular", size: 11))
                     .foregroundColor(inkMuted).lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10).padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, minHeight: footerHeight, alignment: .leading)
+                    .padding(.horizontal, 10)
             }
-            .frame(width: width)
+            .frame(maxWidth: .infinity)
             .background(Color.white.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(inkPrimary.opacity(0.08), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.07), radius: 6, y: 3)
         }
         .buttonStyle(.plain)
+    }
+
+    /// The name lives on the artwork either way — over the photo when there is one,
+    /// filling the space when there isn't. The box below is then free to be just the
+    /// facts, instead of repeating the title underneath itself.
+    ///
+    /// The photo goes in an overlay on an empty colour, not straight into the stack: a
+    /// `.fill` image reports a layout size larger than the box it's drawn in — that's what
+    /// filling means — and a stack asked to hold one sizes itself to the overflow. An
+    /// overlay can't change what it's drawn on, so a tall photo and a wide one give the
+    /// same card.
+    private func artwork(title: String, photo: UIImage?) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            LinearGradient(colors: [shelfWood.opacity(0.30), shelfWood.opacity(0.14)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+
+            if let photo {
+                Color.clear
+                    .overlay { Image(uiImage: photo).resizable().aspectRatio(contentMode: .fill) }
+                    .clipped()
+                // The name has to hold up over whatever the photo turns out to be — a
+                // bright dish, or the blogger's face. A scrim that only began halfway
+                // down wasn't enough for either.
+                LinearGradient(stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black.opacity(0.30), location: 0.45),
+                    .init(color: .black.opacity(0.82), location: 1),
+                ], startPoint: .top, endPoint: .bottom)
+            }
+
+            Text(title)
+                .font(.custom("DMSans-Medium", size: photo == nil ? 17 : 15))
+                .foregroundColor(photo == nil ? inkPrimary.opacity(0.78) : .white)
+                .multilineTextAlignment(.leading)
+                .lineLimit(3)
+                .shadow(color: photo == nil ? .clear : .black.opacity(0.75), radius: 4, y: 1)
+                .padding(12)
+        }
+    }
+
+    /// Sits on top of the card rather than inside it. A button nested in another button's
+    /// label doesn't reliably get the tap — the card would swallow it and start cooking.
+    private func removeButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(Color.black.opacity(0.45)))
+                .overlay(Circle().stroke(Color.white.opacity(0.35), lineWidth: 0.5))
+                .padding(7)            // widens the target without growing the badge
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Remove from Cook again")
     }
 
     private func subtitle(ingredients: Int, steps: Int) -> String {
@@ -236,15 +279,32 @@ struct CookingModeView: View {
     }
 
     /// Most cooking is repeats, so the ones you've actually cooked come first.
+    ///
+    /// Held in state rather than read from storage every time the body runs: taking a
+    /// card off the shelf has to redraw the row, and a property that reads UserDefaults
+    /// gives SwiftUI nothing to notice. Refreshed on the way in and after each cook.
     private var recentlyCooked: [Memory] {
-        recipes
-            .compactMap { recipe -> (Memory, Date)? in
+        recentIds.compactMap { id in recipes.first { $0.id == id } }
+    }
+
+    private func refreshRecent() {
+        recentIds = recipes
+            .compactMap { recipe -> (UUID, Date)? in
                 guard let when = CookingSessionView.lastCooked(recipe.id) else { return nil }
-                return (recipe, when)
+                return (recipe.id, when)
             }
             .sorted { $0.1 > $1.1 }
             .prefix(6)
             .map { $0.0 }
+    }
+
+    /// Off the shelf, not out of the app. The recipe stays in "Everything else", keeps
+    /// its ticks, and cooking it again puts it back at the front.
+    private func forget(_ recipe: Memory) {
+        CookingSessionView.forgetCooked(recipe.id)
+        withAnimation(.easeOut(duration: 0.22)) {
+            recentIds.removeAll { $0 == recipe.id }
+        }
     }
 
     private func subTasks(for memory: Memory) -> [SubTask] {

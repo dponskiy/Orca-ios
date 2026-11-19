@@ -503,4 +503,10 @@ struct CookingSessionView: View {
     static func lastCooked(_ id: UUID) -> Date? {
         UserDefaults.standard.object(forKey: cookedKey(id)) as? Date
     }
+
+    /// Clears the stamp, which is all "Cook again" is built from. The recipe, its steps
+    /// and its ticks are untouched.
+    static func forgetCooked(_ id: UUID) {
+        UserDefaults.standard.removeObject(forKey: cookedKey(id))
+    }
 }
