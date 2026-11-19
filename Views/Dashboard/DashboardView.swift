@@ -549,7 +549,7 @@ struct DashboardView: View {
     private func subtitle(for action: QuickActionItem) -> String {
         switch action {
         case .shopping:     return hasCookingWithChecklist ? "Build your grocery list" : "Recipes & grocery lists"
-        case .cooking:      return "Steps & timers, screen stays on"
+        case .cooking:      return "Recipes, step by step"
         case .collectibles: return "Pokémon, Legos & more"
         case .media:        return "Movies, shows & books"
         case .shared:       return hasSharedSpaces ? "View shared spaces" : "Invite someone"

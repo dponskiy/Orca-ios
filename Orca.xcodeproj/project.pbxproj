@@ -11,6 +11,8 @@
 		0E0B5CE042EB4F66A223A796 /* WorkoutModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72E850EBA51B4FA389A321C6 /* WorkoutModeView.swift */; };
 		2E3DB8E3161F4ACCB16A8022 /* SharedSpacesHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5E027962775488B95900143 /* SharedSpacesHubView.swift */; };
 		3797E7BDB26541F9821A63F3 /* SharedGroceryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B296FDAA0ED84E5BAFD21766 /* SharedGroceryView.swift */; };
+		391D054C2B9801528DC42ECC /* RecipeDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36312584C82DA8E5341DEADE /* RecipeDocument.swift */; };
+		3F7D13528695E9E70DA1C87A /* RecipePhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8326DA9EE33D0C5088F6D6 /* RecipePhoto.swift */; };
 		4A180C7EA3AB46DF9D2D580B /* GroceryAisles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13AD7C0B3C64473187A56E4A /* GroceryAisles.swift */; };
 		53EAA882FC7E4307A297C067 /* SharedSpaceSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAA6770445784A249FC6295F /* SharedSpaceSyncService.swift */; };
 		63BDF21486C84994AB881237 /* RecipeImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA5165992CA4D5EADE9D002 /* RecipeImportService.swift */; };
@@ -50,12 +52,6 @@
 		872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72382F4F2399000A4AE3 /* DropOverlayView.swift */; };
 		872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9A2F4EB3DF0058324F /* AudioService.swift */; };
 		872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B992F4EB3CE0058324F /* SonarEngine.swift */; };
-		3F7D13528695E9E70DA1C87A /* RecipePhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8326DA9EE33D0C5088F6D6 /* RecipePhoto.swift */; };
-		E00A65828E6D765A60A221B3 /* CookingSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8A5ECAB2CC50583F7D9EBA /* CookingSessionView.swift */; };
-		D846A94BD59F3A773D93B340 /* CookingModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD9DC86A1789E7FF591EB4A /* CookingModeView.swift */; };
-		B3CDFAD6C766D59CCD20B419 /* CookTimerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C6C928A52D3EFDD48552F8 /* CookTimerStore.swift */; };
-		391D054C2B9801528DC42ECC /* RecipeDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36312584C82DA8E5341DEADE /* RecipeDocument.swift */; };
-		EB2C2AE3A52460DF9C47979C /* CookTimeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6A632EE17E7F3D391619A17 /* CookTimeParser.swift */; };
 		872F726C2F4FF148000A4AE3 /* ConfirmBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72392F4F23A0000A4AE3 /* ConfirmBannerView.swift */; };
 		872F726D2F4FF4BC000A4AE3 /* CaptureDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F723A2F4F23AB000A4AE3 /* CaptureDrawerView.swift */; };
 		872F726F2F4FF511000A4AE3 /* TypeCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F726E2F4FF50B000A4AE3 /* TypeCaptureView.swift */; };
@@ -123,7 +119,11 @@
 		A1B2C3D4E5F6A7B8C9D0F4F1 /* GameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0F4F0 /* GameView.swift */; };
 		AA01B1112F9A000100CA1001 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA01B1102F9A000100CA1001 /* CalendarService.swift */; };
 		AA02C1012FAB000100A10001 /* AppleIntelligenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA02C1002FAB000100A10001 /* AppleIntelligenceService.swift */; };
+		B3CDFAD6C766D59CCD20B419 /* CookTimerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C6C928A52D3EFDD48552F8 /* CookTimerStore.swift */; };
 		BF52E9249DAA48CA9B4D5F0E /* InvitePartnerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB38421D0E414BE8B1B1CB3F /* InvitePartnerView.swift */; };
+		D846A94BD59F3A773D93B340 /* CookingModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD9DC86A1789E7FF591EB4A /* CookingModeView.swift */; };
+		E00A65828E6D765A60A221B3 /* CookingSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8A5ECAB2CC50583F7D9EBA /* CookingSessionView.swift */; };
+		EB2C2AE3A52460DF9C47979C /* CookTimeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6A632EE17E7F3D391619A17 /* CookTimeParser.swift */; };
 		EB965DF991AB49D7A6535285 /* SharedSpaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E9EBA5833A045DDA182CE6C /* SharedSpaceView.swift */; };
 		EBEA33F619B04CD8BC00A521 /* SharedEventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894410E66040486FB43DCB22 /* SharedEventDetailView.swift */; };
 		FACA77F7FC9540CDB8130293 /* MealDBService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 784F83020862420ABC203C97 /* MealDBService.swift */; };
@@ -170,8 +170,11 @@
 /* Begin PBXFileReference section */
 		13AD7C0B3C64473187A56E4A /* GroceryAisles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroceryAisles.swift; sourceTree = "<group>"; };
 		1C893911D5F2490E8995577F /* SharedSpaceMembersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpaceMembersView.swift; sourceTree = "<group>"; };
+		1C8A5ECAB2CC50583F7D9EBA /* CookingSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookingSessionView.swift; sourceTree = "<group>"; };
+		22C6C928A52D3EFDD48552F8 /* CookTimerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookTimerStore.swift; sourceTree = "<group>"; };
 		276A05743BF74E6486DC3BC3 /* ThoughtsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThoughtsView.swift; sourceTree = "<group>"; };
 		35DA8A35C3014ACB9B38725E /* ThoughtTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThoughtTab.swift; sourceTree = "<group>"; };
+		36312584C82DA8E5341DEADE /* RecipeDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeDocument.swift; sourceTree = "<group>"; };
 		3CA5165992CA4D5EADE9D002 /* RecipeImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeImportService.swift; sourceTree = "<group>"; };
 		6E9EBA5833A045DDA182CE6C /* SharedSpaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpaceView.swift; sourceTree = "<group>"; };
 		72E850EBA51B4FA389A321C6 /* WorkoutModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutModeView.swift; sourceTree = "<group>"; };
@@ -219,12 +222,6 @@
 		873C1B972F4EB3AA0058324F /* EchoBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoBadge.swift; sourceTree = "<group>"; };
 		873C1B982F4EB3B60058324F /* PingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingCard.swift; sourceTree = "<group>"; };
 		873C1B992F4EB3CE0058324F /* SonarEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarEngine.swift; sourceTree = "<group>"; };
-		CE8326DA9EE33D0C5088F6D6 /* RecipePhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipePhoto.swift; sourceTree = "<group>"; };
-		1C8A5ECAB2CC50583F7D9EBA /* CookingSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookingSessionView.swift; sourceTree = "<group>"; };
-		BAD9DC86A1789E7FF591EB4A /* CookingModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookingModeView.swift; sourceTree = "<group>"; };
-		22C6C928A52D3EFDD48552F8 /* CookTimerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookTimerStore.swift; sourceTree = "<group>"; };
-		36312584C82DA8E5341DEADE /* RecipeDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeDocument.swift; sourceTree = "<group>"; };
-		C6A632EE17E7F3D391619A17 /* CookTimeParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookTimeParser.swift; sourceTree = "<group>"; };
 		873C1B9A2F4EB3DF0058324F /* AudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioService.swift; sourceTree = "<group>"; };
 		873C1B9B2F4EB3E60058324F /* NotifcationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotifcationService.swift; sourceTree = "<group>"; };
 		873C1B9C2F4EB3F30058324F /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
@@ -292,7 +289,10 @@
 		B5E027962775488B95900143 /* SharedSpacesHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpacesHubView.swift; sourceTree = "<group>"; };
 		B92EF8EC96EE4A21951BE9DC /* SharedSpace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpace.swift; sourceTree = "<group>"; };
 		BAA6770445784A249FC6295F /* SharedSpaceSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedSpaceSyncService.swift; sourceTree = "<group>"; };
+		BAD9DC86A1789E7FF591EB4A /* CookingModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookingModeView.swift; sourceTree = "<group>"; };
+		C6A632EE17E7F3D391619A17 /* CookTimeParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookTimeParser.swift; sourceTree = "<group>"; };
 		CB38421D0E414BE8B1B1CB3F /* InvitePartnerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitePartnerView.swift; sourceTree = "<group>"; };
+		CE8326DA9EE33D0C5088F6D6 /* RecipePhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipePhoto.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -1127,6 +1127,7 @@
 		873C1B7F2F4EA59E0058324F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APP_DISPLAY_NAME = "Orca DEV";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
@@ -1150,8 +1151,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orca/Info.plist;
-				APP_DISPLAY_NAME = "Orca DEV";
-				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "Orca DEV";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Orca adds your memories and shared events with dates to your iPhone Calendar so they show up in Calendar.app, Siri, and your lock screen.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Orca uses your camera to capture screenshots as memories";
@@ -1196,6 +1196,7 @@
 		873C1B802F4EA59E0058324F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APP_DISPLAY_NAME = Orca;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Orca/Orca.entitlements;
@@ -1218,8 +1219,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orca/Info.plist;
-				APP_DISPLAY_NAME = Orca;
-				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				INFOPLIST_KEY_CFBundleDisplayName = "Orca DEV";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Orca adds your memories and shared events with dates to your iPhone Calendar so they show up in Calendar.app, Siri, and your lock screen.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Orca uses your camera to capture screenshots as memories";

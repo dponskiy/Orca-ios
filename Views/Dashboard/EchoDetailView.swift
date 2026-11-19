@@ -93,7 +93,7 @@ struct EchoDetailView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Cooking Mode")
                                         .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy)
-                                    Text("Steps & timers · screen stays on")
+                                    Text("Recipes, step by step")
                                         .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
                                 }
                                 Spacer()
