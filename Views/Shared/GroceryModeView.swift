@@ -578,9 +578,7 @@ struct GroceryModeView: View {
         }
         // OCR/manual recipe — encode inline as base64 JSON
         let lines = memory.text.components(separatedBy: "\n")
-        let titleLine = lines.first.map {
-            $0.hasPrefix("🍽") ? String($0.dropFirst(2)).trimmingCharacters(in: .whitespaces) : $0
-        } ?? "Recipe"
+        let titleLine = RecipeDocument.title(in: memory.text)
         let ingredients = subTasks(for: memory).map { $0.text }
         var instructions: [String] = []
         if let instrRange = memory.text.range(of: "\nInstructions:\n") {

@@ -26,13 +26,33 @@ enum RecipeDocument {
 
     // MARK: - Reading
 
-    /// The recipe's name: the first line, without the 🍽 it's saved with.
+    /// The recipe's name: the first line that says something, without the 🍽 it's filed
+    /// under.
+    ///
+    /// Dropping a fixed two characters was wrong three ways. The plate is saved bare by
+    /// some capture screens and with a variation selector by others, and `hasPrefix`
+    /// doesn't treat those as the same character — so one form kept its emoji inside the
+    /// name. It isn't always followed by a space either, so "🍽Sunday Sauce" came back as
+    /// "unday Sauce". And a text that opened with a blank line gave up altogether, with
+    /// the name sitting right there on the next one.
+    ///
+    /// Only the preamble is searched, so a recipe with nothing above its steps is called
+    /// "Recipe" rather than "1. Brown the sausage".
     static func title(in text: String) -> String {
-        let first = text.components(separatedBy: "\n").first ?? text
-        let stripped = first.hasPrefix("🍽") ? String(first.dropFirst(2)) : first
-        let trimmed = stripped.trimmingCharacters(in: .whitespaces)
-        return trimmed.isEmpty ? "Recipe" : trimmed
+        for line in preamble(in: text).components(separatedBy: "\n") {
+            var name = Substring(line)
+            for plate in plates where name.hasPrefix(plate) {
+                name = name.dropFirst(plate.count)
+                break
+            }
+            let trimmed = name.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return "Recipe"
     }
+
+    /// One plate, as the two different characters it gets saved as.
+    private static let plates = ["🍽️", "🍽"]
 
     /// The steps, in order, with the numbering they were saved with removed — a step
     /// should read as a step, not as "3. 3." once it's drawn in a numbered list.

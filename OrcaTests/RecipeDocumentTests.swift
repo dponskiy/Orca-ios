@@ -37,6 +37,29 @@ struct RecipeDocumentTests {
         #expect(RecipeDocument.title(in: Self.noSteps) == "Grandma's Soup")
     }
 
+    @Test("The name survives however the plate was written")
+    func titleToleratesPlateVariants() {
+        // Capture screens save the plate both bare and with a variation selector, and
+        // Swift doesn't consider those the same character.
+        #expect(RecipeDocument.title(in: "🍽️ Sunday Sauce\n45 min") == "Sunday Sauce")
+        #expect(RecipeDocument.title(in: "🍽Sunday Sauce") == "Sunday Sauce")
+        #expect(RecipeDocument.title(in: "Sunday Sauce") == "Sunday Sauce")
+        #expect(RecipeDocument.title(in: "🍽   Sunday Sauce  ") == "Sunday Sauce")
+    }
+
+    @Test("A blank opening line doesn't cost the recipe its name")
+    func titleSkipsBlankLines() {
+        #expect(RecipeDocument.title(in: "\n\n🍽 Pancakes\nServes 4") == "Pancakes")
+        #expect(RecipeDocument.title(in: "🍽 \nPancakes") == "Pancakes")
+    }
+
+    @Test("A recipe with nothing above its steps gets a name, not the first step")
+    func titleFallsBack() {
+        #expect(RecipeDocument.title(in: "Instructions:\n1. Boil water") == "Recipe")
+        #expect(RecipeDocument.title(in: "") == "Recipe")
+        #expect(RecipeDocument.title(in: "🍽") == "Recipe")
+    }
+
     @Test("Steps come back in order, with the saved numbering removed")
     func readsSteps() {
         #expect(RecipeDocument.steps(in: Self.sauce) ==
