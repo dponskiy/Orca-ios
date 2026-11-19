@@ -93,6 +93,12 @@ class RecipeImportService {
 
         let memory = Memory(text: parts.joined(separator: "\n"), echoId: echoId)
         memory.url = urlString
+        // The extractor has always found a photo and the import always dropped it.
+        // Stored as a file rather than a link: a hotlinked URL goes blank the day the
+        // site reorganises, and nothing on screen would explain why.
+        if let image = recipe.imageURL, let data = await RecipePhoto.fetch(from: image) {
+            memory.imageData = data
+        }
         memory.hasChecklist = !recipe.ingredients.isEmpty
         modelContext.insert(memory)
 

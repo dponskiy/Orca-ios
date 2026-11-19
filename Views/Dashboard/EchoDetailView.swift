@@ -19,11 +19,13 @@ struct EchoDetailView: View {
         case editMemory(Memory)
         case detailMemory(Memory)
         case groceryMode
+        case cookingMode
         var id: String {
             switch self {
             case .editMemory(let m): return "edit-\(m.id)"
             case .detailMemory(let m): return "detail-\(m.id)"
             case .groceryMode: return "grocery"
+            case .cookingMode: return "cooking"
             }
         }
     }
@@ -75,6 +77,32 @@ struct EchoDetailView: View {
                             .background(Color.oceanTeal.opacity(0.07))
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.oceanTeal.opacity(0.2), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+
+                        // The other half of the trip: shopping gets the ingredients
+                        // home, cooking is what happens once they're on the counter.
+                        Button {
+                            activeSheet = .cookingMode
+                        } label: {
+                            HStack(spacing: 14) {
+                                ZStack {
+                                    Circle().fill(Color.coral).frame(width: 40, height: 40)
+                                    Image(systemName: "frying.pan.fill").font(.system(size: 15)).foregroundColor(.white)
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Cooking Mode")
+                                        .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy)
+                                    Text("Steps & timers · screen stays on")
+                                        .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .medium)).foregroundColor(.gray.opacity(0.4))
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .background(Color.coral.opacity(0.07))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.coral.opacity(0.2), lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                     }
@@ -218,6 +246,8 @@ struct EchoDetailView: View {
                 MemoryDetailView(memory: memory)
             case .groceryMode:
                 GroceryModeView(memories: filteredMemories)
+            case .cookingMode:
+                CookingModeView()
             }
         }
     }

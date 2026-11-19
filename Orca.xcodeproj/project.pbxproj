@@ -50,6 +50,10 @@
 		872F72692F4FE759000A4AE3 /* DropOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72382F4F2399000A4AE3 /* DropOverlayView.swift */; };
 		872F726A2F4FF0E0000A4AE3 /* AudioService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B9A2F4EB3DF0058324F /* AudioService.swift */; };
 		872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 873C1B992F4EB3CE0058324F /* SonarEngine.swift */; };
+		3F7D13528695E9E70DA1C87A /* RecipePhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8326DA9EE33D0C5088F6D6 /* RecipePhoto.swift */; };
+		E00A65828E6D765A60A221B3 /* CookingSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8A5ECAB2CC50583F7D9EBA /* CookingSessionView.swift */; };
+		D846A94BD59F3A773D93B340 /* CookingModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD9DC86A1789E7FF591EB4A /* CookingModeView.swift */; };
+		B3CDFAD6C766D59CCD20B419 /* CookTimerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C6C928A52D3EFDD48552F8 /* CookTimerStore.swift */; };
 		391D054C2B9801528DC42ECC /* RecipeDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36312584C82DA8E5341DEADE /* RecipeDocument.swift */; };
 		EB2C2AE3A52460DF9C47979C /* CookTimeParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6A632EE17E7F3D391619A17 /* CookTimeParser.swift */; };
 		872F726C2F4FF148000A4AE3 /* ConfirmBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 872F72392F4F23A0000A4AE3 /* ConfirmBannerView.swift */; };
@@ -215,6 +219,10 @@
 		873C1B972F4EB3AA0058324F /* EchoBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EchoBadge.swift; sourceTree = "<group>"; };
 		873C1B982F4EB3B60058324F /* PingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PingCard.swift; sourceTree = "<group>"; };
 		873C1B992F4EB3CE0058324F /* SonarEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarEngine.swift; sourceTree = "<group>"; };
+		CE8326DA9EE33D0C5088F6D6 /* RecipePhoto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipePhoto.swift; sourceTree = "<group>"; };
+		1C8A5ECAB2CC50583F7D9EBA /* CookingSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookingSessionView.swift; sourceTree = "<group>"; };
+		BAD9DC86A1789E7FF591EB4A /* CookingModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookingModeView.swift; sourceTree = "<group>"; };
+		22C6C928A52D3EFDD48552F8 /* CookTimerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookTimerStore.swift; sourceTree = "<group>"; };
 		36312584C82DA8E5341DEADE /* RecipeDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeDocument.swift; sourceTree = "<group>"; };
 		C6A632EE17E7F3D391619A17 /* CookTimeParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CookTimeParser.swift; sourceTree = "<group>"; };
 		873C1B9A2F4EB3DF0058324F /* AudioService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioService.swift; sourceTree = "<group>"; };
@@ -493,6 +501,10 @@
 				784F83020862420ABC203C97 /* MealDBService.swift */,
 				3CA5165992CA4D5EADE9D002 /* RecipeImportService.swift */,
 				873C1B992F4EB3CE0058324F /* SonarEngine.swift */,
+				CE8326DA9EE33D0C5088F6D6 /* RecipePhoto.swift */,
+				1C8A5ECAB2CC50583F7D9EBA /* CookingSessionView.swift */,
+				BAD9DC86A1789E7FF591EB4A /* CookingModeView.swift */,
+				22C6C928A52D3EFDD48552F8 /* CookTimerStore.swift */,
 				36312584C82DA8E5341DEADE /* RecipeDocument.swift */,
 				C6A632EE17E7F3D391619A17 /* CookTimeParser.swift */,
 			);
@@ -892,6 +904,10 @@
 				FACA77F7FC9540CDB8130293 /* MealDBService.swift in Sources */,
 				63BDF21486C84994AB881237 /* RecipeImportService.swift in Sources */,
 				872F726B2F4FF0ED000A4AE3 /* SonarEngine.swift in Sources */,
+				3F7D13528695E9E70DA1C87A /* RecipePhoto.swift in Sources */,
+				E00A65828E6D765A60A221B3 /* CookingSessionView.swift in Sources */,
+				D846A94BD59F3A773D93B340 /* CookingModeView.swift in Sources */,
+				B3CDFAD6C766D59CCD20B419 /* CookTimerStore.swift in Sources */,
 				391D054C2B9801528DC42ECC /* RecipeDocument.swift in Sources */,
 				EB2C2AE3A52460DF9C47979C /* CookTimeParser.swift in Sources */,
 				872F726F2F4FF511000A4AE3 /* TypeCaptureView.swift in Sources */,

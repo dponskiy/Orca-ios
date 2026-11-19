@@ -83,6 +83,7 @@ struct GroceryModeView: View {
     @State private var showAddRecipeOptions = false
     @State private var recipesExpanded = false
     @State private var recipeSearch = ""
+    @State private var showCookingMode = false
 
     // Adding items runs in a streak — you rattle off everything you remembered at once.
     // Return adds the item and holds the keyboard on an empty field for the next one,
@@ -1002,6 +1003,30 @@ struct GroceryModeView: View {
                     .frame(maxHeight: .infinity)
             } else {
             List {
+                // The other half of the trip. One button at the top rather than one per
+                // recipe: you decide to cook, then pick what — not the other way round.
+                if !isCustomActive && listType.hasRecipes && !recipeMemories.isEmpty {
+                    Section {
+                        Button { showCookingMode = true } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "frying.pan.fill")
+                                    .font(.system(size: 15)).foregroundColor(.coral)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("Cooking Mode")
+                                        .font(.custom("DMSans-Medium", size: 15)).foregroundColor(.deepNavy)
+                                    Text("Steps & timers · screen stays on")
+                                        .font(.custom("DMSans-Regular", size: 12)).foregroundColor(.gray)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .medium)).foregroundColor(.gray.opacity(0.4))
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
                 if !isCustomActive && listType.hasRecipes {
                     if recipeMemories.isEmpty {
                         Section {
@@ -1585,6 +1610,7 @@ struct GroceryModeView: View {
             }
         }
         .sheet(isPresented: $showRecipeBuilder) { RecipeBuilderView() }
+        .fullScreenCover(isPresented: $showCookingMode) { CookingModeView() }
         .sheet(item: $householdSpace) { space in
             NavigationStack { SharedGroceryView(space: space) }
         }

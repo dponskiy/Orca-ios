@@ -22,7 +22,7 @@ struct DashboardView: View {
     // Routes every dashboard modal through a single presentation. The individual
     // flags stay so the rest of the view (and child bindings) are untouched.
     private enum DashboardSheet: String, Identifiable {
-        case createEcho, editMemory, memoryDetail, grocery, media
+        case createEcho, editMemory, memoryDetail, grocery, cooking, media
         case collectibles, sharedSpaces, thoughts, gifts, weather
         var id: String { rawValue }
     }
@@ -34,6 +34,7 @@ struct DashboardView: View {
                 if editingMemory != nil { return .editMemory }
                 if detailMemory  != nil { return .memoryDetail }
                 if showGroceryMode      { return .grocery }
+                if showCookingMode      { return .cooking }
                 if showMediaMode        { return .media }
                 if showCollectibles     { return .collectibles }
                 if showSharedSpaces     { return .sharedSpaces }
@@ -47,6 +48,7 @@ struct DashboardView: View {
                 // to true by the buttons that open each destination.
                 showCreateEcho    = (newValue == .createEcho)
                 showGroceryMode   = (newValue == .grocery)
+                showCookingMode   = (newValue == .cooking)
                 showMediaMode     = (newValue == .media)
                 showCollectibles  = (newValue == .collectibles)
                 showSharedSpaces  = (newValue == .sharedSpaces)
@@ -68,10 +70,11 @@ struct DashboardView: View {
     @Query private var sharedEvents: [SharedEvent]
     @Environment(AuthService.self) private var authService
     @State private var showCollectibles = false
+    @State private var showCookingMode = false
     @State private var showSharedSpaces = false
     @State private var showThoughts = false
     @State private var showEditQuickActions = false
-    @AppStorage("enabledQuickActions") private var enabledActionsRaw = "shopping,thoughts,shared,media,collectibles"
+    @AppStorage("enabledQuickActions") private var enabledActionsRaw = "shopping,cooking,thoughts,shared,media"
     @State private var showWeatherDetail = false
     @StateObject private var weatherService = WeatherService.shared
     @StateObject private var locationService = LocationService.shared
@@ -385,7 +388,7 @@ struct DashboardView: View {
                 // Migrate quick actions: add new, remove retired
                 var ids = enabledActionsRaw.split(separator: ",").map(String.init)
                 var changed = false
-                for newAction in ["gifts", "collectibles"] where !ids.contains(newAction) {
+                for newAction in ["gifts", "cooking"] where !ids.contains(newAction) {
                     ids.append(newAction)
                     changed = true
                 }
@@ -412,6 +415,7 @@ struct DashboardView: View {
                 case .editMemory:    if let m = editingMemory { MemoryEditView(memory: m) }
                 case .memoryDetail:  if let m = detailMemory  { MemoryDetailView(memory: m) }
                 case .grocery:       GroceryModeView(memories: memories.filter { $0.echoId == cookingEcho?.id })
+                case .cooking:       CookingModeView()
                 case .media:         WatchModeView()
                 case .collectibles:  CollectiblesView()
                 case .sharedSpaces:  SharedSpacesHubView()
@@ -481,11 +485,12 @@ struct DashboardView: View {
     // MARK: - Quick Actions Data
 
     enum QuickActionItem: String, CaseIterable {
-        case shopping, thoughts, shared, media, gifts, collectibles
+        case shopping, cooking, thoughts, shared, media, gifts, collectibles
 
         var icon: String {
             switch self {
             case .shopping:     return "cart.fill"
+            case .cooking:      return "frying.pan.fill"
             case .collectibles: return "square.stack.3d.up.fill"
             case .media:        return "popcorn.fill"
             case .shared:       return "person.2.fill"
@@ -496,6 +501,7 @@ struct DashboardView: View {
         var title: String {
             switch self {
             case .shopping:     return "Shopping"
+            case .cooking:      return "Cooking"
             case .collectibles: return "Collectibles"
             case .media:        return "Media"
             case .shared:       return "Shared Space"
@@ -506,6 +512,7 @@ struct DashboardView: View {
         var displayName: String {
             switch self {
             case .shopping:     return "Shopping Mode"
+            case .cooking:      return "Cooking Mode"
             case .collectibles: return "Collectibles"
             case .media:        return "Media Mode"
             case .shared:       return "Shared Space"
@@ -542,6 +549,7 @@ struct DashboardView: View {
     private func subtitle(for action: QuickActionItem) -> String {
         switch action {
         case .shopping:     return hasCookingWithChecklist ? "Build your grocery list" : "Recipes & grocery lists"
+        case .cooking:      return "Steps & timers, screen stays on"
         case .collectibles: return "Pokémon, Legos & more"
         case .media:        return "Movies, shows & books"
         case .shared:       return hasSharedSpaces ? "View shared spaces" : "Invite someone"
@@ -553,6 +561,7 @@ struct DashboardView: View {
     private func triggerAction(_ action: QuickActionItem) {
         switch action {
         case .shopping:     showGroceryMode = true
+        case .cooking:      showCookingMode = true
         case .collectibles: showCollectibles = true
         case .media:        showMediaMode = true
         case .shared:       showSharedSpaces = true
