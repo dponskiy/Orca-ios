@@ -45,21 +45,9 @@ struct MemoryDetailView: View {
         }
         // Inline payload for OCR/manual recipes
         let lines = memory.text.components(separatedBy: "\n")
-        let titleLine = lines.first.map { $0.hasPrefix("🍽") ? String($0.dropFirst(2)).trimmingCharacters(in: .whitespaces) : $0 } ?? "Recipe"
+        let titleLine = RecipeDocument.title(in: memory.text)
         let ingredients = memorySubTasks.map { $0.text }
-        var instructions: [String] = []
-        if let instrRange = memory.text.range(of: "\nInstructions:\n") {
-            let instrBlock = String(memory.text[instrRange.upperBound...])
-            instructions = instrBlock.components(separatedBy: "\n").compactMap { line -> String? in
-                let s = line.trimmingCharacters(in: .whitespaces)
-                guard !s.isEmpty else { return nil }
-                // Strip leading "N. " numbering
-                if let dot = s.firstIndex(of: "."), s[s.startIndex].isNumber {
-                    return String(s[s.index(after: dot)...]).trimmingCharacters(in: .whitespaces)
-                }
-                return s
-            }
-        }
+        let instructions = RecipeDocument.steps(in: memory.text)
         // Extract meta from second line if present
         var prep: String? = nil; var cook: String? = nil; var serves: String? = nil
         if lines.count > 1 {
@@ -279,27 +267,7 @@ struct MemoryDetailView: View {
     private var checklistSection: some View {
         let isCooking = echo?.name.lowercased().contains("cook") == true
 
-        // Parse instructions out of memory text
-        let instructionSteps: [String] = {
-            guard isCooking else { return [] }
-            let lines = memory.text.components(separatedBy: "\n")
-            var capturing = false
-            var steps: [String] = []
-            for line in lines {
-                if line.trimmingCharacters(in: .whitespaces) == "Instructions:" {
-                    capturing = true
-                    continue
-                }
-                if capturing {
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-                    if trimmed.isEmpty { continue }
-                    // Strip leading number like "1. "
-                    let stripped = trimmed.replacingOccurrences(of: #"^\d+\.\s*"#, with: "", options: .regularExpression)
-                    if !stripped.isEmpty { steps.append(stripped) }
-                }
-            }
-            return steps
-        }()
+        let instructionSteps = isCooking ? RecipeDocument.steps(in: memory.text) : []
 
         return VStack(alignment: .leading, spacing: 16) {
 
