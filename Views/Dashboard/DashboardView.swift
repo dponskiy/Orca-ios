@@ -74,7 +74,10 @@ struct DashboardView: View {
     @State private var showSharedSpaces = false
     @State private var showThoughts = false
     @State private var showEditQuickActions = false
-    @AppStorage("enabledQuickActions") private var enabledActionsRaw = "shopping,cooking,thoughts,shared,media"
+    // Six, because the grid is three across and a row of one looks like a mistake.
+    // Thoughts is the one left out; it's a tap away under Edit.
+    @AppStorage("enabledQuickActions") private var enabledActionsRaw = "shopping,cooking,shared,media,gifts,collectibles"
+    @AppStorage("quickActionsTrimmedToSix") private var didTrimToSix = false
     @State private var showWeatherDetail = false
     @StateObject private var weatherService = WeatherService.shared
     @StateObject private var locationService = LocationService.shared
@@ -388,12 +391,23 @@ struct DashboardView: View {
                 // Migrate quick actions: add new, remove retired
                 var ids = enabledActionsRaw.split(separator: ",").map(String.init)
                 var changed = false
-                for newAction in ["gifts", "cooking"] where !ids.contains(newAction) {
-                    ids.append(newAction)
-                    changed = true
-                }
                 if ids.contains("workout") {
                     ids.removeAll { $0 == "workout" }
+                    changed = true
+                }
+                // Settle on six. Each release had been appending its new action on
+                // every launch, so the strip grew to seven and spilled onto a third row
+                // holding a single card. Thoughts steps out, Collectibles comes back.
+                //
+                // Once, not every launch. The appends ran unguarded, which meant an
+                // action switched off under Edit came back the next time the app
+                // started — so whatever you choose from here on, stays chosen.
+                if !didTrimToSix {
+                    for action in ["gifts", "cooking", "collectibles"] where !ids.contains(action) {
+                        ids.append(action)
+                    }
+                    ids.removeAll { $0 == "thoughts" }
+                    didTrimToSix = true
                     changed = true
                 }
                 if changed {
