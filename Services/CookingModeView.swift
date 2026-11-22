@@ -34,8 +34,23 @@ struct CookingModeView: View {
     @Query private var echoes: [Echo]
 
     @State private var search = ""
-    @State private var cooking: Memory?
     @State private var recentIds: [UUID] = []
+
+    /// One cover, two destinations. Two presentation modifiers stacked on the same view
+    /// destabilise each other — the dashboard learned that the hard way — so what's on
+    /// top of this screen is one piece of state.
+    private enum Showing: Identifiable {
+        case cooking(Memory)
+        case addRecipe
+
+        var id: String {
+            switch self {
+            case .cooking(let recipe): return recipe.id.uuidString
+            case .addRecipe:           return "add"
+            }
+        }
+    }
+    @State private var showing: Showing?
 
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
 
@@ -90,8 +105,19 @@ struct CookingModeView: View {
                 }
             }
             .onAppear(perform: refreshRecent)
-            .fullScreenCover(item: $cooking, onDismiss: refreshRecent) { recipe in
-                CookingSessionView(memory: recipe, ingredients: subTasks(for: recipe))
+            .fullScreenCover(item: $showing, onDismiss: refreshRecent) { what in
+                switch what {
+                case .cooking(let recipe):
+                    CookingSessionView(memory: recipe, ingredients: subTasks(for: recipe))
+                case .addRecipe:
+                    // The same screen the Drop button opens, so a recipe added from
+                    // here lands exactly where one added anywhere else does — and the
+                    // shelf behind picks it up on its own, being a @Query.
+                    RecipeCaptureView(isPresented: Binding(
+                        get: { showing != nil },
+                        set: { if !$0 { showing = nil } }
+                    ))
+                }
             }
         }
     }
@@ -129,16 +155,38 @@ struct CookingModeView: View {
             .foregroundColor(inkMuted)
     }
 
+    /// An empty shelf should hand you the way out of it. Opening cooking mode with
+    /// nothing saved otherwise explains the problem and leaves you to go and find the
+    /// capture screen yourself.
     private var emptyState: some View {
         VStack(spacing: 8) {
             Text(search.isEmpty ? "No recipes yet" : "Nothing matches “\(search)”")
                 .font(.custom("DMSans-Medium", size: 15)).foregroundColor(inkPrimary)
             Text(search.isEmpty
-                 ? "Anything you save with an ingredient list turns up here."
+                 ? "Paste a link and the ingredients and steps come with it."
                  : "Try an ingredient — “chicken” finds recipes that use it.")
                 .font(.custom("DMSans-Regular", size: 13))
                 .foregroundColor(inkMuted)
                 .multilineTextAlignment(.center)
+
+            if search.isEmpty {
+                Button { showing = .addRecipe } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
+                        Text("Add a recipe").font(.custom("DMSans-Medium", size: 14))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 18).padding(.vertical, 11)
+                    .background(Capsule().fill(Color.oceanTeal))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 10)
+            } else {
+                Button("Clear search") { search = "" }
+                    .font(.custom("DMSans-Medium", size: 13))
+                    .foregroundColor(.oceanTeal)
+                    .padding(.top, 6)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 50)
@@ -157,7 +205,7 @@ struct CookingModeView: View {
         let steps = RecipeDocument.steps(in: recipe.text).count
 
         return Button {
-            cooking = recipe
+            showing = .cooking(recipe)
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 artwork(title: title, photo: recipe.imageData.flatMap(UIImage.init(data:)))
